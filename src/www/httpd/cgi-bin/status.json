@@ -1,13 +1,13 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 printf "Content-type: application/json\r\n\r\n"
 
-NAME="yi-hack-v5"
+NAME="yi-hack-v6"
 HOSTNAME=$(hostname)
-FW_VERSION=$(cat /tmp/sd/yi-hack-v5/version)
-BASEFW_VERSION=$(cat /home/yi-hack-v5/version)
+FW_VERSION=$(cat /home/yi-hack/extra/version)
+BASEFW_VERSION=$(cat /home/yi-hack/version)
 HOME_VERSION=$(cat /home/app/.appver)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then

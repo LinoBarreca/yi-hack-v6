@@ -1,13 +1,12 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
 
 REMOTE_VERSION_FILE=/tmp/.hackremotever
 REMOTE_NEWVERSION_FILE=/tmp/.hacknewver
 
-LOCAL_VERSION_FILE=/tmp/sd/yi-hack-v5/version
+LOCAL_VERSION_FILE=/home/yi-hack/extra/version
 
 IS_SD_PRESENT="NO"
 

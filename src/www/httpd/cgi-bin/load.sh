@@ -1,16 +1,11 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 # Conf
 CONF_FILE="etc/camera.conf"
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
 
-get_config()
-{
-    key=$1
-    grep -w $1 $YI_HACK_PREFIX/$CONF_FILE | cut -d "=" -f2 | awk 'NR==1 {print; exit}'
-}
+. /home/yi-hack/base/script/get_config.sh
 
 # Files
 TMPOUT=/tmp/config.tar.bz2.dl
@@ -72,11 +67,11 @@ RES=$?
 # Verify result of tar.bz2 command and copy files to destination
 if [ $RES -eq 0 ]; then
     if [ \( -f "system.conf" \) -a \( -f "camera.conf" \) ]; then
-        mv -f *.conf /tmp/sd/yi-hack-v5/etc/
-        chmod 0644 /tmp/sd/yi-hack-v5/etc/*.conf
+        mv -f *.conf /home/yi-hack/config/
+        chmod 0644 /home/yi-hack/config/*.conf
         if [ -f hostname ]; then
-            mv -f hostname /tmp/sd/yi-hack-v5/etc/
-            chmod 0644 /tmp/sd/yi-hack-v5/etc/hostname
+            mv -f hostname /home/yi-hack/config/
+            chmod 0644 /home/yi-hack/config/hostname
         fi
         RES=0
     else
@@ -98,38 +93,38 @@ else
     printf "Upload failed\r\n"
 fi
 
-if [ ! -f "$YI_HACK_PREFIX/$CONF_FILE" ]; then
+if [ ! -f "/home/yi-hack/config/camera.conf" ]; then
     exit
 fi
 
 # Set camera settings
-if [[ $(get_config SWITCH_ON) == "no" ]] ; then
+if [[ $(get_config camera.SWITCH_ON) == "no" ]] ; then
     ipc_cmd -t off
 else
     ipc_cmd -t on
 fi
 
-if [[ $(get_config SAVE_VIDEO_ON_MOTION) == "no" ]] ; then
+if [[ $(get_config camera.SAVE_VIDEO_ON_MOTION) == "no" ]] ; then
     ipc_cmd -v always
 else
     ipc_cmd -v detect
 fi
 
-ipc_cmd -s $(get_config SENSITIVITY)
+ipc_cmd -s $(get_config camera.SENSITIVITY)
 
-if [[ $(get_config LED) == "no" ]] ; then
+if [[ $(get_config camera.LED) == "no" ]] ; then
     ipc_cmd -l off
 else
     ipc_cmd -l on
 fi
 
-if [[ $(get_config IR) == "no" ]] ; then
+if [[ $(get_config camera.IR) == "no" ]] ; then
     ipc_cmd -i off
 else
     ipc_cmd -i on
 fi
 
-if [[ $(get_config ROTATE) == "no" ]] ; then
+if [[ $(get_config camera.ROTATE) == "no" ]] ; then
     ipc_cmd -r off
 else
     ipc_cmd -r o

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 validateDir()
 {

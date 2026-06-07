@@ -1,9 +1,8 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
-CONF_FILE="$YI_HACK_PREFIX/etc/camera.conf"
+CONF_FILE="/home/yi-hack/config/camera.conf"
 
 CONF_LAST="CONF_LAST"
 

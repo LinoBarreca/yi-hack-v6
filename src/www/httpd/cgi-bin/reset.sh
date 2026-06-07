@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-cd /tmp/sd/yi-hack-v5/etc
+cd /home/yi-hack/config
 
 rm hostname
 

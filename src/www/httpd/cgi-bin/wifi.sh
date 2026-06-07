@@ -1,8 +1,7 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
 ACTION="none"
 
 removedoublequotes(){
@@ -60,7 +59,7 @@ elif [ $ACTION == "save" ]; then
     done
 
     if [ "$PWD" == "$PWD2" ]; then
-        $YI_HACK_PREFIX/script/configure_wifi.sh
+        /home/yi-hack/base/script/configure_wifi.sh
         sleep 1
         rm -f /tmp/configure_wifi.cfg
 

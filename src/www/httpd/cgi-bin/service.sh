@@ -1,11 +1,10 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 CONF_FILE="etc/system.conf"
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
-YI_HACK_VER=$(cat /tmp/sd/yi-hack-v5/version)
+YI_HACK_VER=$(cat /home/yi-hack/extra/version)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
     HW_ID=$(dd bs=1 count=4 skip=660 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
@@ -14,28 +13,24 @@ else
     HW_ID=$(dd bs=1 count=4 skip=592 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
     SERIAL_NUMBER=$(dd bs=1 count=16 skip=596 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
 fi
-get_config()
-{
-    key=$1
-    grep -w $1 $YI_HACK_PREFIX/$CONF_FILE | cut -d "=" -f2 | awk 'NR==1 {print; exit}'
-}
+. /home/yi-hack/base/script/get_config.sh
 
 init_config()
 {
-    if [[ x$(get_config USERNAME) != "x" ]] ; then
-        USERNAME=$(get_config USERNAME)
-        PASSWORD=$(get_config PASSWORD)
+    if [[ x$(get_config system.USERNAME) != "x" ]] ; then
+        USERNAME=$(get_config system.USERNAME)
+        PASSWORD=$(get_config system.PASSWORD)
         ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
         RTSP_USERPWD=$USERNAME:$PASSWORD@
     fi
 
-    case $(get_config RTSP_PORT) in
+    case $(get_config system.RTSP_PORT) in
         ''|*[!0-9]*) RTSP_PORT=554 ;;
-        *) RTSP_PORT=$(get_config RTSP_PORT) ;;
+        *) RTSP_PORT=$(get_config system.RTSP_PORT) ;;
     esac
-    case $(get_config HTTPD_PORT) in
+    case $(get_config system.HTTPD_PORT) in
         ''|*[!0-9]*) HTTPD_PORT=80 ;;
-        *) HTTPD_PORT=$(get_config HTTPD_PORT) ;;
+        *) HTTPD_PORT=$(get_config system.HTTPD_PORT) ;;
     esac
 
     if [[ $RTSP_PORT != "554" ]] ; then
@@ -50,8 +45,8 @@ init_config()
 start_rtsp()
 {
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_RES=$(get_config RTSP_STREAM)
-RRTSP_AUDIO=$(get_config RTSP_AUDIO)
+RRTSP_RES=$(get_config system.RTSP_STREAM)
+RRTSP_AUDIO=$(get_config system.RTSP_AUDIO)
 RRTSP_PORT=$RTSP_PORT
 RRTSP_USER=$USERNAME
 RRTSP_PWD=$PASSWORD
@@ -59,21 +54,21 @@ RRTSP_PWD=$PASSWORD
 
 # The below section to be also copied to system.sh
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
-    if [[ $(get_config RTSP_AUDIO) == "yes" ]]; then
+    if [[ $(get_config system.RTSP_AUDIO) == "yes" ]]; then
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config RTSP_STREAM) == "low" ]]; then
+    if [[ $(get_config system.RTSP_STREAM) == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config RTSP_STREAM) == "high" ]]; then
+    if [[ $(get_config system.RTSP_STREAM) == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config RTSP_STREAM) == "both" ]]; then
+    if [[ $(get_config system.RTSP_STREAM) == "both" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
 #Seems to be killing the resource - fixed via #153
-    $YI_HACK_PREFIX/script/wd_rtsp.sh &
+    /home/yi-hack/base/script/wd_rtsp.sh &
 #The above section to be also copied to service.sh
 }
 
@@ -136,20 +131,20 @@ start_onvif()
     if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
         echo "#PTZ" >> $ONVIF_SRVD_CONF
         echo "ptz=1" >> $ONVIF_SRVD_CONF
-        echo "get_position=/tmp/sd/yi-hack-v5/bin/ipc_cmd -g" >> $ONVIF_SRVD_CONF
-        echo "is_running=/tmp/sd/yi-hack-v5/bin/ipc_cmd -u" >> $ONVIF_SRVD_CONF
-        echo "move_left=/tmp/sd/yi-hack-v5/bin/ipc_cmd -m left" >> $ONVIF_SRVD_CONF
-        echo "move_right=/tmp/sd/yi-hack-v5/bin/ipc_cmd -m right" >> $ONVIF_SRVD_CONF
-        echo "move_up=/tmp/sd/yi-hack-v5/bin/ipc_cmd -m up" >> $ONVIF_SRVD_CONF
-        echo "move_down=/tmp/sd/yi-hack-v5/bin/ipc_cmd -m down" >> $ONVIF_SRVD_CONF
-        echo "move_stop=/tmp/sd/yi-hack-v5/bin/ipc_cmd -m stop" >> $ONVIF_SRVD_CONF
-        echo "move_preset=/tmp/sd/yi-hack-v5/bin/ipc_cmd -p %d" >> $ONVIF_SRVD_CONF
-        echo "set_preset=/tmp/sd/yi-hack-v5/script/ptz_presets.sh -a add_preset -m %s" >> $ONVIF_SRVD_CONF
-        echo "set_home_position=/tmp/sd/yi-hack-v5/script/ptz_presets.sh -a set_home_position" >> $ONVIF_SRVD_CONF
-        echo "remove_preset=/tmp/sd/yi-hack-v5/script/ptz_presets.sh -a del_preset -n %d" >> $ONVIF_SRVD_CONF
-        echo "jump_to_abs=/tmp/sd/yi-hack-v5/bin/ipc_cmd -j %f,%f" >> $ONVIF_SRVD_CONF
-        echo "jump_to_rel=/tmp/sd/yi-hack-v5/bin/ipc_cmd -J %f,%f" >> $ONVIF_SRVD_CONF
-        echo "get_presets=/tmp/sd/yi-hack-v5/script/ptz_presets.sh -a get_presets" >> $ONVIF_SRVD_CONF
+        echo "get_position=/home/yi-hack/extra/bin/ipc_cmd -g" >> $ONVIF_SRVD_CONF
+        echo "is_running=/home/yi-hack/extra/bin/ipc_cmd -u" >> $ONVIF_SRVD_CONF
+        echo "move_left=/home/yi-hack/extra/bin/ipc_cmd -m left" >> $ONVIF_SRVD_CONF
+        echo "move_right=/home/yi-hack/extra/bin/ipc_cmd -m right" >> $ONVIF_SRVD_CONF
+        echo "move_up=/home/yi-hack/extra/bin/ipc_cmd -m up" >> $ONVIF_SRVD_CONF
+        echo "move_down=/home/yi-hack/extra/bin/ipc_cmd -m down" >> $ONVIF_SRVD_CONF
+        echo "move_stop=/home/yi-hack/extra/bin/ipc_cmd -m stop" >> $ONVIF_SRVD_CONF
+        echo "move_preset=/home/yi-hack/extra/bin/ipc_cmd -p %d" >> $ONVIF_SRVD_CONF
+        echo "set_preset=/home/yi-hack/base/script/ptz_presets.sh -a add_preset -m %s" >> $ONVIF_SRVD_CONF
+        echo "set_home_position=/home/yi-hack/base/script/ptz_presets.sh -a set_home_position" >> $ONVIF_SRVD_CONF
+        echo "remove_preset=/home/yi-hack/base/script/ptz_presets.sh -a del_preset -n %d" >> $ONVIF_SRVD_CONF
+        echo "jump_to_abs=/home/yi-hack/extra/bin/ipc_cmd -j %f,%f" >> $ONVIF_SRVD_CONF
+        echo "jump_to_rel=/home/yi-hack/extra/bin/ipc_cmd -J %f,%f" >> $ONVIF_SRVD_CONF
+        echo "get_presets=/home/yi-hack/base/script/ptz_presets.sh -a get_presets" >> $ONVIF_SRVD_CONF
         echo "" >> $ONVIF_SRVD_CONF
     fi
 
@@ -212,7 +207,7 @@ stop_wsdd()
 start_ftpd()
 {
     if [[ "$1" == "none" ]] ; then
-        if [[ $(get_config BUSYBOX_FTPD) == "yes" ]] ; then
+        if [[ $(get_config system.BUSYBOX_FTPD) == "yes" ]] ; then
             FTPD_DAEMON="busybox"
         else
             FTPD_DAEMON="pure-ftpd"
@@ -231,7 +226,7 @@ start_ftpd()
 stop_ftpd()
 {
     if [[ "$1" == "none" ]] ; then
-        if [[ $(get_config BUSYBOX_FTPD) == "yes" ]] ; then
+        if [[ $(get_config system.BUSYBOX_FTPD) == "yes" ]] ; then
             FTPD_DAEMON="busybox"
         else
             FTPD_DAEMON="pure-ftpd"
@@ -257,7 +252,7 @@ ps_program()
     fi
 }
 
-. $YI_HACK_PREFIX/www/cgi-bin/validate.sh
+. /home/yi-hack/www/cgi-bin/validate.sh
 
 if ! $(validateQueryString $QUERY_STRING); then
     printf "Content-type: application/json\r\n\r\n"

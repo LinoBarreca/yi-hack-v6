@@ -11,9 +11,9 @@
 #include "config.h"
 #include "validate.h"
 
-#define MQTT_CONF_FILE    "/tmp/sd/yi-hack-v5/etc/mqttv4.conf"
-#define CONF_FILE_PATH    "/tmp/sd/yi-hack-v5/etc"
-#define CONF2MQTT_SCRIPT  "/tmp/sd/yi-hack-v5/script/conf2mqtt.sh"
+#define MQTT_CONF_FILE    "/tmp/sd/yi-hack/etc/mqttv4.conf"
+#define CONF_FILE_PATH    "/tmp/sd/yi-hack/etc"
+#define CONF2MQTT_SCRIPT  "/tmp/sd/yi-hack/script/conf2mqtt.sh"
 
 typedef struct
 {

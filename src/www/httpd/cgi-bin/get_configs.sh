@@ -1,8 +1,7 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
 
 get_conf_type()
 {
@@ -17,9 +16,9 @@ CONF_TYPE="$(get_conf_type)"
 CONF_FILE=""
 
 if [ "$CONF_TYPE" = "mqtt" ] ; then
-    CONF_FILE="$YI_HACK_PREFIX/etc/mqttv4.conf"
+    CONF_FILE="/home/yi-hack/config/mqttv4.conf"
 else
-    CONF_FILE="$YI_HACK_PREFIX/etc/$CONF_TYPE.conf"
+    CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf"
 fi
 
 printf "{\n"
@@ -34,7 +33,7 @@ while read -r LINE ; do
 done < "$CONF_FILE"
 
 if [ "$CONF_TYPE" = "system" ] ; then
-    HOSTNAME=$(cat "$YI_HACK_PREFIX/etc/hostname")
+    HOSTNAME=$(cat "/home/yi-hack/config/hostname")
     printf "\"%s\":\"%s\",\n" "HOSTNAME" "${HOSTNAME//\"/\\\"}"  # Escape double quotes in hostname
 fi
 

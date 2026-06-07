@@ -7,10 +7,10 @@ cd $SCRIPT_DIR
 #upx ./_install/bin/*
 #upx ./_install/lib/*
 
-mkdir -p ../../build/home/yi-hack-v5/bin/
-mkdir -p ../../build/home/yi-hack-v5/lib/
-mkdir -p ../../build/home/yi-hack-v5/etc/
+mkdir -p ../../build/home/yi-hack/bin/
+mkdir -p ../../build/home/yi-hack/lib/
+mkdir -p ../../build/home/yi-hack/etc/
 
-rsync -a ./_install/tmp/sd/yi-hack-v5/bin/* ../../build/home/yi-hack-v5/bin/
-rsync -a ./_install/tmp/sd/yi-hack-v5/lib/* ../../build/home/yi-hack-v5/lib/
-rsync -a ./_install/tmp/sd/yi-hack-v5/etc/* ../../build/home/yi-hack-v5/etc/
+rsync -a ./_install/tmp/sd/yi-hack/bin/* ../../build/home/yi-hack/bin/
+rsync -a ./_install/tmp/sd/yi-hack/lib/* ../../build/home/yi-hack/lib/
+rsync -a ./_install/tmp/sd/yi-hack/etc/* ../../build/home/yi-hack/etc/

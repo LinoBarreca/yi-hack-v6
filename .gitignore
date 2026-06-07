@@ -38,3 +38,5 @@ src/ipc_cmd/ipc_cmd/ipc_read.o
 
 
 
+CAMERA_FIRMWARE_DESIGN.md
+simulated_boot.log

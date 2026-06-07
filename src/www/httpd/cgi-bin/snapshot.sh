@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 validateFile()
 {
@@ -12,8 +12,7 @@ validateFile()
     esac
 }
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
-CONF_FILE="$YI_HACK_PREFIX/etc/camera.conf"
+CONF_FILE="/home/yi-hack/config/camera.conf"
 
 if grep -q SWITCH_ON=no "$CONF_FILE"; then
     printf "Status: 503 Service Unavailable\r\n"

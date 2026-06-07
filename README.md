@@ -1,21 +1,16 @@
 <p align="center">
-    <img height="200" src="https://raw.githubusercontent.com/alienatedsec/yi-hack-v5/master/imgs/yi-hack-v5-header.png">
+    <img height="200" src="https://raw.githubusercontent.com/LinoBarreca/yi-hack-v6/master/imgs/yi-hack-v6-header.png">
 </p>
 <p align="center">
-    <a target="_blank" href="https://discord.gg/bsKncwvRU7">
-        <img src="https://img.shields.io/discord/825822449449828414?logo=discord" alt="Official Discord Server">
-    </a>
-    <a target="_blank" href="https://github.com/alienatedsec/yi-hack-v5/releases">
-        <img src="https://img.shields.io/github/downloads/alienatedsec/yi-hack-v5/total.svg" alt="Releases Downloads">
+    <a target="_blank" href="https://github.com/LinoBarreca/yi-hack-v6/releases">
+        <img src="https://img.shields.io/github/downloads/LinoBarreca/yi-hack-v6/total.svg" alt="Releases Downloads">
     </a>
 </p>
 
-## Why this `YI-HACK-V5` firmware?
+## Why this `yi-hack-v6` firmware?
 
-The answer is simple: missing updates, RTSP, and not based on the latest stock firmware (which features improvements and new cool stuff).
-Besides, there were no updates to `yi-hack-v4`, and I am against that RTSP licensing model. I have contributed enough and will continue my work separately.
-
-I am slowly working on pre-release versions, and I can see lots of downloads, testing and contributions. A big thank you to the community.
+The answer is simple: I wanted to save 5 euro of SD card on AliExpress, so I decided to write code for a month..
+Just kidding..I have 6 Yi cameras..I wanted an easy way to update them all and configure them all together.
 
 ## Table of Contents
 
@@ -31,6 +26,12 @@ I am slowly working on pre-release versions, and I can see lots of downloads, te
 This firmware will add the following features:
 
 - **NEW FEATURES**
+  - new, simplified file layout
+  - Ability to run without an SD card (recovery http)
+  - Ability to load the firmware from a network share (configurable through the recovery http)
+  - Ability to load some configurations from the network share (user chooses which ones)
+
+- **v5 FEATURES**
   - **RTSP server** - which will allow an RTSP stream of the video while keeping the cloud features enabled (available to all and it is free).
   - **MQTT** - detect motion directly from your home server!
   - WebServer - user-friendly stats and configurations.
@@ -92,7 +93,7 @@ For microSD cards larger than 32 GB, Windows 10 only gives you the option to for
       * Volume label: Something
       * Perform a quick format: &#9745;
 
-You should now have a FAT32 partition on your microSD card that will allow the camera to load the firmware files to update to `yi-hack-v5`.
+You should now have a FAT32 partition on your microSD card that will allow the camera to load the firmware files to update to `yi-hack-v6`.
 
 ### Example: 4 GB FAT32 partition on 64 GB microSD card
 
@@ -110,9 +111,9 @@ Alternative way:
 
 </p></details>
 
-3. Get the correct firmware files for your camera from the latest baseline release link: https://github.com/alienatedsec/yi-hack-v5/releases/tag/0.4.1
+3. Get the correct firmware files for your camera from the latest baseline release link: https://github.com/LinoBarreca/yi-hack-v6/releases/tag/0.1.0
 
-4. Save both files `rootfs_xx` and `home_xx`, and the `yi-hack-v5` folder on the root path of the microSD card.
+4. Save both files `rootfs_xx` and `home_xx`, and the `yi-hack-v6` folder on the root path of the microSD card.
 
 **_IMPORTANT: Make sure that the filenames stored on the microSD card are correct and didn't get changed. e.g. The firmware filenames for the Yi 1080p Dome camera must be home_h20 and rootfs_h20._**
 
@@ -134,7 +135,7 @@ Access the web interface by entering the IP address of the camera in a web brows
 
 **_IMPORTANT: If you have multiple cameras. It is important to configure each camera with a unique hostname. Otherwise, the web interface will only be accessible by IP address._**
 
-10. Done! You are now successfully running yi-hack-v5!
+10. Done! You are now successfully running yi-hack-v6!
 
 ## Unbrick your camera
 _TO DO - (It happened a few times and it's often possible to recover from it)_
@@ -142,17 +143,18 @@ _TO DO - (It happened a few times and it's often possible to recover from it)_
 ## Troubleshooting
 
 ### Wi-Fi is connected, and the camera responds to ping but I'm not able to connect to the web interface
-Verify that you did not forget to upload the `yi-hack-v5` folder to the SD card when uploading firmware. If you did, upload it and restart the camera.
+Verify that you did not forget to upload the `yi-hack-v6` folder to the SD card when uploading firmware. If you did, upload it and restart the camera.
 
 ### Cannot complete the pairing/wifi settings lost after reboot
 Ensure you are using the correct app (Yi Home) to set up the wifi connection. For example, the "Xiaomi Home" app will also generate the correct QR code that will work with your camera for the initial connection, but then after power is removed
 the settings will be lost.
 
 ## Introducing pre-releases
-Please follow this [guide](https://github.com/alienatedsec/yi-hack-v5/discussions/248#discussion-5090628) if you want to test new features and improvements
+Please follow this [guide](https://github.com/LinoBarreca/yi-hack-v6/discussions/248#discussion-5090628) if you want to test new features and improvements
 
 ## Acknowledgments
-Special thanks to the following people and projects, without them `yi-hack-v5` wouldn't be possible.
+Special thanks to the following people and projects, without them `yi-hack-v6` wouldn't be possible.
+- @alienatedsec [https://github.com/alienatedsec/yi-hack-v5](https://github.com/alienatedsec/yi-hack-v5)
 - @TheCrypt0 - [https://github.com/TheCrypt0/yi-hack-v4](https://github.com/TheCrypt0/yi-hack-v4)
 - @shadow-1 - [https://github.com/shadow-1/yi-hack-v3](https://github.com/shadow-1/yi-hack-v3)
 - @fritz-smh - [https://github.com/fritz-smh/yi-hack](https://github.com/fritz-smh/yi-hack)

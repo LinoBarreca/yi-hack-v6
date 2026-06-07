@@ -1,9 +1,10 @@
 #!/bin/bash
 
 #
-#  This file is part of yi-hack-v5 (https://github.com/alienatedsec/yi-hack-v5).
+#  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
 #  Copyright (c) 2018-2019 Davide Maggioni - v4 specific
 #  Copyright (c) 2021-2024 alienatedsec - v5 specific
+#  Copyright (c) 2026 Lino Barreca.
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -107,7 +108,7 @@ VERSION_ID=$(cat $(get_script_dir)/../VERSION)
 
 echo ""
 echo "------------------------------------------------------------------------"
-echo " YI-HACK-V5 - FIRMWARE PACKER"
+echo " yi-hack-v6 - FIRMWARE PACKER"
 echo "------------------------------------------------------------------------"
 printf " camera_name      : %s\n" $CAMERA_NAME
 printf " camera_id        : %s\n" $CAMERA_ID
@@ -188,7 +189,7 @@ printf "done!\n"
 
 # insert the version file
 printf "Copying the version file... "
-cp $BASE_DIR/VERSION $TMP_DIR/home/yi-hack-v5/version
+cp $BASE_DIR/VERSION $TMP_DIR/home/yi-hack/version
 printf "done!\n\n"
 
 # insert the camera version file
@@ -211,27 +212,27 @@ compress_file "$TMP_DIR/home/base/tools" wpa_passphrase
 compress_file "$TMP_DIR/home/base/tools" wpa_cli
 compress_file "$TMP_DIR/home/lib" libcrypto.so.1.1
 
-# Compress the yi-hack-v5 folder
-printf "Compressing yi-hack-v5... "
-7za a $TMP_DIR/home/yi-hack-v5/yi-hack-v5.7z $TMP_DIR/home/yi-hack-v5/* > /dev/null
+# Compress the yi-hack-v6 folder
+printf "Compressing yi-hack-v6... "
+7za a $TMP_DIR/home/yi-hack/yi-hack.7z $TMP_DIR/home/yi-hack/* > /dev/null
 
 # copy files to the output dir
 echo ">>> Copying files to $OUT_DIR... "
 echo "    Copying files..."
-cp -R $TMP_DIR/home/yi-hack-v5 $OUT_DIR
-rm $OUT_DIR/yi-hack-v5/yi-hack-v5.7z
+cp -R $TMP_DIR/home/yi-hack $OUT_DIR
+rm $OUT_DIR/yi-hack/yi-hack.7z
 echo "Copying files to the output folder - done!"
 
-# delete yi-hack-v5.7z before packing
-rm $TMP_DIR/home/yi-hack-v5/yi-hack-v5.7z
-echo "Deleteing of yi-hack-v5.7z - done!"
+# delete yi-hack.7z before packing
+rm $TMP_DIR/home/yi-hack/yi-hack.7z
+echo "Deleteing of yi-hack.7z - done!"
 
-# Delete all the compressed files except system_init.sh and yi-hack-v5.7z
-#find $TMP_DIR/home/yi-hack-v5/* -maxdepth 0 -type d ! -name 'script' -exec rm -rf {} +
-find $TMP_DIR/home/yi-hack-v5/script/ -maxdepth 0 ! -name 'system_init.sh' -type f -exec rm -f {} +
-find $TMP_DIR/home/yi-hack-v5/* -maxdepth 0 -type d ! \( -name 'script' -o -name 'etc' -o -name 'lib' \) -exec rm -rf {} \;
-find $TMP_DIR/home/yi-hack-v5/lib/ -type f ! -name 'ipc_multiplex.so' -exec rm -f {} \;
-find $TMP_DIR/home/yi-hack-v5/* -maxdepth 0 -type f ! -name 'version' -exec rm {} +
+# Delete all the compressed files except system_init.sh and yi-hack.7z
+#find $TMP_DIR/home/yi-hack/* -maxdepth 0 -type d ! -name 'script' -exec rm -rf {} +
+find $TMP_DIR/home/yi-hack/script/ -maxdepth 0 ! -name 'system_init.sh' -type f -exec rm -f {} +
+find $TMP_DIR/home/yi-hack/* -maxdepth 0 -type d ! \( -name 'script' -o -name 'etc' -o -name 'lib' \) -exec rm -rf {} \;
+find $TMP_DIR/home/yi-hack/lib/ -type f ! -name 'ipc_multiplex.so' -exec rm -f {} \;
+find $TMP_DIR/home/yi-hack/* -maxdepth 0 -type f ! -name 'version' -exec rm {} +
 
 # Delete the old wpa_supplicant upgrade file from the image so it wont override the release version
 find $TMP_DIR/home/app/ -type f -name 'wpa_supplicant' -exec rm -f {} \;

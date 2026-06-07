@@ -1,7 +1,8 @@
 #!/bin/sh
 
-# This file is part of yi-hack-v5 (https://github.com/alienatedsec/yi-hack-v5).
+# This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
 # Copyright (c) 2021 alienatedsec
+# Copyright (c) 2026 Lino Barreca.
 
 set -e
 

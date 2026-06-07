@@ -1,12 +1,11 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
-PTZ_CONF_FILE=$YI_HACK_PREFIX/etc/ptz_presets.conf
-PTZ_SCRIPT=$YI_HACK_PREFIX/script/ptz_presets.sh
+PTZ_CONF_FILE=/home/yi-hack/config/ptz_presets.conf
+PTZ_SCRIPT=/home/yi-hack/base/script/ptz_presets.sh
 
-. $YI_HACK_PREFIX/www/cgi-bin/validate.sh
+. /home/yi-hack/www/cgi-bin/validate.sh
 
 return_error() {
     printf "Content-type: application/json\r\n\r\n"

@@ -1,8 +1,7 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
 
 get_file_type()
 {   
@@ -75,13 +74,13 @@ else
 #        
 #        killall viewd rtspv4
 #        
-#        cp -rf rtspv4__*/* $YI_HACK_PREFIX/
+#        cp -rf rtspv4__*/* /home/yi-hack/extra/
 #        rm -rf rtspv4__*
 #        
-#        chmod +x $YI_HACK_PREFIX/bin/viewd
-#        chmod +x $YI_HACK_PREFIX/bin/rtspv4
+#        chmod +x /home/yi-hack/extra/bin/viewd
+#        chmod +x /home/yi-hack/extra/bin/rtspv4
 #    else
-        cp -f "$TMP_FILE" "$YI_HACK_PREFIX/$FILE_TYPE"
+        cp -f "$TMP_FILE" "/home/yi-hack/extra/$FILE_TYPE"
 #    fi
 fi
 

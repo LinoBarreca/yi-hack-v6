@@ -7,11 +7,11 @@ set_path_before()
 	[ -d $1 ] && PATH="$1:$PATH"
 }
 
-PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack-v5/bin:/home/app/localbin:/home/base:/tmp/sd/yi-hack-v5/bin:/tmp/sd/yi-hack-v5/sbin:/tmp/sd/yi-hack-v5/usr/bin:/tmp/sd/yi-hack-v5/usr/sbin:/home/yi-hack-v5/sbin"
+PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack/extra/bin:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin:/home/yi-hack/extra/sbin"
 set_path_before /usr/local/sbin
 set_path_before /usr/local/bin
 
-LD_LIBRARY_PATH="/usr/local/lib:/home/hisiko/hisilib:/lib:/usr/lib:/home/lib:/home/app/locallib:/tmp/sd:/tmp/sd/yi-hack-v5:/tmp/sd/yi-hack-v5/lib:/home/yi-hack-v5/lib"
+LD_LIBRARY_PATH="/usr/local/lib:/home/hisiko/hisilib:/lib:/usr/lib:/home/lib:/home/app/locallib:/home/yi-hack/extra/lib:/home/yi-hack/extra/lib"
 
 export PATH
 export LD_LIBRARY_PATH
@@ -30,9 +30,9 @@ WHITE="[1;37m"
 
 umask 022
 
-alias crontab="crontab -c /tmp/sd/yi-hack-v5/etc/crontabs"
+alias crontab="crontab -c /home/yi-hack/config/crontabs"
 
-HACK_VERSION=$(cat /tmp/sd/yi-hack-v5/version)
+HACK_VERSION=$(cat /home/yi-hack/extra/version)
 NEW_VERSION=$(cat /tmp/.hacknewver 2>/dev/null)
 
 ###############################################################################
@@ -44,7 +44,7 @@ echo " | | | |___|   | .'|  _| '_|___| | |__ |"
 echo " |_  |_|   |_|_|__,|___|_,_|    \_/|___|"
 echo " |___|"
 echo " -----------------------------------------------------"
-echo "  yi-hack-v5 - $HACK_VERSION"
+echo "  yi-hack-v6 - $HACK_VERSION"
 echo " -----------------------------------------------------"
 
 if [[ -z $NEW_VERSION ]] ; then
@@ -59,7 +59,7 @@ else
         echo " UPDATE: A new version is available."
         echo ""
         echo " You can download it from GitHub:"
-        echo " > https://github.com/alienatedsec/yi-hack-v5/releases"
+        echo " > https://github.com/LinoBarreca/yi-hack-v6/releases"
         echo " -----------------------------------------------------"
     elif [[ $NEW_VERSION == "no_currentversionisbeta" ]] ; then
         echo " WARNING: You are using an early-access version."

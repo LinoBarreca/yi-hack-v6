@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# 0.1.0
+
+ulimit -s 1024
+export LD_LIBRARY_PATH=/home/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/home/yi-hack/extra/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/home/app/locallib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/home/hisiko/hisilib:$LD_LIBRARY_PATH
+export PATH=/home/app:$PATH
+export PATH=/home/app/localbin:$PATH
+export PATH=/home/base/tools:$PATH
+export PATH=/home/yi-hack/extra/bin:$PATH
+export PATH=/home/yi-hack/extra/sbin:$PATH
+
+
+. /home/yi-hack/base/script/get_config.sh
+
+if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
+        cd /home/app
+        ./cloudAPI_fake "$@"
+else
+    if [ "$4" == "https://api.xiaoyi.com/v4/ipc/check_did" ]; then
+        echo '{"allow":true,"code":"20000"}'
+    elif [[ $(get_config system.PROXYCHAINSNG) == "yes" ]] ; then
+        cd /home/app
+        /home/yi-hack/extra/bin/proxychains4 ./cloudAPI_real "$@"
+    else
+        cd /home/app
+        ./cloudAPI_real "$@"
+    fi
+fi

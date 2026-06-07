@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 # Use. Available variables:
 # "oldness" variable. Defines which video to retrieve. 
@@ -98,7 +98,7 @@ done
 
 if [ "$TYPE" == "2" ]; then
     LOCAL_IP=$(ifconfig wlan0 | awk '/inet addr/{print substr($2,6)}')
-    source /tmp/sd/yi-hack-v5/etc/system.conf
+    source /home/yi-hack/config/system.conf
 
     printf "Content-type: text/plain\r\n\r\n"
     echo "http://$LOCAL_IP:$HTTPD_PORT/record/$DIRNAME/$VIDNAME"

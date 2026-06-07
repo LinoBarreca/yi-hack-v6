@@ -1,8 +1,7 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack-v5"
 
 sedencode(){
 #  echo -e "$(sed 's/\\/\\\\\\/g;s/\&/\\\&/g;s/\//\\\//g;')"
@@ -46,7 +45,7 @@ get_conf_type()
     fi
 }
 
-. $YI_HACK_PREFIX/www/cgi-bin/validate.sh
+. /home/yi-hack/www/cgi-bin/validate.sh
 
 if ! $(validateQueryString $QUERY_STRING); then
     printf "Content-type: application/json\r\n\r\n"
@@ -60,9 +59,9 @@ CONF_TYPE="$(get_conf_type)"
 CONF_FILE=""
 
 if [ "$CONF_TYPE" == "mqtt" ] ; then
-    CONF_FILE="$YI_HACK_PREFIX/etc/mqttv4.conf"
+    CONF_FILE="/home/yi-hack/config/mqttv4.conf"
 else
-    CONF_FILE="$YI_HACK_PREFIX/etc/$CONF_TYPE.conf"
+    CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf"
 fi
 
 read -r POST_DATA
@@ -91,12 +90,12 @@ for ROW in $ROWS; do
             if [ "$MAC" != "" ]; then
                 hostname yi-$MAC
             else
-                hostname yi-hack-v5
+                hostname yi-hack-v6
             fi
-            hostname > $YI_HACK_PREFIX/etc/hostname
+            hostname > /home/yi-hack/config/hostname
         else
             hostname $VALUE
-            echo "$VALUE" > $YI_HACK_PREFIX/etc/hostname
+            echo "$VALUE" > /home/yi-hack/config/hostname
         fi
     elif [ "$KEY" == "MOTION_IMAGE_DELAY" ] ; then
         if $(validateNumber $VALUE); then

@@ -1,0 +1,44 @@
+#!/bin/sh
+
+# yi-hack-v6 boot dispatch.
+# By now S01udev has run system_init.sh and /home/base/init.sh (WiFi up, SD mounted at /tmp/sd).
+
+ulimit -s 1024
+export LD_LIBRARY_PATH=/home/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/home/app/locallib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/home/hisiko/hisilib:$LD_LIBRARY_PATH
+export PATH=/home/app/localbin:$PATH
+export PATH=/home/base/tools:$PATH
+
+# Mount CIFS if configured+available (no-op otherwise), then build the logical view
+# /home/yi-hack/{extra,output,www}. build_view exits 0 if a payload (extra) is present.
+/home/yi-hack/base/script/mount_cifs.sh
+if /home/yi-hack/base/script/build_view.sh; then
+    # Payload present -> full dispatcher (RTSP/ONVIF/MQTT/cloud/... per config)
+    /home/yi-hack/base/script/system.sh
+else
+    # Minimal boot: no payload. Rescue web UI (www -> base/www-min) + telnet are always up.
+    # The stock Xiaomi cloud app runs so the camera is still usable via the Yi app,
+    # unless privacy is enabled.
+    # TODO (section 5.9): privacy flag + build the rescue UI (base/www-min).
+    httpd -h /home/yi-hack/www &
+    telnetd &
+    if [ "$(cat /home/yi-hack/config/privacy 2>/dev/null)" != "on" ]; then
+        (
+            sleep 2
+            cd /home/app
+            ./dispatch &
+            sleep 2
+            ./rmm &
+            sleep 4
+            ./mp4record &
+            ./cloud &
+            ./p2p_tnp &
+            if [[ $(cat /home/app/.camver) != "yi_dome" ]] ; then
+                ./oss &
+            fi
+            ./watch_process &
+            tcpsvd -vE 0.0.0.0 21 ftpd -w &
+        )
+    fi
+fi

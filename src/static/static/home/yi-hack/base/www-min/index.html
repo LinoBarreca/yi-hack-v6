@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yi-hack-v6 rescue</title>
+<style>
+ body{font-family:sans-serif;max-width:640px;margin:1em auto;padding:0 1em;color:#222}
+ h1{font-size:1.3em} h2{font-size:1.05em;margin-top:1.5em;border-bottom:1px solid #ccc}
+ label{display:block;margin:.4em 0 .1em} input[type=text],input[type=password],select{width:100%;padding:.4em;box-sizing:border-box}
+ label.chk{display:flex;align-items:center;gap:.5em} label.chk input[type=checkbox]{width:auto;margin:0;flex:none}
+ button{margin-top:.8em;padding:.5em 1em;cursor:pointer}
+ .row{display:flex;gap:1em} .row>div{flex:1}
+ #status,#msg{background:#f4f4f4;padding:.6em;border-radius:4px;white-space:pre-wrap;font-family:monospace;font-size:.85em}
+ .ok{color:#0a0} .err{color:#c00}
+</style>
+</head>
+<body>
+<h1>yi-hack-v6 &mdash; rescue</h1>
+<p>Minimal recovery UI (flash). Available with no payload. Configure WiFi / CIFS, then reboot.</p>
+
+<h2>Status</h2>
+<div id="status">loading...</div>
+<button onclick="loadStatus()">Refresh</button>
+
+<h2>WiFi</h2>
+<label>SSID</label><input id="wifi_ssid">
+<label>Passphrase (PSK)</label><input id="wifi_psk" type="password">
+
+<h2>CIFS (network payload)</h2>
+<label class="chk"><input type="checkbox" id="cifs_enabled"> Enable CIFS (boot payload from network share)</label>
+<div class="row">
+ <div><label>Host</label><input id="cifs_host" placeholder="nas.lan"></div>
+ <div><label>Share</label><input id="cifs_share" placeholder="yicam"></div>
+</div>
+<label>User (blank = guest)</label><input id="cifs_user" placeholder="guest">
+<button onclick="testCifs()">Test CIFS</button>
+
+<h2>Privacy</h2>
+<label class="chk"><input type="checkbox" id="privacy"> Privacy mode (do not start the Xiaomi cloud app)</label>
+
+<h2>Apply</h2>
+<button onclick="save()">Save config</button>
+<button onclick="doReboot()" style="background:#fdd">Save &amp; Reboot</button>
+<div id="msg"></div>
+
+<script>
+function j(u,o){return fetch(u,o).then(r=>r.json())}
+function loadStatus(){
+ j('cgi-bin/status.sh').then(s=>{
+  document.getElementById('status').textContent=
+   'model:     '+s.model+'\nwlan IP:   '+s.wifi_ip+'\nwlan MAC:  '+s.wifi_mac+
+   '\neth IP:    '+s.eth_ip+'\neth MAC:   '+s.eth_mac+'\nSD:        '+s.sd+'\nCIFS:      '+s.cifs+
+   '\npayload:   '+s.extra+'\nprivacy:   '+s.privacy;
+ }).catch(e=>document.getElementById('status').textContent='error: '+e);
+}
+function loadCfg(){
+ j('cgi-bin/get.sh').then(c=>{
+  wifi_ssid.value=c.WIFI_SSID||''; cifs_host.value=c.CIFS_HOST||''; cifs_share.value=c.CIFS_SHARE||'';
+  cifs_user.value=c.CIFS_USER||''; cifs_enabled.checked=c.CIFS_ENABLED==='yes'; privacy.checked=c.PRIVACY==='on';
+ });
+}
+function body(){
+ return 'wifi_ssid='+encodeURIComponent(wifi_ssid.value)+'&wifi_psk='+encodeURIComponent(wifi_psk.value)+
+  '&cifs_enabled='+(cifs_enabled.checked?'yes':'no')+'&cifs_host='+encodeURIComponent(cifs_host.value)+
+  '&cifs_share='+encodeURIComponent(cifs_share.value)+'&cifs_user='+encodeURIComponent(cifs_user.value)+
+  '&privacy='+(privacy.checked?'on':'off');
+}
+function msg(t,ok){var m=document.getElementById('msg');m.textContent=t;m.className=ok?'ok':'err';}
+function save(){
+ j('cgi-bin/save.sh',{method:'POST',body:body()}).then(r=>msg(r.error==='false'?'Saved.':'Save failed.',r.error==='false')).then(loadStatus);
+}
+function testCifs(){
+ msg('testing...',true);
+ j('cgi-bin/cifstest.sh',{method:'POST',body:body()}).then(r=>msg(r.msg,r.ok==='yes'));
+}
+function doReboot(){
+ if(!confirm('Save and reboot now?'))return;
+ j('cgi-bin/save.sh',{method:'POST',body:body()}).then(()=>fetch('cgi-bin/reboot.sh')).then(()=>msg('Rebooting...',true));
+}
+loadStatus();loadCfg();
+</script>
+</body>
+</html>

@@ -1,15 +1,15 @@
 #!/bin/sh
 
-# 0.4.1
+# 0.1.0
 
 printf "Content-type: application/octet-stream\r\n\r\n"
 
 TMP_DIR="/tmp/yi-temp-save"
 mkdir $TMP_DIR
 cd $TMP_DIR
-cp /tmp/sd/yi-hack-v5/etc/*.conf .
-if [ -f /tmp/sd/yi-hack-v5/etc/hostname ]; then
-    cp /tmp/sd/yi-hack-v5/etc/hostname .
+cp /home/yi-hack/config/*.conf .
+if [ -f /home/yi-hack/config/hostname ]; then
+    cp /home/yi-hack/config/hostname .
 fi
 tar cvf config.tar * > /dev/null
 bzip2 config.tar

@@ -6,8 +6,8 @@ cd $SCRIPT_DIR
 # Compress the file
 #upx ./_install/sbin/curl
 
-mkdir -p ../../build/home/yi-hack-v5/bin/
-mkdir -p ../../build/home/yi-hack-v5/lib/
+mkdir -p ../../build/home/yi-hack/bin/
+mkdir -p ../../build/home/yi-hack/lib/
 
-rsync -a ./_install/bin/curl ../../build/home/yi-hack-v5/bin/
-rsync -a ./sysroot/lib/libssl.so.1.1 ../../build/home/yi-hack-v5/lib/
+rsync -a ./_install/bin/curl ../../build/home/yi-hack/bin/
+rsync -a ./sysroot/lib/libssl.so.1.1 ../../build/home/yi-hack/lib/
