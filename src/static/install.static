@@ -5,5 +5,5 @@ cd $SCRIPT_DIR
 
 mkdir -p ../../build/
 
-rsync -a ./_install/* ../../build/
+cp -a ./_install/* ../../build/
 

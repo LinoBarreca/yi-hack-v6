@@ -14,7 +14,7 @@ mkdir -p ../../build/home/yi-hack/lib/
 mkdir -p ../../build/rootfs/lib/
 
 # Copying all files 
-rsync -a ./_install/lib/* ../../build/home/yi-hack/lib/
+cp -a ./_install/lib/* ../../build/home/yi-hack/lib/
 
 #rsync -a ./_install/lib/libuClibc* ../../build/home/yi-hack/lib/
 #rsync -a ./_install/lib/libc.so.0 ../../build/home/yi-hack/lib/
@@ -38,10 +38,10 @@ cp -f ../../build/home/yi-hack/lib/libthread_db-0.9.33.2.so ../../build/home/yi-
 cp -f ../../build/home/yi-hack/lib/libutil-0.9.33.2.so ../../build/home/yi-hack/lib/libutil.so.0
 
 # kept for just in case
-rsync -a ./_install/lib/libuClibc* ../../build/rootfs/lib/
-rsync -a ./_install/lib/libc.so.0 ../../build/rootfs/lib/
-rsync -a ./_install/lib/ld-uClibc* ../../build/rootfs/lib/
-rsync -a ./_install/lib/libm* ../../build/rootfs/lib/
+cp -a ./_install/lib/libuClibc* ../../build/rootfs/lib/
+cp -a ./_install/lib/libc.so.0 ../../build/rootfs/lib/
+cp -a ./_install/lib/ld-uClibc* ../../build/rootfs/lib/
+cp -a ./_install/lib/libm* ../../build/rootfs/lib/
 
 ln -fs /tmp/sd/yi-hack/lib/libutil-0.9.33.2.so ../../build/rootfs/lib/libutil-0.9.33.2.so
 ln -fs libutil-0.9.33.2.so ../../build/rootfs/lib/libutil.so.0

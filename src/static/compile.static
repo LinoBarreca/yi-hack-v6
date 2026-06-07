@@ -5,4 +5,4 @@ cd $SCRIPT_DIR
 
 mkdir -p ./_install
 
-rsync -a ./static/* ./_install
+cp -a ./static/* ./_install

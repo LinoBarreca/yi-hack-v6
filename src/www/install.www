@@ -3,4 +3,4 @@
 SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
-rsync -a ./_install/* ../../build/home/yi-hack/
+cp -a ./_install/* ../../build/home/yi-hack/

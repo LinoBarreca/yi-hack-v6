@@ -11,6 +11,6 @@ mkdir -p ../../build/home/yi-hack/bin/
 mkdir -p ../../build/home/yi-hack/lib/
 mkdir -p ../../build/home/yi-hack/etc/
 
-rsync -a ./_install/tmp/sd/yi-hack/bin/* ../../build/home/yi-hack/bin/
-rsync -a ./_install/tmp/sd/yi-hack/lib/* ../../build/home/yi-hack/lib/
-rsync -a ./_install/tmp/sd/yi-hack/etc/* ../../build/home/yi-hack/etc/
+cp -a ./_install/tmp/sd/yi-hack/bin/* ../../build/home/yi-hack/bin/
+cp -a ./_install/tmp/sd/yi-hack/lib/* ../../build/home/yi-hack/lib/
+cp -a ./_install/tmp/sd/yi-hack/etc/* ../../build/home/yi-hack/etc/

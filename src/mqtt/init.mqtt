@@ -7,8 +7,9 @@ cd $SCRIPT_DIR
 
 rm -rf ./_install
 
+# mqttv4 is vendored in-tree (no longer a submodule; upstream is dead). Sources are
+# edited directly here - no git reset / dir.patch.
 cd mqttv4
-git reset --hard 
 
 cp ../config.mak config.mak
 
@@ -22,5 +23,3 @@ fi
 ln -fs ../../../mosquitto/_install/lib/libmosquitto.so.1 ./lib/libmosquitto.so
 
 cd ..
-
-patch -p0 < dir.patch

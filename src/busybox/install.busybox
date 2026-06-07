@@ -9,7 +9,7 @@ cd $SCRIPT_DIR
 #cp -f ./_install/bin/busybox ../../build/home/yi-hack/bin/busybox
 #ln -fs /tmp/sd/home/yi-hack/bin/busybox ../../build/rootfs/bin/busybox
 #rm ./_install/bin/busybox
-rsync -a ./_install/* ../../build/rootfs/
+cp -a ./_install/* ../../build/rootfs/
 
 # Silly idea - dont try at home
 

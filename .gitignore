@@ -23,7 +23,6 @@ INIT_SUBMODULES.md
 # Added for easier management
 src/dropbear/dropbear
 src/ftpd/pure-ftpd
-src/mqtt/mqttv4
 src/uClibc/uClibc
 src/wsdd/wsdd
 src/snapshot/snapshot/ffmpeg-4.3.2/
