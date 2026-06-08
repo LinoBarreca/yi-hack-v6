@@ -28,6 +28,7 @@ RAM_BASE="${RAM_BASE:-/tmp/yi-hack}"
 CONFIG_DIR="${CONFIG_DIR:-$LOGICAL/config}"
 CIFS_RW_MNT="${CIFS_RW_MNT:-}"   # dedicated RW mount for output->CIFS (empty = unavailable; the CIFS payload is RO)
 . "$LOGICAL/base/script/get_config.sh"
+. "$LOGICAL/base/script/version_compat.sh"
 
 MODEL=$(cat /home/app/.camver 2>/dev/null)
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') build_view: $*"; }
@@ -58,10 +59,16 @@ fi
 if [ -z "$EXTRA_SRC" ] && is_mounted "$SD_MNT"; then
     EXTRA_SRC=$(extra_on "$SD_MNT") && log "extra <- SD ($EXTRA_SRC)"
 fi
+# Version handshake (5.8): refuse a payload whose version is incompatible with the
+# flash base (wrong-schema config / wrong-ABI binaries) -> fall back to minimal boot.
+if [ -n "$EXTRA_SRC" ] && ! payload_compatible "${EXTRA_SRC%/*}"; then
+    log "payload incompatible with base -> refusing payload -> minimal boot"
+    EXTRA_SRC=""
+fi
 if [ -n "$EXTRA_SRC" ]; then
     relink "$EXTRA_SRC" "$LOGICAL/extra"
 else
-    log "no CIFS/SD payload -> extra empty -> minimal boot"
+    log "no usable CIFS/SD payload -> extra empty -> minimal boot"
 fi
 
 # ---------------- www (single web UI path) ----------------
