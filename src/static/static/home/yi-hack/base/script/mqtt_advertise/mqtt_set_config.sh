@@ -1,30 +1,19 @@
 #!/bin/sh
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack"
+export LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:$LD_LIBRARY_PATH"
+export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
+MOSQUITTO_SUB="/home/yi-hack/extra/bin/mosquitto_sub"
 
-CONFIG_SET="script/mqtt_advertise/mqtt_adv_config.sh"
-CONF_FILE="etc/camera.conf"
-CONF_MQTT_ADVERTISE_FILE="etc/mqtt_advertise.conf"
-MQTT_FILE="etc/mqttv4.conf"
+CONFIG_SET="/home/yi-hack/base/script/mqtt_advertise/mqtt_adv_config.sh"
+CAMERA_CONF_FILE="/home/yi-hack/config/camera.conf"
 
-PATH=$PATH:$YI_HACK_PREFIX/bin:$YI_HACK_PREFIX/usr/bin:/bin:/usr/bin
-LD_LIBRARY_PATH=$YI_HACK_PREFIX/lib:/lib:$LD_LIBRARY_PATH
-
-get_config() {
-    key=^$1
-    grep -w $key $YI_HACK_PREFIX/$MQTT_FILE | cut -d "=" -f2
-}
-
-get_mqtt_advertise_config() {
-    key=$1
-    grep -w $1 $YI_HACK_PREFIX/$CONF_MQTT_ADVERTISE_FILE | cut -d "=" -f2
-}
+. /home/yi-hack/base/script/get_config.sh
 
 HOSTNAME=$(hostname)
-MQTT_IP=$(get_config MQTT_IP)
-MQTT_PORT=$(get_config MQTT_PORT)
-MQTT_USER=$(get_config MQTT_USER)
-MQTT_PASSWORD=$(get_config MQTT_PASSWORD)
+MQTT_IP=$(get_config services.mqtt.BROKER_IP)
+MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)
+MQTT_USER=$(get_config services.mqtt.BROKER_USER)
+MQTT_PASSWORD=$(get_config services.mqtt.BROKER_PASSWORD)
 
 HOST=$MQTT_IP
 if [ ! -z $MQTT_PORT ]; then
@@ -34,17 +23,17 @@ if [ ! -z $MQTT_USER ]; then
     HOST=$HOST' -u '$MQTT_USER' -P '$MQTT_PASSWORD
 fi
 
-MQTT_PREFIX=$(get_config MQTT_PREFIX)
-MQTT_ADV_CAMERA_SETTING_TOPIC=$(get_mqtt_advertise_config MQTT_ADV_CAMERA_SETTING_TOPIC)
+MQTT_PREFIX=$(get_config identity.MQTT_PREFIX)
+CAMERA_SETTING_TOPIC=$(get_config services.mqtt_advertise.CAMERA_SETTING_TOPIC)
 
 while :; do
-    TOPIC=$MQTT_PREFIX'/'$MQTT_ADV_CAMERA_SETTING_TOPIC'/+/set'
-    SUBSCRIBED=$($YI_HACK_PREFIX/bin/mosquitto_sub -i $HOSTNAME -v -C 1 -h $HOST -t $TOPIC)
+    TOPIC=$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'/+/set'
+    SUBSCRIBED=$($MOSQUITTO_SUB -i $HOSTNAME -v -C 1 -h $HOST -t $TOPIC)
     CONF_UPPER=$(echo $SUBSCRIBED | awk '{print $1}' | awk -F / '{ print $(NF-1)}')
     CONF=$(echo $CONF_UPPER | awk '{ print tolower($0) }')
     VAL=$(echo $SUBSCRIBED | awk '{print $2}')
 
-    sed -i "s/^\(${CONF_UPPER}\s*=\s*\).*$/\1${VAL}/" $YI_HACK_PREFIX/$CONF_FILE
+    sed -i "s/^\(${CONF_UPPER}\s*=\s*\).*$/\1${VAL}/" $CAMERA_CONF_FILE
     if [ "$CONF" == "switch_on" ]; then
         if [ "$VAL" == "no" ]; then
             ipc_cmd -t off
@@ -90,5 +79,5 @@ while :; do
             ipc_cmd -r on
         fi
     fi
-    $YI_HACK_PREFIX/$CONFIG_SET
+    $CONFIG_SET
 done

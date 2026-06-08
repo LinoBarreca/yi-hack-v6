@@ -39,7 +39,7 @@
                     <tr class="row">
                         <td>Server IP</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="MQTT_IP"/>
+                            <input class="u-full-width" type="text" placeholder="" data-key="BROKER_IP"/>
                             <span class="switch-description">
                                 MQTT Server IP.
                             </span>
@@ -48,7 +48,7 @@
                     <tr class="row">
                         <td>Server Port</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1883" data-key="MQTT_PORT"/>
+                            <input class="u-full-width" type="text" placeholder="1883" data-key="BROKER_PORT"/>
                             <span class="switch-description">
                                 MQTT Server Port.
                             </span>
@@ -76,7 +76,7 @@
                     <tr class="row">
                         <td>Username</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="MQTT_USER"/>
+                            <input class="u-full-width" type="text" placeholder="" data-key="BROKER_USER"/>
                             <span class="switch-description">
                                 Server username.
                             </span>
@@ -85,7 +85,7 @@
                     <tr class="row">
                         <td>Password</td>
                         <td>
-                            <input class="u-full-width" type="password" placeholder="" data-key="MQTT_PASSWORD"/>
+                            <input class="u-full-width" type="password" placeholder="" data-key="BROKER_PASSWORD"/>
                             <span class="switch-description">
                                 Server password.
                             </span>
@@ -173,7 +173,7 @@
                     <tr class="row">
                         <td>Topics Prefix for remote configuration</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="yicam-config" data-key="MQTT_PREFIX_CONFIG"/>
+                            <input class="u-full-width" type="text" placeholder="yicam-config" data-key="PREFIX_CONFIG"/>
                             <span class="switch-description">
                                 The MQTT Topic prefix where the camera will subscribe to receive configuration messages.
                                 The final topic will be TOPIC_PREFIX_CONFIG/PARAM_FILE/PARAM_VALUE (Example: yicam-config/system/rtsp).
@@ -195,7 +195,7 @@
                     <tr class="row">
                         <td>Keepalive</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="120" data-key="MQTT_KEEPALIVE"/>
+                            <input class="u-full-width" type="text" placeholder="120" data-key="KEEPALIVE"/>
                             <span class="switch-description">
                                 Keep alive ensures that the connection between the broker and client is still open and that the broker and the client are aware of being connected. The amount is specified is seconds.
                             </span>
@@ -204,7 +204,7 @@
                     <tr class="row">
                         <td>QoS</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_QOS"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="QOS"/>
                             <span class="switch-description">
                                 The Quality of Service (QoS) level is an agreement between the sender of a message and the receiver of a message that defines the guarantee of delivery for a specific message.
                             </span>
@@ -213,7 +213,7 @@
                     <tr class="row">
                         <td>Retain for birth and will messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_BIRTH_WILL"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_BIRTH_WILL"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>
@@ -222,7 +222,7 @@
                     <tr class="row">
                         <td>Retain for motion messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_MOTION"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_MOTION"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>
@@ -231,7 +231,7 @@
                     <tr class="row">
                         <td>Retain for motion image messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_MOTION_IMAGE"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_MOTION_IMAGE"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>
@@ -240,7 +240,7 @@
                     <tr class="row">
                         <td>Retain for video list messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_MOTION_FILES"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_MOTION_FILES"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>
@@ -249,7 +249,7 @@
 <!--                    <tr class="row">
                         <td>Retain for AI Human Detection messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_AI_HUMAN_DETECTION"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_AI_HUMAN_DETECTION"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>
@@ -258,7 +258,7 @@
                     <tr class="row">
                         <td>Retain for Sound Detection messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_SOUND_DETECTION"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_SOUND_DETECTION"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>
@@ -267,7 +267,7 @@
                     <tr class="row">
                         <td>Retain for Baby Crying messages</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="1" data-key="MQTT_RETAIN_BABY_CRYING"/>
+                            <input class="u-full-width" type="text" placeholder="1" data-key="RETAIN_BABY_CRYING"/>
                             <span class="switch-description">
                                 A retained message is a normal MQTT message with the retained flag set to true. The broker stores the last retained message and the corresponding QoS for that topic. (1 = enabled, 0 = disabled)
                             </span>

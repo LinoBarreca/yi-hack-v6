@@ -1,22 +1,10 @@
 #!/bin/sh
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack"
-CONF_FILE="etc/mqttv4.conf"
-CONF_MQTT_ADVERTISE_FILE="etc/mqtt_advertise.conf"
+export LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:$LD_LIBRARY_PATH"
+export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
+MOSQUITTO_PUB="/home/yi-hack/extra/bin/mosquitto_pub"
 
-PATH=$PATH:$YI_HACK_PREFIX/bin:$YI_HACK_PREFIX/usr/bin:/bin:/usr/bin
-LD_LIBRARY_PATH=$YI_HACK_PREFIX/lib:/lib:$LD_LIBRARY_PATH
-
-
-get_config() {
-    key=^$1
-    grep -w $key $YI_HACK_PREFIX/$CONF_FILE | cut -d "=" -f2
-}
-
-get_mqtt_advertise_config() {
-    key=$1
-    grep -w $1 $YI_HACK_PREFIX/$CONF_MQTT_ADVERTISE_FILE | cut -d "=" -f2
-}
+. /home/yi-hack/base/script/get_config.sh
 
 HOSTNAME=$(hostname)
 UPTIME=$(cat /proc/uptime | cut -d ' ' -f1)
@@ -28,12 +16,10 @@ WLAN_STRENGTH=$(cat /proc/net/wireless | awk 'END { print $3 }' | sed 's/\.$//')
 
 # MQTT configuration
 
-LD_LIBRARY_PATH=$YI_HACK_PREFIX/lib:$LD_LIBRARY_PATH
-
-MQTT_IP=$(get_config MQTT_IP)
-MQTT_PORT=$(get_config MQTT_PORT)
-MQTT_USER=$(get_config MQTT_USER)
-MQTT_PASSWORD=$(get_config MQTT_PASSWORD)
+MQTT_IP=$(get_config services.mqtt.BROKER_IP)
+MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)
+MQTT_USER=$(get_config services.mqtt.BROKER_USER)
+MQTT_PASSWORD=$(get_config services.mqtt.BROKER_PASSWORD)
 
 HOST=$MQTT_IP
 if [ ! -z $MQTT_PORT ]; then
@@ -43,21 +29,21 @@ if [ ! -z $MQTT_USER ]; then
     HOST=$HOST' -u '$MQTT_USER' -P '$MQTT_PASSWORD
 fi
 
-MQTT_PREFIX=$(get_config MQTT_PREFIX)
-MQTT_ADV_TELEMETRY_TOPIC=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_TOPIC)
-MQTT_ADV_TELEMETRY_RETAIN=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_RETAIN)
-MQTT_ADV_TELEMETRY_QOS=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_QOS)
-if [ "$MQTT_ADV_TELEMETRY_RETAIN" == "1" ]; then
+MQTT_PREFIX=$(get_config identity.MQTT_PREFIX)
+TELEMETRY_TOPIC=$(get_config services.mqtt_advertise.TELEMETRY_TOPIC)
+TELEMETRY_RETAIN=$(get_config services.mqtt_advertise.TELEMETRY_RETAIN)
+TELEMETRY_QOS=$(get_config services.mqtt_advertise.TELEMETRY_QOS)
+if [ "$TELEMETRY_RETAIN" == "1" ]; then
     RETAIN="-r"
 else
     RETAIN=""
 fi
-if [ "$MQTT_ADV_TELEMETRY_QOS" == "0" ] || [ "$MQTT_ADV_TELEMETRY_QOS" == "1" ] || [ "$MQTT_ADV_TELEMETRY_QOS" == "2" ]; then
-    QOS="-q $MQTT_ADV_TELEMETRY_QOS"
+if [ "$TELEMETRY_QOS" == "0" ] || [ "$TELEMETRY_QOS" == "1" ] || [ "$TELEMETRY_QOS" == "2" ]; then
+    QOS="-q $TELEMETRY_QOS"
 else
     QOS=""
 fi
-TOPIC=$MQTT_PREFIX/$MQTT_ADV_TELEMETRY_TOPIC
+TOPIC=$MQTT_PREFIX/$TELEMETRY_TOPIC
 
 # MQTT Publish
 CONTENT="{ "
@@ -71,4 +57,4 @@ CONTENT=$CONTENT'"total_memory":"'$TOTAL_MEMORY'",'
 CONTENT=$CONTENT'"free_memory":"'$FREE_MEMORY'",'
 CONTENT=$CONTENT'"wlan_strength":"'$WLAN_STRENGTH'"'
 CONTENT=$CONTENT" }"
-$YI_HACK_PREFIX/bin/mosquitto_pub -i $HOSTNAME $QOS $RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+$MOSQUITTO_PUB -i $HOSTNAME $QOS $RETAIN -h $HOST -t $TOPIC -m "$CONTENT"

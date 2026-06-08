@@ -16,7 +16,9 @@ CONF_TYPE="$(get_conf_type)"
 CONF_FILE=""
 
 if [ "$CONF_TYPE" = "mqtt" ] ; then
-    CONF_FILE="/home/yi-hack/config/mqttv4.conf"
+    CONF_FILE="/home/yi-hack/config/services/mqtt.conf"
+elif [ "$CONF_TYPE" = "mqtt_advertise" ] ; then
+    CONF_FILE="/home/yi-hack/config/services/mqtt_advertise.conf"
 else
     CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf"
 fi

@@ -11,7 +11,8 @@
 #include "config.h"
 #include "validate.h"
 
-#define MQTT_CONF_FILE    "/home/yi-hack/config/mqttv4.conf"
+#define MQTT_CONF_FILE    "/home/yi-hack/config/services/mqtt.conf"
+#define IDENTITY_CONF_FILE "/home/yi-hack/config/identity.conf"
 #define CONF_FILE_PATH    "/home/yi-hack/config"
 #define CONF2MQTT_SCRIPT  "/home/yi-hack/base/script/conf2mqtt.sh"
 

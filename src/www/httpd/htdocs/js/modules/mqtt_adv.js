@@ -26,10 +26,10 @@ APP.mqtt_adv = (function ($) {
 
                 $.each(response, function (key, state) {
                     if (key == "HOMEASSISTANT_BOOT" || key == "HOMEASSISTANT_CRON" || key == "HOMEASSISTANT_ENABLE" || 
-                        key == "MQTT_ADV_INFO_GLOBAL_ENABLE" || key == "MQTT_ADV_INFO_GLOBAL_BOOT" || key == "MQTT_ADV_INFO_GLOBAL_CRON" || 
-                        key == "MQTT_ADV_LINK_ENABLE" || key == "MQTT_ADV_LINK_BOOT" || key == "MQTT_ADV_LINK_CRON" ||
-                        key == "MQTT_ADV_CAMERA_SETTING_ENABLE" || key == "MQTT_ADV_CAMERA_SETTING_BOOT" || key == "MQTT_ADV_CAMERA_SETTING_CRON" ||
-                        key == "MQTT_ADV_TELEMETRY_ENABLE" || key == "MQTT_ADV_TELEMETRY_BOOT" || key == "MQTT_ADV_TELEMETRY_CRON") {
+                        key == "INFO_GLOBAL_ENABLE" || key == "INFO_GLOBAL_BOOT" || key == "INFO_GLOBAL_CRON" || 
+                        key == "LINK_ENABLE" || key == "LINK_BOOT" || key == "LINK_CRON" ||
+                        key == "CAMERA_SETTING_ENABLE" || key == "CAMERA_SETTING_BOOT" || key == "CAMERA_SETTING_CRON" ||
+                        key == "TELEMETRY_ENABLE" || key == "TELEMETRY_BOOT" || key == "TELEMETRY_CRON") {
                         $('input[type="checkbox"][data-key="' + key + '"]').prop('checked', state === 'yes');
 
                     } else {
@@ -42,12 +42,32 @@ APP.mqtt_adv = (function ($) {
             }
         });
 
+        // HOMEASSISTANT_NAME / HOMEASSISTANT_IDENTIFIERS are per-camera identity
+        // (config/identity.conf), not the centrally-managed mqtt_advertise.conf.
+        $.ajax({
+            type: "GET",
+            url: 'cgi-bin/get_configs.sh?conf=identity',
+            dataType: "json",
+            success: function (response) {
+                $.each(response, function (key, state) {
+                    $('input[type="text"][data-key="' + key + '"]').prop('value', state);
+                });
+            },
+            error: function (response) {
+                console.log('error', response);
+            }
+        });
+
     }
+
+    // Per-camera identity keys on this page -> config/identity.conf (not managed)
+    var IDENTITY_KEYS = ["HOMEASSISTANT_NAME", "HOMEASSISTANT_IDENTIFIERS"];
 
     function saveConfigs() {
         var saveStatusElem;
 
         let configs = {};
+        let configsIdentity = {};
 
         saveStatusElem = $('#save-status');
         saveStatusElem.text("Saving...");
@@ -64,6 +84,11 @@ APP.mqtt_adv = (function ($) {
             configs[$(this).attr('data-key')] = $(this).prop('checked') ? 'yes' : 'no';
         });
 
+        // Split identity keys out to identity.conf
+        IDENTITY_KEYS.forEach(function (k) {
+            if (k in configs) { configsIdentity[k] = configs[k]; delete configs[k]; }
+        });
+
         $.ajax({
             type: "POST",
             url: 'cgi-bin/set_configs.sh?conf=mqtt_advertise',
@@ -72,6 +97,18 @@ APP.mqtt_adv = (function ($) {
             success: function (response) {
                 saveStatusElem.text("Saved");
             },
+            error: function (response) {
+                saveStatusElem.text("Error while saving");
+                console.log('error', response);
+            }
+        });
+
+        $.ajax({
+            type: "POST",
+            url: 'cgi-bin/set_configs.sh?conf=identity',
+            data: JSON.stringify(configsIdentity),
+            dataType: "json",
+            success: function (response) {},
             error: function (response) {
                 saveStatusElem.text("Error while saving");
                 console.log('error', response);

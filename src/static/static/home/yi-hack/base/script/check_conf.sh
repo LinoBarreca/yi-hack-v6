@@ -1,12 +1,27 @@
 #!/bin/sh
 
-# 0.1.0
+# 0.1.0 - yi-hack-v6
+#
+# check_conf.sh - seed default values into the flash config files. For each file,
+# any default key that is MISSING is appended; existing keys are left untouched
+# (so user/runtime values survive). Runs once at boot from system.sh.
+#
+# Layout below is kept in the SAME ORDER everywhere — file path, its defaults
+# (PARMS_<FILE>), and the seeding call — so it is obvious which defaults go where.
 
+# -----------------------------------------------------------------------------
+# Config files
+# -----------------------------------------------------------------------------
 SYSTEM_CONF_FILE="/home/yi-hack/config/system.conf"
 CAMERA_CONF_FILE="/home/yi-hack/config/camera.conf"
-MQTTV4_CONF_FILE="/home/yi-hack/config/mqttv4.conf"
+MQTT_CONF_FILE="/home/yi-hack/config/services/mqtt.conf"
+IDENTITY_CONF_FILE="/home/yi-hack/config/identity.conf"
+ADVERTISE_CONF_FILE="/home/yi-hack/config/services/mqtt_advertise.conf"
 
-PARMS1="
+# -----------------------------------------------------------------------------
+# Defaults per file
+# -----------------------------------------------------------------------------
+PARMS_SYSTEM="
 HTTPD=yes
 TELNETD=no
 SSHD=yes
@@ -46,7 +61,7 @@ SSH_PASSWORD=
 CRONTAB=
 DEBUG_LOG=no"
 
-PARMS2="
+PARMS_CAMERA="
 SWITCH_ON=yes
 SAVE_VIDEO_ON_MOTION=yes
 SENSITIVITY=low
@@ -57,13 +72,11 @@ LED=yes
 ROTATE=no
 IR=yes"
 
-PARMS3="
-MQTT_IP=0.0.0.0
-MQTT_PORT=1883
-MQTT_CLIENT_ID=yi-cam
-MQTT_USER=
-MQTT_PASSWORD=
-MQTT_PREFIX=yicam
+PARMS_MQTT="
+BROKER_IP=0.0.0.0
+BROKER_PORT=1883
+BROKER_USER=
+BROKER_PASSWORD=
 TOPIC_BIRTH_WILL=status
 TOPIC_MOTION=motion_detection
 TOPIC_MOTION_IMAGE=motion_detection_image
@@ -74,54 +87,84 @@ BIRTH_MSG=online
 WILL_MSG=offline
 MOTION_START_MSG=motion_start
 MOTION_STOP_MSG=motion_stop
+AI_HUMAN_DETECTION_MSG=human
+AI_VEHICLE_DETECTION_MSG=vehicle
+AI_ANIMAL_DETECTION_MSG=animal
 BABY_CRYING_MSG=crying
 SOUND_DETECTION_MSG=sound_detected
-MQTT_KEEPALIVE=120
-MQTT_QOS=1
-MQTT_RETAIN_BIRTH_WILL=1
-MQTT_RETAIN_MOTION=0
-MQTT_RETAIN_MOTION_IMAGE=0
-MQTT_RETAIN_MOTION_FILES=0
-MQTT_RETAIN_SOUND_DETECTION=0"
+KEEPALIVE=120
+QOS=1
+RETAIN_BIRTH_WILL=1
+RETAIN_MOTION=0
+RETAIN_MOTION_IMAGE=0
+RETAIN_MOTION_FILES=0
+RETAIN_SOUND_DETECTION=0"
 
-if [ ! -f $SYSTEM_CONF_FILE ]; then
-    touch $SYSTEM_CONF_FILE
-fi
-for i in $PARMS1
-do
-    if [ ! -z "$i" ]; then
-        PAR=$(echo "$i" | cut -d= -f1)
-        MATCH=$(cat $SYSTEM_CONF_FILE | grep ^$PAR=)
-        if [ -z "$MATCH" ]; then
-            echo "$i" >> $SYSTEM_CONF_FILE
-        fi
-    fi
-done
+PARMS_IDENTITY="
+MQTT_CLIENT_ID=yi-cam
+MQTT_PREFIX=yicam
+HOMEASSISTANT_NAME=Yi Camera
+HOMEASSISTANT_IDENTIFIERS=yi-cam"
 
-if [ ! -f $CAMERA_CONF_FILE ]; then
-    touch $CAMERA_CONF_FILE
-fi
-for i in $PARMS2
-do
-    if [ ! -z "$i" ]; then
-        PAR=$(echo "$i" | cut -d= -f1)
-        MATCH=$(cat $CAMERA_CONF_FILE | grep ^$PAR=)
-        if [ -z "$MATCH" ]; then
-            echo "$i" >> $CAMERA_CONF_FILE
-        fi
-    fi
-done
+PARMS_ADVERTISE="
+LINK_ENABLE=no
+LINK_BOOT=no
+LINK_CRON=no
+LINK_CRONTAB=
+LINK_TOPIC=links
+LINK_RETAIN=1
+LINK_QOS=0
+INFO_GLOBAL_ENABLE=no
+INFO_GLOBAL_BOOT=no
+INFO_GLOBAL_CRON=no
+INFO_GLOBAL_CRONTAB=
+INFO_GLOBAL_TOPIC=info_global
+INFO_GLOBAL_RETAIN=1
+INFO_GLOBAL_QOS=0
+CAMERA_SETTING_ENABLE=no
+CAMERA_SETTING_BOOT=no
+CAMERA_SETTING_CRON=no
+CAMERA_SETTING_CRONTAB=
+CAMERA_SETTING_TOPIC=camera_setting
+CAMERA_SETTING_RETAIN=1
+CAMERA_SETTING_QOS=0
+TELEMETRY_ENABLE=no
+TELEMETRY_BOOT=no
+TELEMETRY_CRON=no
+TELEMETRY_CRONTAB=
+TELEMETRY_TOPIC=telemetry
+TELEMETRY_RETAIN=1
+TELEMETRY_QOS=0
+HOMEASSISTANT_ENABLE=no
+HOMEASSISTANT_BOOT=no
+HOMEASSISTANT_CRON=no
+HOMEASSISTANT_CRONTAB=
+HOMEASSISTANT_MQTT_PREFIX=homeassistant
+HOMEASSISTANT_MANUFACTURER=YI
+HOMEASSISTANT_MODEL=
+HOMEASSISTANT_RETAIN=1
+HOMEASSISTANT_QOS=0"
 
-if [ ! -f $MQTTV4_CONF_FILE ]; then
-    touch $MQTTV4_CONF_FILE
-fi
-for i in $PARMS3
-do
-    if [ ! -z "$i" ]; then
-        PAR=$(echo "$i" | cut -d= -f1)
-        MATCH=$(cat $MQTTV4_CONF_FILE | grep ^$PAR=)
-        if [ -z "$MATCH" ]; then
-            echo "$i" >> $MQTTV4_CONF_FILE
-        fi
-    fi
-done
+# -----------------------------------------------------------------------------
+# seed_defaults <conf_file> <defaults> : append each missing KEY=value
+# -----------------------------------------------------------------------------
+seed_defaults() {
+    _file="$1"
+    _parms="$2"
+    mkdir -p "${_file%/*}"
+    [ -f "$_file" ] || touch "$_file"
+    for _kv in $_parms; do
+        [ -z "$_kv" ] && continue
+        _key=$(echo "$_kv" | cut -d= -f1)
+        grep -q "^$_key=" "$_file" || echo "$_kv" >> "$_file"
+    done
+}
+
+# -----------------------------------------------------------------------------
+# Seed (same order as above)
+# -----------------------------------------------------------------------------
+seed_defaults "$SYSTEM_CONF_FILE"    "$PARMS_SYSTEM"
+seed_defaults "$CAMERA_CONF_FILE"    "$PARMS_CAMERA"
+seed_defaults "$MQTT_CONF_FILE"      "$PARMS_MQTT"
+seed_defaults "$IDENTITY_CONF_FILE"  "$PARMS_IDENTITY"
+seed_defaults "$ADVERTISE_CONF_FILE" "$PARMS_ADVERTISE"

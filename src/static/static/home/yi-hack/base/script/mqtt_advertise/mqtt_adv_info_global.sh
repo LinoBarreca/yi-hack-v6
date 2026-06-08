@@ -1,24 +1,13 @@
 #!/bin/sh
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack"
-CONF_FILE="etc/mqttv4.conf"
-CONF_MQTT_ADVERTISE_FILE="etc/mqtt_advertise.conf"
+export LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:$LD_LIBRARY_PATH"
+export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
+MOSQUITTO_PUB="/home/yi-hack/extra/bin/mosquitto_pub"
 
-PATH=$PATH:$YI_HACK_PREFIX/bin:$YI_HACK_PREFIX/usr/bin:/bin:/usr/bin
-LD_LIBRARY_PATH=$YI_HACK_PREFIX/lib:/lib:$LD_LIBRARY_PATH
-
-get_config() {
-    key=^$1
-    grep -w $key $YI_HACK_PREFIX/$CONF_FILE | cut -d "=" -f2
-}
-
-get_mqtt_advertise_config() {
-    key=$1
-    grep -w $1 $YI_HACK_PREFIX/$CONF_MQTT_ADVERTISE_FILE | cut -d "=" -f2
-}
+. /home/yi-hack/base/script/get_config.sh
 
 HOSTNAME=$(hostname)
-FW_VERSION=$(cat $YI_HACK_PREFIX/version)
+FW_VERSION=$(cat /home/yi-hack/extra/version)
 HOME_VERSION=$(cat /home/app/.appver)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
@@ -36,12 +25,10 @@ WLAN_ESSID=$(iwconfig wlan0 | grep ESSID | cut -d\" -f2)
 
 # MQTT configuration
 
-LD_LIBRARY_PATH=$YI_HACK_PREFIX/lib:$LD_LIBRARY_PATH
-
-MQTT_IP=$(get_config MQTT_IP)
-MQTT_PORT=$(get_config MQTT_PORT)
-MQTT_USER=$(get_config MQTT_USER)
-MQTT_PASSWORD=$(get_config MQTT_PASSWORD)
+MQTT_IP=$(get_config services.mqtt.BROKER_IP)
+MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)
+MQTT_USER=$(get_config services.mqtt.BROKER_USER)
+MQTT_PASSWORD=$(get_config services.mqtt.BROKER_PASSWORD)
 
 HOST=$MQTT_IP
 if [ ! -z $MQTT_PORT ]; then
@@ -51,21 +38,21 @@ if [ ! -z $MQTT_USER ]; then
     HOST=$HOST' -u '$MQTT_USER' -P '$MQTT_PASSWORD
 fi
 
-MQTT_PREFIX=$(get_config MQTT_PREFIX)
-MQTT_ADV_INFO_GLOBAL_TOPIC=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_TOPIC)
-MQTT_ADV_INFO_GLOBAL_RETAIN=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_RETAIN)
-MQTT_ADV_INFO_GLOBAL_QOS=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_QOS)
-if [ "$MQTT_ADV_INFO_GLOBAL_RETAIN" == "1" ]; then
+MQTT_PREFIX=$(get_config identity.MQTT_PREFIX)
+INFO_GLOBAL_TOPIC=$(get_config services.mqtt_advertise.INFO_GLOBAL_TOPIC)
+INFO_GLOBAL_RETAIN=$(get_config services.mqtt_advertise.INFO_GLOBAL_RETAIN)
+INFO_GLOBAL_QOS=$(get_config services.mqtt_advertise.INFO_GLOBAL_QOS)
+if [ "$INFO_GLOBAL_RETAIN" == "1" ]; then
     RETAIN="-r"
 else
     RETAIN=""
 fi
-if [ "$MQTT_ADV_INFO_GLOBAL_QOS" == "0" ] || [ "$MQTT_ADV_INFO_GLOBAL_QOS" == "1" ] || [ "$MQTT_ADV_INFO_GLOBAL_QOS" == "2" ]; then
-    QOS="-q $MQTT_ADV_INFO_GLOBAL_QOS"
+if [ "$INFO_GLOBAL_QOS" == "0" ] || [ "$INFO_GLOBAL_QOS" == "1" ] || [ "$INFO_GLOBAL_QOS" == "2" ]; then
+    QOS="-q $INFO_GLOBAL_QOS"
 else
     QOS=""
 fi
-TOPIC=$MQTT_PREFIX/$MQTT_ADV_INFO_GLOBAL_TOPIC
+TOPIC=$MQTT_PREFIX/$INFO_GLOBAL_TOPIC
 
 # MQTT Publish
 CONTENT="{ "
@@ -81,4 +68,4 @@ CONTENT=$CONTENT'"gateway":"'$GATEWAY'",'
 CONTENT=$CONTENT'"mac_addr":"'$MAC_ADDR'",'
 CONTENT=$CONTENT'"wlan_essid":"'$WLAN_ESSID'"'
 CONTENT=$CONTENT" }"
-$YI_HACK_PREFIX/bin/mosquitto_pub -i $HOSTNAME $QOS $RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+$MOSQUITTO_PUB -i $HOSTNAME $QOS $RETAIN -h $HOST -t $TOPIC -m "$CONTENT"

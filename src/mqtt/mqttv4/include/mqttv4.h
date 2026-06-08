@@ -16,7 +16,8 @@
 
 #define MQTTV4_VERSION      "0.1.0"
 #define SYSTEM_CONF_FILE    "/home/yi-hack/config/system.conf"
-#define MQTTV4_CONF_FILE    "/home/yi-hack/config/mqttv4.conf"
+#define MQTTV4_CONF_FILE    "/home/yi-hack/config/services/mqtt.conf"
+#define IDENTITY_CONF_FILE  "/home/yi-hack/config/identity.conf"
 #define CAMERA_CONF_FILE    "/home/yi-hack/config/camera.conf"
 
 #define MQTTV4_SNAPSHOT     "export MOD=$(cat /home/app/.camver); /home/yi-hack/extra/bin/imggrabber -m $MOD -r low -w"

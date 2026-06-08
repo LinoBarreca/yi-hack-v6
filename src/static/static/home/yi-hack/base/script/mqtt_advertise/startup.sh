@@ -1,79 +1,76 @@
 #!/bin/sh
 
-YI_HACK_PREFIX="/tmp/sd/yi-hack"
-PATH=$PATH:$YI_HACK_PREFIX/bin:$YI_HACK_PREFIX/usr/bin:/bin:/usr/bin
-CONF_MQTT_ADVERTISE_FILE="etc/mqtt_advertise.conf"
+export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
+ADV_DIR="/home/yi-hack/base/script/mqtt_advertise"
 
-get_mqtt_advertise_config() {
-    key=$1
-    grep -w $1 $YI_HACK_PREFIX/$CONF_MQTT_ADVERTISE_FILE | cut -d "=" -f2
-}
+. /home/yi-hack/base/script/get_config.sh
 
-$YI_HACK_PREFIX/script/mqtt_advertise/check_conf.sh
+# Config defaults (incl. mqtt_advertise.conf) are ensured at boot by the single
+# base/script/check_conf.sh (run from system.sh before this script).
 
-MQTT_ADV_LINK_ENABLE=$(get_mqtt_advertise_config MQTT_ADV_LINK_ENABLE)
-MQTT_ADV_LINK_BOOT=$(get_mqtt_advertise_config MQTT_ADV_LINK_BOOT)
-MQTT_ADV_LINK_CRON=$(get_mqtt_advertise_config MQTT_ADV_LINK_CRON)
-MQTT_ADV_LINK_CRONTAB=$(get_mqtt_advertise_config MQTT_ADV_LINK_CRONTAB)
-MQTT_ADV_INFO_GLOBAL_ENABLE=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_ENABLE)
-MQTT_ADV_INFO_GLOBAL_BOOT=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_BOOT)
-MQTT_ADV_INFO_GLOBAL_CRON=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_CRON)
-MQTT_ADV_INFO_GLOBAL_CRONTAB=$(get_mqtt_advertise_config MQTT_ADV_INFO_GLOBAL_CRONTAB)
-MQTT_ADV_CAMERA_SETTING_ENABLE=$(get_mqtt_advertise_config MQTT_ADV_CAMERA_SETTING_ENABLE)
-MQTT_ADV_CAMERA_SETTING_BOOT=$(get_mqtt_advertise_config MQTT_ADV_CAMERA_SETTING_BOOT)
-MQTT_ADV_CAMERA_SETTING_CRON=$(get_mqtt_advertise_config MQTT_ADV_CAMERA_SETTING_CRON)
-MQTT_ADV_CAMERA_SETTING_CRONTAB=$(get_mqtt_advertise_config MQTT_ADV_CAMERA_SETTING_CRONTAB)
-MQTT_ADV_TELEMETRY_ENABLE=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_ENABLE)
-MQTT_ADV_TELEMETRY_BOOT=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_BOOT)
-MQTT_ADV_TELEMETRY_CRON=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_CRON)
-MQTT_ADV_TELEMETRY_CRONTAB=$(get_mqtt_advertise_config MQTT_ADV_TELEMETRY_CRONTAB)
-HOMEASSISTANT_ENABLE=$(get_mqtt_advertise_config HOMEASSISTANT_ENABLE)
-HOMEASSISTANT_BOOT=$(get_mqtt_advertise_config HOMEASSISTANT_BOOT)
-HOMEASSISTANT_CRON=$(get_mqtt_advertise_config HOMEASSISTANT_CRON)
-HOMEASSISTANT_CRONTAB=$(get_mqtt_advertise_config HOMEASSISTANT_CRONTAB)
+LINK_ENABLE=$(get_config services.mqtt_advertise.LINK_ENABLE)
+LINK_BOOT=$(get_config services.mqtt_advertise.LINK_BOOT)
+LINK_CRON=$(get_config services.mqtt_advertise.LINK_CRON)
+LINK_CRONTAB=$(get_config services.mqtt_advertise.LINK_CRONTAB)
+INFO_GLOBAL_ENABLE=$(get_config services.mqtt_advertise.INFO_GLOBAL_ENABLE)
+INFO_GLOBAL_BOOT=$(get_config services.mqtt_advertise.INFO_GLOBAL_BOOT)
+INFO_GLOBAL_CRON=$(get_config services.mqtt_advertise.INFO_GLOBAL_CRON)
+INFO_GLOBAL_CRONTAB=$(get_config services.mqtt_advertise.INFO_GLOBAL_CRONTAB)
+CAMERA_SETTING_ENABLE=$(get_config services.mqtt_advertise.CAMERA_SETTING_ENABLE)
+CAMERA_SETTING_BOOT=$(get_config services.mqtt_advertise.CAMERA_SETTING_BOOT)
+CAMERA_SETTING_CRON=$(get_config services.mqtt_advertise.CAMERA_SETTING_CRON)
+CAMERA_SETTING_CRONTAB=$(get_config services.mqtt_advertise.CAMERA_SETTING_CRONTAB)
+TELEMETRY_ENABLE=$(get_config services.mqtt_advertise.TELEMETRY_ENABLE)
+TELEMETRY_BOOT=$(get_config services.mqtt_advertise.TELEMETRY_BOOT)
+TELEMETRY_CRON=$(get_config services.mqtt_advertise.TELEMETRY_CRON)
+TELEMETRY_CRONTAB=$(get_config services.mqtt_advertise.TELEMETRY_CRONTAB)
+HOMEASSISTANT_ENABLE=$(get_config services.mqtt_advertise.HOMEASSISTANT_ENABLE)
+HOMEASSISTANT_BOOT=$(get_config services.mqtt_advertise.HOMEASSISTANT_BOOT)
+HOMEASSISTANT_CRON=$(get_config services.mqtt_advertise.HOMEASSISTANT_CRON)
+HOMEASSISTANT_CRONTAB=$(get_config services.mqtt_advertise.HOMEASSISTANT_CRONTAB)
 
-if [ "$MQTT_ADV_LINK_ENABLE" == "yes" ]; then
-    if [ "$MQTT_ADV_LINK_BOOT" == "yes" ]; then
-        $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_links.sh &
+if [ "$LINK_ENABLE" == "yes" ]; then
+    if [ "$LINK_BOOT" == "yes" ]; then
+        $ADV_DIR/mqtt_adv_links.sh &
     fi
-    if [ "$MQTT_ADV_LINK_CRON" == "yes" ]; then
-        echo "$MQTT_ADV_LINK_CRONTAB  $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_link.sh" > /var/spool/cron/crontabs/root
+    if [ "$LINK_CRON" == "yes" ]; then
+        echo "$LINK_CRONTAB  $ADV_DIR/mqtt_adv_links.sh" > /var/spool/cron/crontabs/root
     fi
 fi
-if [ "$MQTT_ADV_INFO_GLOBAL_ENABLE" == "yes" ]; then
-    if [ "$MQTT_ADV_INFO_GLOBAL_BOOT" == "yes" ]; then
-        $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_info_global.sh &
+if [ "$INFO_GLOBAL_ENABLE" == "yes" ]; then
+    if [ "$INFO_GLOBAL_BOOT" == "yes" ]; then
+        $ADV_DIR/mqtt_adv_info_global.sh &
     fi
-    if [ "$MQTT_ADV_INFO_GLOBAL_CRON" == "yes" ]; then
-        echo "$MQTT_ADV_INFO_GLOBAL_CRONTAB  $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_info_global.sh" > /var/spool/cron/crontabs/root
+    if [ "$INFO_GLOBAL_CRON" == "yes" ]; then
+        echo "$INFO_GLOBAL_CRONTAB  $ADV_DIR/mqtt_adv_info_global.sh" > /var/spool/cron/crontabs/root
     fi
 fi
-if [ "$MQTT_ADV_CAMERA_SETTING_ENABLE" == "yes" ]; then
-    if [ "$MQTT_ADV_CAMERA_SETTING_BOOT" == "yes" ]; then
-        $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_config.sh &
+if [ "$CAMERA_SETTING_ENABLE" == "yes" ]; then
+    if [ "$CAMERA_SETTING_BOOT" == "yes" ]; then
+        $ADV_DIR/mqtt_adv_config.sh &
     fi
-    if [ "$MQTT_ADV_CAMERA_SETTING_CRON" == "yes" ]; then
-        echo "$MQTT_ADV_CAMERA_SETTING_CRONTAB  $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_config.sh" > /var/spool/cron/crontabs/root
+    if [ "$CAMERA_SETTING_CRON" == "yes" ]; then
+        echo "$CAMERA_SETTING_CRONTAB  $ADV_DIR/mqtt_adv_config.sh" > /var/spool/cron/crontabs/root
     fi
-    FW_VERSION=$(cat $YI_HACK_PREFIX/version)
+    FW_VERSION=$(cat /home/yi-hack/extra/version)
 
-    $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_set_config.sh &
+    $ADV_DIR/mqtt_set_config.sh &
 fi
-if [ "$MQTT_ADV_TELEMETRY_ENABLE" == "yes" ]; then
-    if [ "$MQTT_ADV_TELEMETRY_BOOT" == "yes" ]; then
-        $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_telemetry.sh &
+if [ "$TELEMETRY_ENABLE" == "yes" ]; then
+    if [ "$TELEMETRY_BOOT" == "yes" ]; then
+        $ADV_DIR/mqtt_adv_telemetry.sh &
     fi
-    if [ "$MQTT_ADV_TELEMETRY_CRON" == "yes" ]; then
-        echo "$MQTT_ADV_TELEMETRY_CRONTAB  $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_telemetry.sh" > /var/spool/cron/crontabs/root
+    if [ "$TELEMETRY_CRON" == "yes" ]; then
+        echo "$TELEMETRY_CRONTAB  $ADV_DIR/mqtt_adv_telemetry.sh" > /var/spool/cron/crontabs/root
     fi
 fi
 
-# $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_homeassistant_clean.sh
+# $ADV_DIR/mqtt_adv_homeassistant_clean.sh
 if [ "$HOMEASSISTANT_ENABLE" == "yes" ]; then
     if [ "$HOMEASSISTANT_BOOT" == "yes" ]; then
-        $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_homeassistant.sh &
+        $ADV_DIR/mqtt_adv_homeassistant.sh &
     fi
     if [ "$HOMEASSISTANT_CRON" == "yes" ]; then
-        echo "$HOMEASSISTANT_CRONTAB  $YI_HACK_PREFIX/script/mqtt_advertise/mqtt_adv_homeassistant.sh" > /var/spool/cron/crontabs/root
+        echo "$HOMEASSISTANT_CRONTAB  $ADV_DIR/mqtt_adv_homeassistant.sh" > /var/spool/cron/crontabs/root
     fi
 fi

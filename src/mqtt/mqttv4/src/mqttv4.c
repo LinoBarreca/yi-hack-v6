@@ -670,7 +670,7 @@ static void handle_config(const char *key, const char *value)
         else
             conf.enable = 0;
     }
-    else if(strcmp(key, "MQTT_IP")==0)
+    else if(strcmp(key, "BROKER_IP")==0)
     {
         strcpy(conf.host, value);
     }
@@ -678,66 +678,66 @@ static void handle_config(const char *key, const char *value)
     {
         strcpy(conf.client_id, value);
     }
-    else if(strcmp(key, "MQTT_USER")==0)
+    else if(strcmp(key, "BROKER_USER")==0)
     {
         conf.user=malloc((char)strlen(value)+1);
         strcpy(conf.user, value);
     }
-    else if(strcmp(key, "MQTT_PASSWORD")==0)
+    else if(strcmp(key, "BROKER_PASSWORD")==0)
     {
         conf.password=malloc((char)strlen(value)+1);
         strcpy(conf.password, value);
     }
-    else if(strcmp(key, "MQTT_PORT")==0)
+    else if(strcmp(key, "BROKER_PORT")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.port=nvalue;
     }
-    else if(strcmp(key, "MQTT_KEEPALIVE")==0)
+    else if(strcmp(key, "KEEPALIVE")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.keepalive=nvalue;
     }
-    else if(strcmp(key, "MQTT_QOS")==0)
+    else if(strcmp(key, "QOS")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.qos=nvalue;
     }
-    else if(strcmp(key, "MQTT_RETAIN_BIRTH_WILL")==0)
+    else if(strcmp(key, "RETAIN_BIRTH_WILL")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.retain_birth_will=nvalue;
     }
-    else if(strcmp(key, "MQTT_RETAIN_MOTION")==0)
+    else if(strcmp(key, "RETAIN_MOTION")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.retain_motion=nvalue;
     }
-    else if(strcmp(key, "MQTT_RETAIN_MOTION_IMAGE")==0)
+    else if(strcmp(key, "RETAIN_MOTION_IMAGE")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.retain_motion_image=nvalue;
     }
-    else if(strcmp(key, "MQTT_RETAIN_MOTION_FILES")==0)
+    else if(strcmp(key, "RETAIN_MOTION_FILES")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
         if(errno==0)
             conf.retain_motion_files=nvalue;
     }
-    else if(strcmp(key, "MQTT_RETAIN_SOUND_DETECTION")==0)
+    else if(strcmp(key, "RETAIN_SOUND_DETECTION")==0)
     {
         errno=0;
         nvalue=strtol(value, NULL, 10);
@@ -872,6 +872,18 @@ static void init_mqttv4_config()
     stop_config();
 
     if(init_config(MQTTV4_CONF_FILE)!=0)
+    {
+        fprintf(stderr, "Cannot open config file. Skipping.\n");
+        return;
+    }
+
+    config_set_handler(&handle_config);
+    config_parse();
+    stop_config();
+
+    // Per-camera identity (MQTT_CLIENT_ID, MQTT_PREFIX) lives in identity.conf, not in the
+    // centrally-managed mqtt.conf (so a mass config push never collides).
+    if(init_config(IDENTITY_CONF_FILE)!=0)
     {
         fprintf(stderr, "Cannot open config file. Skipping.\n");
         return;

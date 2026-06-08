@@ -7,7 +7,7 @@ cd /home/yi-hack/config
 rm hostname
 
 rm camera.conf
-rm mqttv4.conf
+rm -f services/mqtt.conf services/mqtt_advertise.conf
 rm proxychains.conf
 rm system.conf
 

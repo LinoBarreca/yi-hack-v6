@@ -164,7 +164,7 @@ void handle_config(const char *key, const char *value)
 {
     int nvalue;
 
-    if(strcmp(key, "MQTT_IP") == 0) {
+    if(strcmp(key, "BROKER_IP") == 0) {
         if (strlen(value) < sizeof(conf.host))
             strcpy(conf.host, value);
     } else if(strcmp(key, "MQTT_CLIENT_ID")==0) {
@@ -173,13 +173,13 @@ void handle_config(const char *key, const char *value)
     } else if(strcmp(key, "MQTT_PREFIX")==0) {
         conf.mqtt_prefix_cmnd = malloc((char) strlen(value) + 1 + 7);
         sprintf(conf.mqtt_prefix_cmnd, "%s/cmnd/#", value);
-    } else if(strcmp(key, "MQTT_USER") == 0) {
+    } else if(strcmp(key, "BROKER_USER") == 0) {
         conf.user = malloc((char) strlen(value) + 1);
         strcpy(conf.user, value);
-    } else if(strcmp(key, "MQTT_PASSWORD") == 0) {
+    } else if(strcmp(key, "BROKER_PASSWORD") == 0) {
         conf.password = malloc((char) strlen(value) + 1);
         strcpy(conf.password, value);
-    } else if(strcmp(key, "MQTT_PORT") == 0) {
+    } else if(strcmp(key, "BROKER_PORT") == 0) {
         errno = 0;
         nvalue = strtol(value, NULL, 10);
         if(errno == 0)
@@ -220,6 +220,15 @@ int mqtt_init_conf(mqtt_conf_t *conf)
     config_parse(fp);
 
     close_conf_file(fp);
+
+    // Per-camera identity (MQTT_CLIENT_ID, MQTT_PREFIX) lives in identity.conf, not in the
+    // centrally-managed mqtt.conf.
+    fp = open_conf_file(IDENTITY_CONF_FILE);
+    if (fp != NULL) {
+        config_set_handler(&handle_config);
+        config_parse(fp);
+        close_conf_file(fp);
+    }
 
     return 0;
 }

@@ -3,9 +3,17 @@
 # 0.1.0
 
 CAMERA_CONF_FILE="/home/yi-hack/config/camera.conf"
-MQTT_CONF_FILE="/home/yi-hack/config/mqttv4.conf"
 
-. $MQTT_CONF_FILE
+. /home/yi-hack/base/script/get_config.sh
+
+# Config keys are de-prefixed (file is config/services/mqtt.conf); keep the
+# MQTT_ prefix on the local variables to avoid clashing with the shell's own
+# USER/etc. environment.
+MQTT_IP=$(get_config services.mqtt.BROKER_IP)
+MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)
+MQTT_USER=$(get_config services.mqtt.BROKER_USER)
+MQTT_PASSWORD=$(get_config services.mqtt.BROKER_PASSWORD)
+MQTT_PREFIX=$(get_config identity.MQTT_PREFIX)
 
 if [ -z "$MQTT_IP" ]; then
     exit
