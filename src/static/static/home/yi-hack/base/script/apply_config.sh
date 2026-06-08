@@ -7,12 +7,17 @@
 # centrally" and is copied OVER the local flash copy, per-file, RECURSIVELY (so
 # config/services/*.conf are handled too). This enables mass migration.
 #
-# Runs in base/flash AFTER mount_cifs.sh (mount done) and BEFORE build_view.sh /
-# the dispatcher, so everything downstream reads the overridden values.
+# Run TWICE by S20yi-hack: once BEFORE mount_cifs.sh (only the SD is mounted -> applies
+# the SD config, incl. cifs.conf, so mount_cifs can reach the share) and once AFTER (the
+# CIFS, having priority, overrides). Source priority mirrors build_view.sh: CIFS (if
+# enabled+mounted) else SD. The managed config lives in the SAME payload tree as extra:
+# <payload>/config (per-model first, then flat), e.g. /tmp/cifs/yi-hack/config/.
 #
-# Source priority mirrors build_view.sh: CIFS (if enabled+mounted) else SD. The
-# managed config lives in the SAME payload tree as extra: <payload>/config
-# (per-model first, then flat), e.g. /tmp/cifs/yi-hack/config/.
+# EVERYTHING is version-gated (5.8): the flash base and the share payload must share the
+# same MAJOR.MINOR, else NOTHING is applied -> flash base+config stay ALIGNED (a newer
+# payload, e.g. 0.2.0, never pushes its config onto an older 0.1.0 base, which would
+# brick). No exemptions: a provisioning SD must carry a matching <root>/version. The SD's
+# version is local (SD mounted first), so even cifs.conf can be gated without a chicken-egg.
 #
 # HARD EXCLUSIONS (class 2b runtime state, 6.2/6.7): camera.conf and
 # ptz_presets.conf are written by the device and are NEVER overridden (an override
@@ -58,15 +63,15 @@ if [ -z "$SRC" ] && is_mounted "$SD_MNT"; then
 fi
 [ -z "$SRC" ] && { log "no managed config on share -> keep flash defaults"; exit 0; }
 
-# Version handshake (5.8): never apply managed config from an incompatible payload
-# (wrong config schema would push bad settings).
+# Version handshake (5.8): apply NOTHING from a payload whose version is incompatible
+# with the flash base. Keeps flash base+config ALIGNED (a misaligned config = brick).
 if ! payload_compatible "${SRC%/*}"; then
-    log "payload incompatible with base -> NOT applying managed config"
+    log "payload incompatible with base -> NOT applying config (keep flash aligned)"
     exit 0
 fi
 
 # Copy each file over flash, preserving the relative path (recursive), skipping the
-# runtime-state exclusions. Parameter expansion only (no basename/dirname applet).
+# runtime-state/identity exclusions. Parameter expansion only (no basename/dirname applet).
 ( cd "$SRC" 2>/dev/null && find . -type f ) | while IFS= read -r f; do
     rel=${f#./}
     base=${rel##*/}

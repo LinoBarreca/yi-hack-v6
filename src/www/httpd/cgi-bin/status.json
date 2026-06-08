@@ -6,7 +6,7 @@ printf "Content-type: application/json\r\n\r\n"
 
 NAME="yi-hack-v6"
 HOSTNAME=$(hostname)
-FW_VERSION=$(cat /home/yi-hack/extra/version)
+FW_VERSION=$(cat /home/yi-hack/extra/../version)
 BASEFW_VERSION=$(cat /home/yi-hack/version)
 HOME_VERSION=$(cat /home/app/.appver)
 MODEL_SUFFIX=$(cat /home/app/.camver)

@@ -3,7 +3,7 @@
 # 0.1.0
 
 MODEL_SUFFIX=`cat /home/app/.camver`
-FW_VERSION=`cat /home/yi-hack/extra/version`
+FW_VERSION=`cat /home/yi-hack/extra/../version`
 BASELINE_VERSION=`cat /home/yi-hack/version`
 
 export PATH=/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin
@@ -20,7 +20,7 @@ fi
 if [ "$VAL" == "info" ] ; then
     printf "Content-type: application/json\r\n\r\n"
 
-    FW_VERSION=`cat /home/yi-hack/extra/version`
+    FW_VERSION=`cat /home/yi-hack/extra/../version`
     LATEST_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases/latest 2>&1 | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'`
     PRERELEASE_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases 2>&1 | grep -B 4 '"prerelease": true' | awk -F '"' '{print $4; exit}'`
 	

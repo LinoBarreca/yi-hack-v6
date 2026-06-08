@@ -72,7 +72,7 @@ NAME=$(get_config identity.HOMEASSISTANT_NAME)
 IDENTIFIERS=$(get_config identity.HOMEASSISTANT_IDENTIFIERS)
 MANUFACTURER=$(get_config services.mqtt_advertise.HOMEASSISTANT_MANUFACTURER)
 MODEL=$(get_config services.mqtt_advertise.HOMEASSISTANT_MODEL)
-SW_VERSION=$(cat /home/yi-hack/extra/version)
+SW_VERSION=$(cat /home/yi-hack/extra/../version)
 DEVICE_DETAILS="{\"identifiers\":[\"$IDENTIFIERS\"],\"connections\":[[\"mac\",\"${LOCAL_MAC}\"]],\"manufacturer\":\"$MANUFACTURER\",\"model\":\"$MODEL\",\"name\":\"$NAME\",\"sw_version\":\"$SW_VERSION\",\"configuration_url\":\"http://$LOCAL_IP:$HTTPD_PORT\"}"
 
 if [ "$HOMEASSISTANT_RETAIN" == "1" ]; then

@@ -14,7 +14,7 @@ REMOTE_RELEASE_FILE=/tmp/.hackremoterel
 REMOTE_VERSION_FILE=/tmp/.hackremotever
 REMOTE_NEWVERSION_FILE=/tmp/.hacknewver
 
-LOCAL_VERSION_FILE=/home/yi-hack/extra/version
+LOCAL_VERSION_FILE=/home/yi-hack/extra/../version
 
 if [[ $(get_config system.CHECK_UPDATES) == "yes" ]] ; then
     while : ; do

@@ -32,7 +32,7 @@ umask 022
 
 alias crontab="crontab -c /home/yi-hack/config/crontabs"
 
-HACK_VERSION=$(cat /home/yi-hack/extra/version)
+HACK_VERSION=$(cat /home/yi-hack/extra/../version)
 NEW_VERSION=$(cat /tmp/.hacknewver 2>/dev/null)
 
 ###############################################################################

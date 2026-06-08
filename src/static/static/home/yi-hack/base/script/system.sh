@@ -7,7 +7,7 @@
 # /home/yi-hack/{base,config,extra,output,www} - there is NO YI_HACK_PREFIX and no
 # SD-vs-flash detection (the symlink layer decides where extra/output/www point).
 
-YI_HACK_VER=$(cat /home/yi-hack/extra/version 2>/dev/null)
+YI_HACK_VER=$(cat /home/yi-hack/extra/../version 2>/dev/null)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 
 . /home/yi-hack/base/script/get_config.sh

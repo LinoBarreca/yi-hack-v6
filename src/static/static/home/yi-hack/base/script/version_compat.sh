@@ -17,7 +17,9 @@
 #
 # Usage:  . version_compat.sh ; payload_compatible <payload_root>   # 0=ok, 1=no
 #   <payload_root> = the yi-hack dir on the share/SD; the payload version is read
-#   from <payload_root>/extra/version (mirrors flash /home/yi-hack/extra/version).
+#   from <payload_root>/version (sibling of extra/ and config/ - one version governs
+#   the WHOLE bundle: binaries AND config schema, since a binary change may change
+#   the config format).
 # Test override: BASE_VERSION_FILE
 : "${BASE_VERSION_FILE:=/home/yi-hack/version}"
 
@@ -27,7 +29,7 @@ _ver_mm() { echo "$1" | cut -d. -f1,2; }
 payload_compatible() {
     _vc_pr="$1"
     _vc_base=$(cat "$BASE_VERSION_FILE" 2>/dev/null)
-    _vc_payload=$(cat "$_vc_pr/extra/version" 2>/dev/null)
+    _vc_payload=$(cat "$_vc_pr/version" 2>/dev/null)
 
     if [ -z "$_vc_base" ] || [ -z "$_vc_payload" ]; then
         echo "version_compat: missing version (base='$_vc_base' payload='$_vc_payload') -> incompatible"

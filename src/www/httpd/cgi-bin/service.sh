@@ -4,7 +4,7 @@
 
 CONF_FILE="etc/system.conf"
 
-YI_HACK_VER=$(cat /home/yi-hack/extra/version)
+YI_HACK_VER=$(cat /home/yi-hack/extra/../version)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
     HW_ID=$(dd bs=1 count=4 skip=660 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)

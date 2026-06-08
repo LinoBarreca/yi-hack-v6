@@ -7,7 +7,7 @@ MOSQUITTO_PUB="/home/yi-hack/extra/bin/mosquitto_pub"
 . /home/yi-hack/base/script/get_config.sh
 
 HOSTNAME=$(hostname)
-FW_VERSION=$(cat /home/yi-hack/extra/version)
+FW_VERSION=$(cat /home/yi-hack/extra/../version)
 HOME_VERSION=$(cat /home/app/.appver)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then

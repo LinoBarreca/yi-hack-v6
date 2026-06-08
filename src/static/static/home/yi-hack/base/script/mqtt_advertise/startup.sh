@@ -52,7 +52,7 @@ if [ "$CAMERA_SETTING_ENABLE" == "yes" ]; then
     if [ "$CAMERA_SETTING_CRON" == "yes" ]; then
         echo "$CAMERA_SETTING_CRONTAB  $ADV_DIR/mqtt_adv_config.sh" > /var/spool/cron/crontabs/root
     fi
-    FW_VERSION=$(cat /home/yi-hack/extra/version)
+    FW_VERSION=$(cat /home/yi-hack/extra/../version)
 
     $ADV_DIR/mqtt_set_config.sh &
 fi

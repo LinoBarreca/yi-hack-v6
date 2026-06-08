@@ -10,9 +10,16 @@ export LD_LIBRARY_PATH=/home/hisiko/hisilib:$LD_LIBRARY_PATH
 export PATH=/home/app/localbin:$PATH
 export PATH=/home/base/tools:$PATH
 
-# Mount CIFS if configured+available (no-op otherwise), apply managed config overrides
-# from the share (section 6.2), then build the logical view /home/yi-hack/{extra,output,www}.
-# build_view exits 0 if a payload (extra) is present.
+# Config + payload from SD/CIFS (section 6.2). The SD is already mounted (system_init);
+# the CIFS is not yet. Order:
+#   1. apply_config  - only the SD is mounted, so it bootstraps cifs.conf (UNGATED)
+#                      into flash, letting mount_cifs reach the share.
+#   2. mount_cifs    - reads the (now bootstrapped) cifs.conf; mounts the CIFS if it is
+#                      configured + reachable.
+#   3. apply_config  - the CIFS is now mounted and, having priority, overrides the
+#                      managed config (version-gated).
+#   4. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
+/home/yi-hack/base/script/apply_config.sh
 /home/yi-hack/base/script/mount_cifs.sh
 /home/yi-hack/base/script/apply_config.sh
 if /home/yi-hack/base/script/build_view.sh; then
