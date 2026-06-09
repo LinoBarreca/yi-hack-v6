@@ -2,7 +2,7 @@
 
 # 0.1.0 - yi-hack-v6
 #
-# version_compat.sh - base <-> payload version handshake (sections 5.8, 9).
+# version_compat.sh - base <-> payload version handshake.
 #
 # The flash BASE (/home/yi-hack/version) and the network/SD PAYLOAD
 # (<payload_root>/version, i.e. extra/version) are versioned independently. A

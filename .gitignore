@@ -31,11 +31,15 @@ src/snapshot/snapshot/jpeg-9d/
 scripts/packfiles.sh
 .file.swp
 src/ipc_cmd/ipc_cmd/ipc_multiplexer
-src/ipc_cmd/ipc_cmd/ipc_multiplexer.o
 src/ipc_cmd/ipc_cmd/ipc_read
-src/ipc_cmd/ipc_cmd/ipc_read.o
+src/ipc_cmd/ipc_cmd/ipc2file
 
 
 
 CAMERA_FIRMWARE_DESIGN.md
 simulated_boot.log
+
+src/**/busybox-1.36.1*
+src/ipc_cmd/ipc_cmd/*.o
+src/curl/sysroot/**
+

@@ -3,4 +3,8 @@
 SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
-cp -a ./_install/* ../../build/home/yi-hack/
+# The full www is part of the SD/CIFS payload (logical view: /home/yi-hack/extra/www),
+# NOT homefs/flash (flash only ships base/www-min for rescue).
+# Drop into build/extra (raw payload); the packager wraps it as yi-hack/extra/.
+mkdir -p ../../build/extra
+cp -a ./_install/www ../../build/extra/

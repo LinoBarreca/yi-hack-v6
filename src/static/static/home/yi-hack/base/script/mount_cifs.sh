@@ -2,7 +2,7 @@
 
 # 0.1.0 - yi-hack-v6
 #
-# mount_cifs.sh - bootstrap CIFS mount for diskless (no-SD) operation (section 6.4).
+# mount_cifs.sh - bootstrap CIFS mount for diskless (no-SD) operation.
 #
 # Invoked by /etc/init.d/S20yi-hack when there is no SD payload and CIFS is enabled
 # in cifs.conf. At this point WiFi is ALREADY up (base/init.sh has run), so this
@@ -11,8 +11,8 @@
 #
 # Responsibilities:
 #   1. read parameters from cifs.conf (flash, via the centralized get_config)
-#   2. insmod the CIFS modules (md4, hmac, cifs) - already present in flash (2.4)
-#   3. mount the share read-only on /tmp/cifs with the verified options (2.6)
+#   2. insmod the CIFS modules (md4, hmac, cifs) - already present in flash
+#   3. mount the share read-only on /tmp/cifs with the verified-working SMB1/NTLMSSP options
 #   4. validate that the model payload is present on the share
 #
 # Exit code:
@@ -20,7 +20,7 @@
 #   1 = disabled / not configured / failed after retries  -> minimal boot
 #   2 = mounted but payload missing (wrong share?)         -> minimal boot
 #
-# HANDOFF NOTE (section 6.6): running the payload from /tmp/cifs requires the logical
+# HANDOFF NOTE: running the payload from /tmp/cifs requires the logical
 # view (no YI_HACK_PREFIX, /home/yi-hack/{config,extra,output}). This script only does
 # mount + validation; build_view.sh wires extra->source and the dispatcher boots it.
 
@@ -65,7 +65,7 @@ MODEL=$(cat /home/app/.camver 2>/dev/null)
 i=0
 while [ "$i" -lt "$RETRY" ]; do
     i=$((i + 1))
-    # End-to-end verified options (2.6): SMB1/NT1 + NTLMv2, pass= (not password=), ro
+    # End-to-end verified options: SMB1/NT1 + NTLMv2, pass= (not password=), ro
     if mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
             -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS",ro 2>/dev/null; then
         log "mounted //$HOST/$SHARE on $MOUNTPOINT (attempt $i)"

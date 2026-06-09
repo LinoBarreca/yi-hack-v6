@@ -13,12 +13,8 @@
 # before is the file path (remaining dots become "/"). Keys are UPPERCASE and
 # never contain dots, so the split is unambiguous.
 #
-# Config lives in flash at the fixed logical path /home/yi-hack/config (logical view,
-# section 6.6). CONFIG_DIR can still be overridden by the caller before sourcing.
-#
-# NOTE (v6): the shell layer reads config from /home/yi-hack/config. The MQTT binaries
-# (mqttv4 submodule + mqtt-config) still hardcode their own ".../etc" path and must be
-# recompiled to point here (CAMERA_FIRMWARE_DESIGN.md section 6.7) - known seam.
+# Config lives in flash at the fixed logical path /home/yi-hack/config (the logical view).
+# CONFIG_DIR can still be overridden by the caller before sourcing.
 : "${CONFIG_DIR:=/home/yi-hack/config}"
 
 get_config() {

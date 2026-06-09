@@ -7,10 +7,10 @@ cd $SCRIPT_DIR
 #upx ./_install/bin/*
 #upx ./_install/lib/*
 
-mkdir -p ../../build/home/yi-hack/bin/
-mkdir -p ../../build/home/yi-hack/lib/
-mkdir -p ../../build/home/yi-hack/etc/
+mkdir -p ../../build/extra/bin/
+mkdir -p ../../build/extra/lib/
+mkdir -p ../../build/extra/etc/
 
-cp -a ./_install/tmp/sd/yi-hack/bin/* ../../build/home/yi-hack/bin/
-cp -a ./_install/tmp/sd/yi-hack/lib/* ../../build/home/yi-hack/lib/
-cp -a ./_install/tmp/sd/yi-hack/etc/* ../../build/home/yi-hack/etc/
+cp -a ./_install/tmp/sd/yi-hack/bin/* ../../build/extra/bin/
+cp -a ./_install/tmp/sd/yi-hack/lib/* ../../build/extra/lib/
+cp -a ./_install/tmp/sd/yi-hack/etc/* ../../build/extra/etc/

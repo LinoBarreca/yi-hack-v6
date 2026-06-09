@@ -1,5 +1,5 @@
 #!/bin/sh
-# Validate CIFS while the SD is still inserted: mount on a TEMP mountpoint (section 6.1),
+# Validate CIFS while the SD is still inserted: mount on a TEMP mountpoint,
 # check the payload, unmount. Does not touch /tmp/cifs or the running config.
 . /home/yi-hack/base/www-min/cgi-bin/rescue_lib.sh
 read_body

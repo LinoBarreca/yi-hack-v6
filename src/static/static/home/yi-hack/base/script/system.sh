@@ -30,7 +30,7 @@ touch /tmp/httpd.conf
 
 # Firmware upgrade staged on SD (v5 web-UI "upload firmware" mechanism).
 # TODO v6: revisit - the v6 update model is "update the payload on the share, then
-# reboot" (CAMERA_FIRMWARE_DESIGN.md section 9.9). Kept here for the SD-payload path.
+# reboot". Kept here for the SD-payload path.
 YI_HACK_UPGRADE_PATH="/tmp/sd/$MODEL_SUFFIX"
 if [ -f "$YI_HACK_UPGRADE_PATH/yi-hack/fw_upgrade_in_progress" ]; then
     echo "#!/bin/sh" > /tmp/fw_upgrade_2p.sh
@@ -76,7 +76,7 @@ hostname -F /home/yi-hack/config/hostname
 
 export TZ=$(get_config system.TIMEZONE)
 
-# Swap: destination is decided by the output matrix (section 5.6); build_view.sh created
+# Swap: destination is decided by the output matrix; build_view.sh created
 # /home/yi-hack/output/swap (a symlink) only if output.SWAP != NO and the target is writable.
 if [ -d /home/yi-hack/output/swap ]; then
     SWAPFILE=/home/yi-hack/output/swap/swapfile

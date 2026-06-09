@@ -10,10 +10,11 @@ export LD_LIBRARY_PATH=/home/hisiko/hisilib:$LD_LIBRARY_PATH
 export PATH=/home/app/localbin:$PATH
 export PATH=/home/base/tools:$PATH
 
-# Config + payload from SD/CIFS (section 6.2). The SD is already mounted (system_init);
+# Config + payload from SD/CIFS. The SD is already mounted (system_init);
 # the CIFS is not yet. Order:
-#   1. apply_config  - only the SD is mounted, so it bootstraps cifs.conf (UNGATED)
-#                      into flash, letting mount_cifs reach the share.
+#   1. apply_config  - only the SD is mounted, so it bootstraps cifs.conf into flash
+#                      (letting mount_cifs reach the share). Version-gated: the SD must
+#                      carry a <root>/version matching the flash base, else nothing applies.
 #   2. mount_cifs    - reads the (now bootstrapped) cifs.conf; mounts the CIFS if it is
 #                      configured + reachable.
 #   3. apply_config  - the CIFS is now mounted and, having priority, overrides the
@@ -29,7 +30,7 @@ else
     # Minimal boot: no payload. Rescue web UI (www -> base/www-min) + telnet are always up.
     # The stock Xiaomi cloud app runs so the camera is still usable via the Yi app,
     # unless privacy is enabled.
-    # TODO (section 5.9): privacy flag + build the rescue UI (base/www-min).
+    # TODO: privacy flag + build the rescue UI (base/www-min).
     httpd -h /home/yi-hack/www &
     telnetd &
     if [ "$(cat /home/yi-hack/config/privacy 2>/dev/null)" != "on" ]; then

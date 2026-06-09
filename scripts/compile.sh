@@ -89,6 +89,10 @@ rm -rf "$(get_script_dir)/../build/"
 
 mkdir -p "$(get_script_dir)/../build/home"
 mkdir -p "$(get_script_dir)/../build/rootfs"
+# Raw SD/CIFS payload contents (full www, optional service binaries)
+# — NOT homefs/flash, which only ships base binaries + www-min (rescue).
+# The packager wraps this into the share structure (yi-hack/extra/) and adds version.
+mkdir -p "$(get_script_dir)/../build/extra"
 
 SRC_DIR=$(get_script_dir)/../src
 SELECTED_MODULE=$1
@@ -96,8 +100,24 @@ if [ -n ${SELECTED_MODULE} ]; then
     echo "SELECTED_MODULE: $SELECTED_MODULE"
 fi
 
+# Modules deliberately NOT built (space-separated basenames).
+#   uClibc++ : source unavailable (git.busybox.net TLS cert expired) and not linked by
+#              any module (onvif builds with the toolchain's C++ lib). Re-enable once the
+#              submodule can be fetched, if a payload binary ever needs libuClibc++.
+#   libfuse  : no module links it (-lfuse) and nothing FUSE-based is deployed; it would
+#              ship libfuse3.so as dead weight. The kernel HAS FUSE builtin, so re-enable
+#              if/when a FUSE feature is actually added.
+#   curl     : the curl binary is unused (v6 scripts use busybox wget); its libssl.so.1.1
+#              is redundant too (wget-https works via libcrypto from wpa + busybox TLS).
+#              Skipping also drops a slow openssl-under-qemu build. Re-enable if a real
+#              curl/libcurl consumer appears.
+SKIP_MODULES="uClibc++ libfuse curl"
+
 for SUB_DIR in $SRC_DIR/* ; do
     if [ -d ${SUB_DIR} ]; then # Will not run if no directories are available
+        case " $SKIP_MODULES " in
+            *" $(basename "$SUB_DIR") "*) echo "Skip $SUB_DIR (disabled in SKIP_MODULES)"; continue ;;
+        esac
         if [ -n ${SELECTED_MODULE} ]; then
             if [[ $SUB_DIR == *"$SELECTED_MODULE"* ]]; then
                 compile_module $(normalize_path "$SUB_DIR") || exit 1

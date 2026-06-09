@@ -3,8 +3,8 @@
 # yi-hack-v6 build orchestrator.
 #
 # Builds the cross-build Docker image (canonical HiSilicon arm-hisiv300 toolchain,
-# GCC 4.8.3 / uClibc 0.9.33.2 — see docker/Dockerfile and CAMERA_FIRMWARE_DESIGN.md
-# section 6.8) and drives the build/packaging inside it. On a non-x86 host (e.g. the
+# GCC 4.8.3 / uClibc 0.9.33.2 — see docker/Dockerfile) and drives the build/packaging
+# inside it. On a non-x86 host (e.g. the
 # aarch64 RPi5) it registers qemu-user binfmt first, so everything stays containerized
 # and the host filesystem is not polluted.
 #
@@ -91,12 +91,12 @@ case "${1:-help}" in
     hello)   hello ;;
     shell)   ensure_binfmt; docker run --rm -it --platform="$PLATFORM" -v "$ROOT:/work" "$IMAGE" bash ;;
     sysroot) log "NOTE: not required — no src module links a camera sysroot; they build against"
-             log "      the toolchain's bundled uClibc target/ (see CAMERA_FIRMWARE_DESIGN.md 6.8)."
+             log "      the toolchain's bundled uClibc target/."
              log "      init_sysroot.sh (root + jffs2 mount) is kept only for niche needs."; exit 0 ;;
     compile) ensure_binfmt
              log "cross-compiling ${2:-ALL modules} in $IMAGE (canonical toolchain)..."
              run_in_image bash scripts/compile.sh "${2:-}"
-             log "built into build/ (e.g. build/home/yi-hack/bin/)." ;;
+             log "built into build/{rootfs,home,extra}/." ;;
     pack)    log "TODO: produce install packages (home_fs/root_fs + busybox/wpa replacement)"; exit 1 ;;
     clean)   cleanup_binfmt; docker rmi "$IMAGE" 2>/dev/null || true; log "teardown done (image $IMAGE + qemu binfmt removed)." ;;
     all)     trap cleanup_binfmt EXIT          # unregister qemu binfmt on exit (success or failure)

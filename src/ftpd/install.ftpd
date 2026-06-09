@@ -6,7 +6,7 @@ cd $SCRIPT_DIR
 # Compress the file
 #upx ./_install/sbin/pure-ftpd
 
-mkdir -p ../../build/home/yi-hack/sbin/
+mkdir -p ../../build/extra/sbin/
 
-cp -a ./_install/sbin/pure-ftpd ../../build/home/yi-hack/sbin/
+cp -a ./_install/sbin/pure-ftpd ../../build/extra/sbin/
 

@@ -2,7 +2,7 @@
 
 # 0.1.0 - yi-hack-v6
 #
-# build_view.sh - build the logical view /home/yi-hack/{extra,output} (sections 5.5, 6.6).
+# build_view.sh - build the logical view /home/yi-hack/{extra,output}.
 #
 # Runs in base/flash after base/init.sh (WiFi up) and after mount_cifs.sh (if CIFS is
 # configured), before the dispatcher. base/ and config/ are REAL in flash and are NOT
@@ -13,7 +13,7 @@
 #            else SD if it has a payload     -> SD
 #            else empty                      -> minimal boot
 #
-#   output = PER-CATEGORY symlinks (record/snapshot/log/swap) per the matrix (5.6),
+#   output = PER-CATEGORY symlinks (record/snapshot/log/swap) per the output matrix,
 #            from config/output.conf. NEVER-DANGLING: a link is created only after
 #            verifying the target is mounted+writable; otherwise a defined fallback.
 #
@@ -59,7 +59,7 @@ fi
 if [ -z "$EXTRA_SRC" ] && is_mounted "$SD_MNT"; then
     EXTRA_SRC=$(extra_on "$SD_MNT") && log "extra <- SD ($EXTRA_SRC)"
 fi
-# Version handshake (5.8): refuse a payload whose version is incompatible with the
+# Version handshake: refuse a payload whose version is incompatible with the
 # flash base (wrong-schema config / wrong-ABI binaries) -> fall back to minimal boot.
 if [ -n "$EXTRA_SRC" ] && ! payload_compatible "${EXTRA_SRC%/*}"; then
     log "payload incompatible with base -> refusing payload -> minimal boot"
@@ -98,7 +98,7 @@ link_output() {
         RAM)   ram_link "$_cat"; log "$_cat -> RAM" ;;
         FLASH)
             if [ "$_cat" = "record" ]; then
-                log "$_cat -> FLASH BLOCKED (flash wear = brick, 5.6)"; fallback "$_cat"
+                log "$_cat -> FLASH BLOCKED (flash wear = brick)"; fallback "$_cat"
             else
                 mkdir -p "$LOGICAL/.output-flash/$_cat"; relink "$LOGICAL/.output-flash/$_cat" "$LOGICAL/output/$_cat"; log "$_cat -> FLASH"
             fi ;;

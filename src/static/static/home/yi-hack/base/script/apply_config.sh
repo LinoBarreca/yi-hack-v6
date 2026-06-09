@@ -3,7 +3,7 @@
 # 0.1.0 - yi-hack-v6
 #
 # apply_config.sh - apply managed config overrides from the payload share into the
-# flash config/ (section 6.2). A config file present on the share is "managed
+# flash config/. A config file present on the share is "managed
 # centrally" and is copied OVER the local flash copy, per-file, RECURSIVELY (so
 # config/services/*.conf are handled too). This enables mass migration.
 #
@@ -13,17 +13,16 @@
 # enabled+mounted) else SD. The managed config lives in the SAME payload tree as extra:
 # <payload>/config (per-model first, then flat), e.g. /tmp/cifs/yi-hack/config/.
 #
-# EVERYTHING is version-gated (5.8): the flash base and the share payload must share the
+# EVERYTHING is version-gated: the flash base and the share payload must share the
 # same MAJOR.MINOR, else NOTHING is applied -> flash base+config stay ALIGNED (a newer
 # payload, e.g. 0.2.0, never pushes its config onto an older 0.1.0 base, which would
 # brick). No exemptions: a provisioning SD must carry a matching <root>/version. The SD's
 # version is local (SD mounted first), so even cifs.conf can be gated without a chicken-egg.
 #
-# HARD EXCLUSIONS (class 2b runtime state, 6.2/6.7): camera.conf and
-# ptz_presets.conf are written by the device and are NEVER overridden (an override
-# would wipe runtime state every boot).
+# HARD EXCLUSIONS (runtime state): camera.conf and ptz_presets.conf are written by the
+# device and are NEVER overridden (an override would wipe runtime state every boot).
 #
-# KISS: no validation/rollback (section 10) - a bad managed value just propagates;
+# KISS: no validation/rollback - a bad managed value just propagates;
 # never fails the boot (always exit 0).
 #
 # Test overrides: LOGICAL, SD_MNT, CIFS_MNT, CONFIG_DIR
@@ -40,8 +39,8 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') apply_config: $*"; }
 is_mounted() { mount 2>/dev/null | grep -q " $1 "; }
 
 # Never overridden from the share:
-#  - camera.conf / ptz_presets.conf : runtime state written by the device (6.7)
-#  - identity.conf / hostname        : per-camera identity (5.7) - a mass push would
+#  - camera.conf / ptz_presets.conf : runtime state written by the device
+#  - identity.conf / hostname        : per-camera identity - a mass push would
 #                                      make cameras collide (same HA device / MQTT
 #                                      client id / topic prefix / hostname)
 EXCLUDE="camera.conf ptz_presets.conf identity.conf hostname"
@@ -63,7 +62,7 @@ if [ -z "$SRC" ] && is_mounted "$SD_MNT"; then
 fi
 [ -z "$SRC" ] && { log "no managed config on share -> keep flash defaults"; exit 0; }
 
-# Version handshake (5.8): apply NOTHING from a payload whose version is incompatible
+# Version handshake: apply NOTHING from a payload whose version is incompatible
 # with the flash base. Keeps flash base+config ALIGNED (a misaligned config = brick).
 if ! payload_compatible "${SRC%/*}"; then
     log "payload incompatible with base -> NOT applying config (keep flash aligned)"

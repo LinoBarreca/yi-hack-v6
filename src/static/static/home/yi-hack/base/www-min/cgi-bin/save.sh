@@ -9,7 +9,7 @@ setkey cifs.conf USER    "$(get_field cifs_user)"
 S=$(get_field wifi_ssid); P=$(get_field wifi_psk)
 [ -n "$S" ] && setkey wifi.conf SSID "$S"
 [ -n "$P" ] && setkey wifi.conf PSK "$P"
-# NOTE: applying WiFi to the radio (wifi.conf -> wpa_supplicant) is pending (section 5.12).
+# NOTE: applying WiFi to the radio (wifi.conf -> wpa_supplicant) is pending.
 if [ "$(get_field privacy)" = "on" ]; then echo on > "$CONFIG/privacy"; else rm -f "$CONFIG/privacy"; fi
 sync
 printf '{"error":"false"}'

@@ -22,17 +22,16 @@ mkdir -p ./_install/www/css
 mkdir -p ./_install/www/js
 mkdir -p ./_install/www/pages
 
-echo "Compressing CSS files..."
-#find ./httpd/htdocs/css/* ! -name all.css -exec cat {} \+  > ./_install/www/htdocs/css/tmp.css
-cat ./httpd/htdocs/css/normalize.min.css ./httpd/htdocs/css/skeleton.min.css ./httpd/htdocs/css/custom.css > ./_install/www/css/tmp.css
-yui-compressor --type css -o ./_install/www/css/all.css ./_install/www/css/tmp.css
-rm ./_install/www/css/tmp.css
+# JS/CSS minification is dropped on purpose:
+# The full www is served from the SD/CIFS payload (extra/www),
+# not flash, and every file is gzip -9'd below anyway, which
+# recovers most of what minification would. So we just concatenate.
+echo "Concatenating CSS files..."
+cat ./httpd/htdocs/css/normalize.min.css ./httpd/htdocs/css/skeleton.min.css ./httpd/htdocs/css/custom.css > ./_install/www/css/all.css
 
-echo "Compressing JS files..."
+echo "Concatenating JS files..."
 cp ./httpd/htdocs/js/jquery.min.js ./_install/www/js/jquery.min.js
-cat ./httpd/htdocs/js/utils.js ./httpd/htdocs/js/app.js ./httpd/htdocs/js/modules/*.js > ./_install/www/js/tmp.js
-yui-compressor --type js -o ./_install/www/js/all.js ./_install/www/js/tmp.js
-rm ./_install/www/js/tmp.js
+cat ./httpd/htdocs/js/utils.js ./httpd/htdocs/js/app.js ./httpd/htdocs/js/modules/*.js > ./_install/www/js/all.js
 
 echo "Compressing HTML files..."
 
