@@ -7,8 +7,7 @@ EIP=$(ifconfig eth0 2>/dev/null | awk '/inet addr/{print substr($2,6)}')
 EMAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
 SD=no; mount | grep -q ' /tmp/sd ' && SD=yes
 CF=no; mount | grep -q ' /tmp/cifs ' && CF=yes
-# busybox here has no 'readlink'; derive the symlink target from 'ls -ld'
-if [ -L /home/yi-hack/extra ]; then EX=$(ls -ld /home/yi-hack/extra 2>/dev/null | sed 's/.* -> //'); else EX=none; fi
+if [ -L /home/yi-hack/extra ]; then EX=$(readlink /home/yi-hack/extra 2>/dev/null); else EX=none; fi
 PV=$(cat /home/yi-hack/config/privacy 2>/dev/null); [ -z "$PV" ] && PV=off
 printf '{"model":"%s","wifi_ip":"%s","wifi_mac":"%s","eth_ip":"%s","eth_mac":"%s","sd":"%s","cifs":"%s","extra":"%s","privacy":"%s"}' \
  "$MODEL" "$WIP" "$WMAC" "$EIP" "$EMAC" "$SD" "$CF" "$EX" "$PV"

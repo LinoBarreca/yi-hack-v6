@@ -1,0 +1,16 @@
+--- busybox-1.38.0.ori/networking/httpd.c	2026-06-09 15:21:19.058013858 +0000
++++ busybox-1.38.0/networking/httpd.c	2026-06-09 15:21:20.310059000 +0000
+@@ -2573,6 +2573,13 @@
+ 			} /* else: CGI_NORMAL, will attempt executing */
+ 		} /* else: CGI_NORMAL, will attempt executing */
+ 	}
++	else if (is_prefixed_with(tptr, "onvif/")) {
++		if (tptr[6] == '\0') {
++			/* protect listing "onvif/" */
++			send_headers_and_exit(HTTP_FORBIDDEN);
++		}
++		cgi_type = CGI_NORMAL;
++	}
+ 	else /* why "else": do not check "cgi-bin/SCRIPT/something" for cases below: */
+ #endif
+ 	{

@@ -20,14 +20,8 @@ INIT_SUBMODULES.md
 
 *.DS_Store
 
-# Added for easier management
-src/dropbear/dropbear
-src/ftpd/pure-ftpd
-src/uClibc/uClibc
-src/wsdd/wsdd
-src/snapshot/snapshot/ffmpeg-4.3.2/
-src/snapshot/snapshot/ffmpeg-4.4/
-src/snapshot/snapshot/jpeg-9d/
+# Submodule build-dirtiness is handled by `ignore = dirty` in .gitmodules.
+# Per-module build artifacts are handled by each src/<mod>/.gitignore.
 scripts/packfiles.sh
 .file.swp
 src/ipc_cmd/ipc_cmd/ipc_multiplexer
@@ -39,7 +33,7 @@ src/ipc_cmd/ipc_cmd/ipc2file
 CAMERA_FIRMWARE_DESIGN.md
 simulated_boot.log
 
-src/**/busybox-1.36.1*
+src/**/busybox-1.*
 src/ipc_cmd/ipc_cmd/*.o
 src/curl/sysroot/**
 

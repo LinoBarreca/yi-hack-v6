@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="1.36.1"
+VERSION="1.38.0"
 MAIN_URL=https://busybox.net/downloads/busybox-${VERSION}.tar.bz2
 PACKAGE="busybox-${VERSION}"
 ARCHIVE="${PACKAGE}.tar.bz2"

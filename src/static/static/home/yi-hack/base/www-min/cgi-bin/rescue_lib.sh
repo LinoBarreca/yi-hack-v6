@@ -8,8 +8,7 @@ read_body() { read -r BODY; }
 urldecode() { _d="${1//+/ }"; printf '%b' "${_d//%/\\x}"; }
 
 # get_field NAME -> decoded value of NAME from $BODY (no eval; only known keys are queried)
-# NB: busybox on the camera has no 'head'; use awk for "first match".
-get_field() { _v=$(printf '%s' "$BODY" | tr '&' '\n' | grep "^$1=" | awk 'NR==1{print;exit}'); urldecode "${_v#*=}"; }
+get_field() { _v=$(printf '%s' "$BODY" | tr '&' '\n' | grep "^$1=" | head -n1); urldecode "${_v#*=}"; }
 
 # setkey FILE KEY VALUE -> set KEY=VALUE in $CONFIG/FILE (update in place or append)
 setkey() {

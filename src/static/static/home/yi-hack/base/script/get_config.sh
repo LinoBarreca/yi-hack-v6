@@ -33,5 +33,5 @@ get_config() {
         return 1
     fi
 
-    grep -E "^${_gc_key}=" "$_gc_file" | cut -d= -f2- | awk 'NR==1 {print; exit}'
+    grep -E "^${_gc_key}=" "$_gc_file" | cut -d= -f2- | head -n1
 }

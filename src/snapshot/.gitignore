@@ -3,9 +3,6 @@ _install/
 snapshot/SDK
 snapshot/jpeg-9e
 snapshot/ffmpeg-6.0
-snapshot/add_water.o
-snapshot/convert2jpg.o
 snapshot/imggrabber
-snapshot/imggrabber.o
-snapshot/water_mark.o
+snapshot/*.o
 

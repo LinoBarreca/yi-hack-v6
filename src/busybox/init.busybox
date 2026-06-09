@@ -15,8 +15,7 @@ tar xvf "${ARCHIVE}"
 
 cd "${BUILD_FOLDER}"
 
-patch -p1 < ../gzdef.patch
-patch -p1 < ../onvif.patch
-patch -p1 < ../auth.patch
+# No patches here: this is the minimal rootfs busybox (boot + mount). The httpd
+# patches that serve the full web UI live in src/busybox_tools (the extended busybox).
 
 cp ../.config ./ || exit 1
