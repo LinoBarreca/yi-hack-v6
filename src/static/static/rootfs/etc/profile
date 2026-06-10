@@ -7,7 +7,7 @@ set_path_before()
 	[ -d $1 ] && PATH="$1:$PATH"
 }
 
-PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack/extra/bin:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin:/home/yi-hack/extra/sbin"
+PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin:/home/yi-hack/extra/sbin"
 set_path_before /usr/local/sbin
 set_path_before /usr/local/bin
 

@@ -3,21 +3,15 @@
 SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
-# Compress the file
-# upx ./_install/*
-
-mkdir -p ../../build/extra/bin/
-mkdir -p ../../build/extra/sbin/
-mkdir -p ../../build/extra/usr/bin/
+mkdir -p ../../build/home/yi-hack/base/bin/
+mkdir -p ../../build/home/yi-hack/base/sbin/
 
 arm-hisiv300-linux-uclibcgnueabi-strip ./_install/dropbearmulti
-cp -a ./_install/dropbearmulti ../../build/extra/bin/
+cp -a ./_install/dropbearmulti ../../build/home/yi-hack/base/bin/
 
-# Copy binary with different names: fat32 doesn't support symbolic links - thanks Roleo
-cp -f ../../build/extra/bin/dropbearmulti ../../build/extra/bin/dbclient
-cp -f ../../build/extra/bin/dropbearmulti ../../build/extra/bin/dropbearconvert
-cp -f ../../build/extra/bin/dropbearmulti ../../build/extra/bin/dropbearkey
-cp -f ../../build/extra/bin/dropbearmulti ../../build/extra/bin/scp
-cp -f ../../build/extra/bin/dbclient ../../build/extra/bin/ssh
-
-cp -f ../../build/extra/bin/dropbearmulti ../../build/extra/sbin/dropbear
+ln -sf dropbearmulti ../../build/home/yi-hack/base/bin/dbclient
+ln -sf dropbearmulti ../../build/home/yi-hack/base/bin/dropbearconvert
+ln -sf dropbearmulti ../../build/home/yi-hack/base/bin/dropbearkey
+ln -sf dropbearmulti ../../build/home/yi-hack/base/bin/scp
+ln -sf dropbearmulti ../../build/home/yi-hack/base/sbin/dropbear
+ln -sf dbclient ../../build/home/yi-hack/base/bin/ssh

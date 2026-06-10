@@ -191,6 +191,10 @@ if [[ $(get_config system.SSHD) == "yes" ]] ; then
         dropbearkey -t ecdsa -f /tmp/dropbear_ecdsa_host_key
         mv /tmp/dropbear_ecdsa_host_key /home/yi-hack/config/dropbear/
     fi
+    if [ ! -f /home/yi-hack/config/dropbear/dropbear_ed25519_host_key ]; then
+        dropbearkey -t ed25519 -f /tmp/dropbear_ed25519_host_key
+        mv /tmp/dropbear_ed25519_host_key /home/yi-hack/config/dropbear/
+    fi
     chmod 0600 /home/yi-hack/config/dropbear/*
     dropbear -R -B
 fi
