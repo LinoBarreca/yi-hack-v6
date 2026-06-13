@@ -13,7 +13,7 @@ MODEL_SUFFIX=$(cat /home/app/.camver)
 . /home/yi-hack/base/script/get_config.sh
 
 export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib:/home/yi-hack/extra/lib:/home/yi-hack/base/lib
-export PATH=/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin:/home/yi-hack/base/script
+export PATH=/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/home/app/localbin:/home/base:/home/yi-hack/base/script
 
 if [ ! -L "/home/yi-hack/.ash_history" ]; then
     ln -sf /dev/null /home/yi-hack/.ash_history
@@ -170,7 +170,10 @@ if [[ $(get_config system.HTTPD) == "yes" ]] ; then
     # Single logical web path; build_view.sh points it to extra/www (full) or base/www-min (rescue).
     # NOTE: recordings live at /home/yi-hack/output/record; the events CGIs read from there
     # (no www/record bind-mount - extra/www may be read-only CIFS).
-    httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
+    # Explicit path: the full UI needs the patched busybox (onvif CGI routing + auth) which
+    # ships in the payload (extra/bin). A bare 'httpd' would resolve to the unpatched rootfs
+    # busybox first on PATH.
+    /home/yi-hack/extra/bin/httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
 fi
 
 if [[ $(get_config system.TELNETD) == "yes" ]] ; then
@@ -358,7 +361,10 @@ if [[ $(get_config system.ONVIF) == "yes" ]] ; then
     echo "input_file=/tmp/onvif_notify_server/sound_detection" >> $ONVIF_SRVD_CONF
 
     chmod 0600 $ONVIF_SRVD_CONF
-    onvif_simple_server --conf_file $ONVIF_SRVD_CONF
+    # onvif_simple_server is a CGI: httpd routes /onvif/* to www/onvif/* (shebang ->
+    # onvif_simple_server), which reads its default conf /tmp/onvif_simple_server.conf.
+    # It is NOT a daemon - the old `onvif_simple_server --conf_file ...` here was a no-op
+    # (the binary lives in www/onvif, never on PATH -> command-not-found), so it is removed.
     ipc2file
     onvif_notify_server --conf_file $ONVIF_SRVD_CONF
 

@@ -7,11 +7,18 @@ set_path_before()
 	[ -d $1 ] && PATH="$1:$PATH"
 }
 
-PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin:/home/yi-hack/extra/sbin"
+# Mirror env.sh: when the payload is mounted (full busybox present) the flash farm in
+# base/bin wins so every applet/httpd is the full patched busybox; otherwise the rootfs
+# mini busybox wins and base/bin stays last only for dropbear. No flash writes.
+if [ -x /home/yi-hack/extra/bin/busybox ]; then
+	PATH="/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base"
+else
+	PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/base/bin"
+fi
 set_path_before /usr/local/sbin
 set_path_before /usr/local/bin
 
-LD_LIBRARY_PATH="/usr/local/lib:/home/hisiko/hisilib:/lib:/usr/lib:/home/lib:/home/app/locallib:/home/yi-hack/extra/lib:/home/yi-hack/extra/lib"
+LD_LIBRARY_PATH="/usr/local/lib:/home/hisiko/hisilib:/lib:/usr/lib:/home/lib:/home/app/locallib:/home/yi-hack/extra/lib:/home/yi-hack/base/lib"
 
 export PATH
 export LD_LIBRARY_PATH
@@ -32,7 +39,7 @@ umask 022
 
 alias crontab="crontab -c /home/yi-hack/config/crontabs"
 
-HACK_VERSION=$(cat /home/yi-hack/extra/../version)
+HACK_VERSION=$(cat /home/yi-hack/version)
 NEW_VERSION=$(cat /tmp/.hacknewver 2>/dev/null)
 
 ###############################################################################

@@ -12,9 +12,9 @@
 #   ./build_all.sh image     # register binfmt (if needed) + build the toolchain image
 #   ./build_all.sh hello     # smoke-test: compile a uClibc ARMv5 binary in the image
 #   ./build_all.sh shell     # interactive shell inside the build image
-#   ./build_all.sh sysroot   # (TODO) build the sysroot from the stock firmware
-#   ./build_all.sh compile   # (TODO) cross-compile the src/ modules
-#   ./build_all.sh pack      # (TODO) produce the install packages (home_fs/root_fs)
+#   ./build_all.sh sysroot   # (not required — no module links a camera sysroot)
+#   ./build_all.sh compile   # cross-compile the src/ modules into build/{rootfs,home,extra}
+#   ./build_all.sh pack [m]  # overlay stock firmware + build → jffs2 images + SD/CIFS zip
 #   ./build_all.sh all       # full pipeline, then unregister qemu binfmt (clean exit)
 #   ./build_all.sh clean     # teardown: unregister qemu binfmt + remove the build image
 #
@@ -77,9 +77,9 @@ yi-hack-v6 build orchestrator. Usage: ./build_all.sh <cmd>
   image     register qemu binfmt (if needed) + build the toolchain image
   hello     smoke-test: compile a uClibc ARMv5 binary in the image
   shell     interactive shell inside the build image
-  sysroot   (TODO) build the sysroot from the stock firmware
-  compile   (TODO) cross-compile the src/ modules
-  pack      (TODO) produce the install packages (home_fs/root_fs)
+  sysroot   (not required — no module links a camera sysroot)
+  compile   cross-compile src/ modules into build/{rootfs,home,extra}
+  pack [m]  produce jffs2 images + SD/CIFS zip (all models, or pass model code)
   all       full pipeline, then unregister qemu binfmt on exit
   clean     teardown: unregister qemu binfmt + remove the build image
 EOF
@@ -97,12 +97,18 @@ case "${1:-help}" in
              log "cross-compiling ${2:-ALL modules} in $IMAGE (canonical toolchain)..."
              run_in_image bash scripts/compile.sh "${2:-}"
              log "built into build/{rootfs,home,extra}/." ;;
-    pack)    log "TODO: produce install packages (home_fs/root_fs + busybox/wpa replacement)"; exit 1 ;;
+    pack)    ensure_binfmt
+             log "packing firmware images for ${2:-all} models (in container)..."
+             run_in_image bash scripts/pack_fw.sh "${2:-all}"
+             log "done — images in build/images/." ;;
     clean)   cleanup_binfmt; docker rmi "$IMAGE" 2>/dev/null || true; log "teardown done (image $IMAGE + qemu binfmt removed)." ;;
-    all)     trap cleanup_binfmt EXIT          # unregister qemu binfmt on exit (success or failure)
+    all)     trap cleanup_binfmt EXIT
              build_image
              hello
-             # TODO: sysroot -> compile -> pack (install images home_fs/root_fs)
-             log "all: image + smoke-test done; sysroot/compile/pack still TODO. qemu binfmt will be unregistered now." ;;
+             log "cross-compiling ALL modules..."
+             run_in_image bash scripts/compile.sh ""
+             log "packing firmware images for all models..."
+             run_in_image bash scripts/pack_fw.sh all
+             log "all done. Images in build/images/." ;;
     *)       echo "usage: $0 {image|hello|shell|sysroot|compile|pack|all|clean}" >&2; exit 2 ;;
 esac

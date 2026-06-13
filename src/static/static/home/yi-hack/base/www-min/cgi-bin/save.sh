@@ -9,7 +9,9 @@ setkey cifs.conf USER    "$(get_field cifs_user)"
 S=$(get_field wifi_ssid); P=$(get_field wifi_psk)
 [ -n "$S" ] && setkey wifi.conf SSID "$S"
 [ -n "$P" ] && setkey wifi.conf PSK "$P"
-# NOTE: applying WiFi to the radio (wifi.conf -> wpa_supplicant) is pending.
+# wifi.conf is applied to the radio at next boot by wifi_up.sh (S20): it writes the new
+# SSID/PSK into mtdblock2[28/92] and associates. Not applied live here on purpose, to avoid
+# dropping the rescue session mid-config -> reboot to apply.
 if [ "$(get_field privacy)" = "on" ]; then echo on > "$CONFIG/privacy"; else rm -f "$CONFIG/privacy"; fi
 sync
 printf '{"error":"false"}'

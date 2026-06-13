@@ -50,4 +50,14 @@ RUN cd /opt/arm-hisiv300-linux/bin \
 #   config.mak              -> /opt/hisi-linux/x86-arm/arm-hisiv300-linux/target/usr/{include,lib}
 ENV PATH=/opt/arm-hisiv300-linux/bin:$PATH
 
+# Packaging tools (scripts/pack_fw.sh runs inside this container so the host needs nothing):
+#   mtd-utils    -> mkfs.jffs2 (build the rootfs/home jffs2 partition images)
+#   u-boot-tools -> mkimage (wrap jffs2 as the uImage that U-Boot's do_auto_sd_update flashes)
+#   p7zip-full   -> 7za (compress big files; system_init.sh extracts them on first boot)
+#   zip          -> SD/CIFS payload archive
+#   fakeroot     -> root:root ownership in the image trees without running as root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        mtd-utils u-boot-tools p7zip-full zip fakeroot \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /work

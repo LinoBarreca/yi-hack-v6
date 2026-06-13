@@ -11,28 +11,39 @@ export PATH=/home/app/localbin:$PATH
 export PATH=/home/base/tools:$PATH
 
 # Config + payload from SD/CIFS. The SD is already mounted (system_init);
-# the CIFS is not yet. Order:
-#   1. apply_config  - only the SD is mounted, so it bootstraps cifs.conf into flash
-#                      (letting mount_cifs reach the share). Version-gated: the SD must
-#                      carry a <root>/version matching the flash base, else nothing applies.
-#   2. mount_cifs    - reads the (now bootstrapped) cifs.conf; mounts the CIFS if it is
+# the CIFS is not yet. WiFi is NOT up yet either (stock 'dispatch', which associates it,
+# is commented out of app/init.sh and only runs later). Order:
+#   1. apply_config  - only the SD is mounted, so it bootstraps cifs.conf + wifi.conf into
+#                      flash (letting wifi_up/mount_cifs use them). Version-gated: the SD
+#                      must carry a <root>/version matching the flash base, else nothing applies.
+#   2. wifi_up       - associate WiFi BEFORE mount_cifs (creds from mtdblock2, overridable
+#                      by wifi.conf). Without this, mount_cifs has no network -> minimal boot.
+#   3. mount_cifs    - reads the (now bootstrapped) cifs.conf; mounts the CIFS if it is
 #                      configured + reachable.
-#   3. apply_config  - the CIFS is now mounted and, having priority, overrides the
+#   4. apply_config  - the CIFS is now mounted and, having priority, overrides the
 #                      managed config (version-gated).
-#   4. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
+#   5. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
 /home/yi-hack/base/script/apply_config.sh
+/home/yi-hack/base/script/wifi_up.sh
 /home/yi-hack/base/script/mount_cifs.sh
 /home/yi-hack/base/script/apply_config.sh
 if /home/yi-hack/base/script/build_view.sh; then
     # Payload present -> full dispatcher (RTSP/ONVIF/MQTT/cloud/... per config)
     /home/yi-hack/base/script/system.sh
 else
-    # Minimal boot: no payload. Rescue web UI (www -> base/www-min) + telnet are always up.
-    # The stock Xiaomi cloud app runs so the camera is still usable via the Yi app,
+    # Minimal boot: no payload. Rescue web UI (www -> base/www-min), telnet and SSH are
+    # always up - they are the ONLY recovery channels here, so they must not depend on
+    # config. The stock Xiaomi cloud app runs so the camera is still usable via the Yi app,
     # unless privacy is enabled.
     # TODO: privacy flag + build the rescue UI (base/www-min).
     httpd -h /home/yi-hack/www &
     telnetd &
+    # SSH recovery: dropbear lives in flash base/bin (no payload needed). Absolute path -
+    # S20's PATH does not include base/bin. -R generates host keys on demand at the paths
+    # compiled into the binary (/home/yi-hack/config/dropbear/, flash); -B allows blank
+    # password so SSH is reachable exactly like telnet. mkdir is belt-and-suspenders.
+    mkdir -p /home/yi-hack/config/dropbear
+    /home/yi-hack/base/bin/dropbear -R -B &
     if [ "$(cat /home/yi-hack/config/privacy 2>/dev/null)" != "on" ]; then
         (
             sleep 2
@@ -48,7 +59,6 @@ else
                 ./oss &
             fi
             ./watch_process &
-            tcpsvd -vE 0.0.0.0 21 ftpd -w &
         )
     fi
 fi
