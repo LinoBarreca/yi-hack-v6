@@ -3,12 +3,46 @@
 # yi-hack-v6 boot dispatch.
 # By now S01udev has run system_init.sh and /home/base/init.sh (WiFi up, SD mounted at /tmp/sd).
 
+# Boot log: keep appending to the RAM log S01udev started (separate script -> re-redirect).
+touch /dev/yi-boot.log 2>/dev/null && exec >> /dev/yi-boot.log 2>&1
+echo "===== $(date '+%F %T') S20yi-hack - dispatch start ====="
+
 ulimit -s 1024
 export LD_LIBRARY_PATH=/home/lib:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=/home/app/locallib:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=/home/hisiko/hisilib:$LD_LIBRARY_PATH
 export PATH=/home/app/localbin:$PATH
 export PATH=/home/base/tools:$PATH
+
+# Boot log -> SD persistence, gated by DEBUG_LOG (troubleshooting only). /home is mounted now,
+# so the config is readable. When on: remount the SD sync (every write hits the card, so a
+# boot that hangs anywhere still leaves a complete log to pull out), copy the pre-S20 RAM
+# buffer onto the SD, then redirect live to the SD file. When off: SD stays standard (async),
+# no SD writes - only the free RAM log in /dev/yi-boot.log (readable via SSH).
+. /home/yi-hack/base/script/get_config.sh
+BOOTLOG=
+if [ "$(get_config system.DEBUG_LOG)" = "yes" ]; then
+    BOOTLOG=1
+    if mount | grep -q " /tmp/sd " && touch /tmp/sd/yi-boot.log 2>/dev/null; then
+        mount -o remount,sync /tmp/sd 2>/dev/null && echo "[bootlog] /tmp/sd remounted sync"
+        cat /dev/yi-boot.log > /tmp/sd/yi-boot.log 2>/dev/null
+        exec >> /tmp/sd/yi-boot.log 2>&1
+        echo "===== [bootlog] live on SD (sync) from here ====="
+    else
+        echo "[bootlog] DEBUG_LOG=yes but no writable SD -> RAM only (/dev/yi-boot.log)"
+    fi
+fi
+# diag: dump key state at boot checkpoints (only when bootlog is on, to keep it quiet/fast otherwise).
+diag() {
+    [ -n "$BOOTLOG" ] || return 0
+    echo "----- diag: $* @ $(date '+%T') -----"
+    echo "-- ifconfig wlan0 --";   ifconfig wlan0 2>/dev/null
+    echo "-- wpa_cli status --";   wpa_cli -i wlan0 status 2>/dev/null
+    echo "-- mount --";            mount 2>/dev/null
+    echo "-- dmesg tail --";       dmesg 2>/dev/null | tail -25
+    echo "-----"
+}
+diag "S20 entry (pre apply_config)"
 
 # Config + payload from SD/CIFS. The SD is already mounted (system_init);
 # the CIFS is not yet. WiFi is NOT up yet either (stock 'dispatch', which associates it,
@@ -25,12 +59,16 @@ export PATH=/home/base/tools:$PATH
 #   5. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
 /home/yi-hack/base/script/apply_config.sh
 /home/yi-hack/base/script/wifi_up.sh
+diag "after wifi_up (WiFi associated? has IP?)"
 /home/yi-hack/base/script/mount_cifs.sh
 /home/yi-hack/base/script/apply_config.sh
+diag "after mount_cifs"
 if /home/yi-hack/base/script/build_view.sh; then
+    diag "build_view -> PAYLOAD (full dispatcher)"
     # Payload present -> full dispatcher (RTSP/ONVIF/MQTT/cloud/... per config)
     /home/yi-hack/base/script/system.sh
 else
+    diag "build_view -> MINIMAL boot"
     # Minimal boot: no payload. Rescue web UI (www -> base/www-min), telnet and SSH are
     # always up - they are the ONLY recovery channels here, so they must not depend on
     # config. The stock Xiaomi cloud app runs so the camera is still usable via the Yi app,

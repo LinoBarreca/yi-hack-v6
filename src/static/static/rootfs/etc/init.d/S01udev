@@ -1,5 +1,12 @@
 #!/bin/sh
 
+# Boot log: capture the whole v6 boot chain to a RAM file. /dev is tmpfs (no flash), present
+# from the very start, and fresh each boot. Always-on (free); S20 persists it to SD when
+# DEBUG_LOG=yes (troubleshooting). The touch-test avoids aborting boot if the redirect fails;
+# console echo is given up (camera is headless without a UART clip).
+touch /dev/yi-boot.log 2>/dev/null && exec >> /dev/yi-boot.log 2>&1
+echo "===== $(date '+%F %T') S01udev - boot start ====="
+
 mkdir /dev/pts
 mount -t devpts devpts /dev/pts
 
