@@ -59,20 +59,25 @@ fi
 mkdir -p $YI_HACK_V5_PREFIX/yi-hack/config/crontabs
 mkdir -p $YI_HACK_V5_PREFIX/yi-hack/config/dropbear
 
-# Comment out all the cloud stuff from base/init.sh
-sed -i '/^\.\/dispatch/s/^/#/' /home/app/init.sh
-sed -i '/^\.\/watch_process/s/^/#/' /home/app/init.sh
-sed -i '/^\.\/oss/s/^/#/' /home/app/init.sh
-sed -i '/^\.\/p2p_tnp/s/^/#/' /home/app/init.sh
-sed -i '/^\.\/cloud/s/^/#/' /home/app/init.sh
-sed -i '/^\.\/mp4record/s/^/#/' /home/app/init.sh
-sed -i '/^\.\/rmm/s/^/#/' /home/app/init.sh
-sed -i 's|^sleep 2$|#sleep 2|' /home/app/init.sh
-# set swappiness from 0 to 60
-sed -i "s#echo 0 > /proc/sys/vm/swappiness#echo 60 > /proc/sys/vm/swappiness#" /home/app/init.sh
-
-# Comment out the rtc command that sometimes hangs the camera in base/init.sh
-# rtctime=$(/home/base/tools/rtctool -g time
-# date -s $rtctime
-sed -i '/^rtctime=\$(\/home\/base\/tools\/rtctool -g time)/s/^/#/' /home/base/init.sh
-sed -i '/^date -s \$rtctime/s/^/#/' /home/base/init.sh
+# Patch the stock init scripts: comment out cloud daemons + bump swappiness in app/init.sh,
+# comment the hanging rtc command in base/init.sh.
+# Flash-wear: each `sed -i` rewrites the whole file, so collapse all edits per file into ONE
+# sed, and guard with a sentinel so we only write when NOT already patched (idempotent boots
+# -> zero flash writes here; re-patches automatically if a stock update resets the file).
+if ! grep -q '^#\./dispatch' /home/app/init.sh; then
+	sed -i -e '/^\.\/dispatch/s/^/#/' \
+	       -e '/^\.\/watch_process/s/^/#/' \
+	       -e '/^\.\/oss/s/^/#/' \
+	       -e '/^\.\/p2p_tnp/s/^/#/' \
+	       -e '/^\.\/cloud/s/^/#/' \
+	       -e '/^\.\/mp4record/s/^/#/' \
+	       -e '/^\.\/rmm/s/^/#/' \
+	       -e 's|^sleep 2$|#sleep 2|' \
+	       -e 's#echo 0 > /proc/sys/vm/swappiness#echo 60 > /proc/sys/vm/swappiness#' \
+	       /home/app/init.sh
+fi
+if ! grep -q '^#rtctime=' /home/base/init.sh; then
+	sed -i -e '/^rtctime=\$(\/home\/base\/tools\/rtctool -g time)/s/^/#/' \
+	       -e '/^date -s \$rtctime/s/^/#/' \
+	       /home/base/init.sh
+fi

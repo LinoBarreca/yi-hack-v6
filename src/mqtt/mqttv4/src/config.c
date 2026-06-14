@@ -136,6 +136,7 @@ int config_replace(char *filename, char *key, char *value)
     char tmpFile[L_tmpnam + 1]; // Add +1 for the null character..
     char ukey[128];
     int ret = -1;
+    int unchanged = 0;   /* key already holds this exact value -> skip the flash write */
 
     strcpy(ukey, key);
     ucase(ukey);
@@ -159,7 +160,11 @@ int config_replace(char *filename, char *key, char *value)
         if (buf[0] != '#') {
             parsed = sscanf(buf, "%[^=] = %s", oldkey, oldvalue);
             if((parsed == 2) && (strcasecmp(ukey, oldkey) == 0)) {
-                sprintf(buf, "%s=%s\n", ukey, value);
+                if (strcmp(oldvalue, value) == 0) {
+                    unchanged = 1;   /* same value already on flash -> no rewrite needed */
+                } else {
+                    sprintf(buf, "%s=%s\n", ukey, value);
+                }
                 ret = 0;
             }
         }
@@ -168,6 +173,14 @@ int config_replace(char *filename, char *key, char *value)
 
     fclose(fpt);
     fclose(fpf);
+    /* Flash-wear: camera.conf is runtime state rewritten on every IPC command (incl. the
+     * frequent HomeAssistant/automation re-sends of an identical value). Only touch the
+     * flash when the value actually changed; otherwise discard the rebuilt temp file.
+     * Real changes are still written synchronously (no power-loss persistence risk). */
+    if (unchanged) {
+        remove(tmpFile);
+        return ret;
+    }
     remove(filename);
     cp(filename, tmpFile);
     remove(tmpFile);

@@ -107,9 +107,17 @@ if [[ x$(get_config system.USERNAME) != "x" ]] ; then
     chmod 0600 /tmp/httpd.conf
 fi
 
-if [[ x$(get_config system.SSH_PASSWORD) != "x" ]] ; then
-    SSH_PASSWORD=$(get_config system.SSH_PASSWORD)
-    echo root:$SSH_PASSWORD | chpasswd --md5
+SSH_PASSWORD=$(get_config system.SSH_PASSWORD)
+if [ -n "$SSH_PASSWORD" ] ; then
+    # Flash-wear: chpasswd rewrites /etc on the rootfs (mtd4) every time. Only run it when the
+    # configured password actually changed, tracked by a marker (md5 of the configured pwd;
+    # the plaintext already lives in system.conf, so the marker leaks nothing extra). The
+    # marker is in config/ (mtd5): a v6 reflash resets rootfs+home together, keeping them in sync.
+    _pwmark=$(echo -n "$SSH_PASSWORD" | md5sum | cut -d' ' -f1)
+    if [ "$_pwmark" != "$(cat /home/yi-hack/config/.sshpw_applied 2>/dev/null)" ] ; then
+        echo "root:$SSH_PASSWORD" | chpasswd --md5
+        echo "$_pwmark" > /home/yi-hack/config/.sshpw_applied
+    fi
 fi
 
 case $(get_config system.RTSP_PORT) in
@@ -383,7 +391,11 @@ if [ ! -z "$CRONTAB" ]; then
     echo "$CRONTAB" > /var/spool/cron/crontabs/root
 fi
 if [ "$FREE_SPACE" != "0" ]; then
-    echo "0 * * * * /home/yi-hack/base/script/clean_records.sh $FREE_SPACE" > /var/spool/cron/crontabs/root
+    # Append (>>), don't overwrite: the recording free-space cleanup must coexist with the
+    # user's scheduled jobs (system.CRONTAB). With > it silently dropped the user crontab
+    # whenever FREE_SPACE != 0 (the default is 10). /var/spool is tmpfs (fresh each boot),
+    # so no cross-boot accumulation.
+    echo "0 * * * * /home/yi-hack/base/script/clean_records.sh $FREE_SPACE" >> /var/spool/cron/crontabs/root
 fi
 
 /usr/sbin/crond -c /var/spool/cron/crontabs/

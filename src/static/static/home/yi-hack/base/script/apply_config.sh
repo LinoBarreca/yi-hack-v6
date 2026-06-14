@@ -77,7 +77,14 @@ fi
     case " $EXCLUDE " in *" $base "*) log "skip $rel (runtime state, never overridden)"; continue ;; esac
     dest="$CONFIG_DIR/$rel"
     mkdir -p "${dest%/*}"
-    if cp "$SRC/$rel" "$dest"; then log "override $rel"; else log "FAILED $rel"; fi
+    # Flash-wear: skip the copy (and the flash write) when content is already identical.
+    if cmp -s "$SRC/$rel" "$dest"; then
+        log "unchanged $rel"
+    elif cp "$SRC/$rel" "$dest"; then
+        log "override $rel"
+    else
+        log "FAILED $rel"
+    fi
 done
 
 exit 0

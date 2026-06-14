@@ -26,7 +26,9 @@ Just kidding..I have 6 Yi cameras..I wanted an easy way to update them all and c
 This firmware will add the following features:
 
 - **NEW FEATURES**
-  - new, simplified file layout
+  - New, simplified file layout
+  - Minimized flash wear (reduced unnecessary writes introduced by all the previous yi-hack)
+  - Updated busybox & wpa_supplicant (more secure)
   - Ability to run without an SD card (recovery http)
   - Ability to load the firmware from a network share (configurable through the recovery http)
   - Ability to load some configurations from the network share (user chooses which ones)

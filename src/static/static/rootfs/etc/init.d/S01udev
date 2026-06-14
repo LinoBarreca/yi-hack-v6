@@ -3,6 +3,12 @@
 mkdir /dev/pts
 mount -t devpts devpts /dev/pts
 
+# /var is small (~28K) and entirely volatile (run sockets/pidfiles/utmp, spool/cron) but
+# lives on the NOR-flash rootfs (mtd4). Mount it tmpfs to keep these frequent runtime writes
+# (wpa_supplicant socket, pidfiles, utmp, crontab) off the flash. See flash-wear analysis.
+mount -t tmpfs tmpfs /var -o size=1m
+mkdir -p /var/run/wpa_supplicant /var/lock /var/spool/cron/crontabs
+
 mkdir -p /dev/.udev
 udevd --daemon
 udevadm trigger
