@@ -11,9 +11,6 @@ LIB_J = $(JPEGLIB_DIR)/.libs/libjpeg.a
 
 all: imggrabber
 
-framefinder.o: framefinder.c $(HEADERS)
-	$(CC) -c $< -fPIC -O2 -o $@
-
 imggrabber.o: imggrabber.c $(HEADERS)
 	@$(build_ffmpeg)
 	@$(build_jpeglib)
@@ -38,7 +35,7 @@ imggrabber: $(OBJECTS)
 .PHONY: clean
 
 clean:
-	rm -f framefinder imggrabber
+	rm -f imggrabber
 	rm -f $(OBJECTS)
 
 distclean: clean

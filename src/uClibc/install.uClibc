@@ -1,50 +1,51 @@
 #!/bin/bash
+#
+# uClibc install — yi-hack-v6
+#
+# We ship OUR uClibc 0.9.33.2 core libs into the rootfs /lib, overwriting the stock ones.
+# This is NOT cosmetic: the stock Xiaomi ld-uClibc was built WITHOUT working LD_PRELOAD
+# support, while ours has LDSO_PRELOAD_ENV_SUPPORT=y. The IPC multiplexer (ipc_multiplex.so,
+# LD_PRELOAD'd into `dispatch` by system.sh) depends on LD_PRELOAD, so with the stock linker
+# it silently never loads and the ipc_dispatch_N queues are never created -> mqttv4/ipc2file
+# can't attach. Shipping our ld.so fixes that. (Proven on hardware: a test binary with
+# PT_INTERP=our-ld.so honours LD_PRELOAD; the same with the stock linker does not.)
+#
+# ld.so and libc are a matched pair (shared link-map/TLS internals), so we ship our libc
+# (libuClibc) alongside our ld.so. Our libuClibc is actually ~37 KB SMALLER than stock, so the
+# rootfs (mtd4, 1280 KB, tight) net SHRINKS - these three are already present as stock real
+# files, we only overwrite them. libm comes along to complete the core set.
+#
+# Partition split (rootfs can't hold the full uClibc set alongside busybox): only the CORE
+# (ld-uClibc / libc / libm) lives in rootfs; the rest (librt / libdl / libpthread / ...) lives
+# in /home/lib and is found via LD_LIBRARY_PATH at full boot. We do NOT add those to rootfs.
+#
+# libutil + libcrypt: the ONLY two uClibc libs stock never shipped (it had no SSH); dropbear
+# NEEDs them. v5 offloaded them onto the SD with a /lib symlink that dangled in diskless v6
+# (bug #1) - we ship them as real files here.
+#
+# Each lib = real .so + versioned-soname symlink. jffs2 supports symlinks (the 155-entry
+# busybox farm relies on it); nothing here is staged onto FAT, so v5's "materialize every
+# soname as a full copy to survive FAT" dance is gone.
 
-SCRIPT_DIR=$(cd `dirname $0` && pwd)
-cd $SCRIPT_DIR
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+cd "$SCRIPT_DIR"
 
-mkdir -p ../../build/home/yi-hack/lib/
+DEST=../../build/rootfs/lib
+mkdir -p "$DEST"
 
+# ship_lib <real-so> <soname>: real object + soname symlink. rm -f first so a partial/dirty
+# rebuild (stale dangling link, or overwriting a stock symlink) can't make `cp` write through.
+ship_lib() {
+    rm -f "$DEST/$1" "$DEST/$2"
+    cp -a "./_install/lib/$1" "$DEST/$1" || exit 1
+    ln -sfn "$1" "$DEST/$2"              || exit 1
+}
 
-#rsync -a ./_install/lib/libcrypt* ../../build/home/yi-hack/lib/
-#rsync -a ./_install/lib/libnsl* ../../build/home/yi-hack/lib/
-#rsync -a ./_install/lib/libutil* ../../build/home/yi-hack/lib/
-#rsync -a ./_install/lib/libutil* ../../build/home/yi-hack/lib/
+# Core (overwrites stock; our ld.so has working LD_PRELOAD):
+ship_lib ld-uClibc-0.9.33.2.so ld-uClibc.so.0
+ship_lib libuClibc-0.9.33.2.so libc.so.0
+ship_lib libm-0.9.33.2.so      libm.so.0
 
-mkdir -p ../../build/rootfs/lib/
-
-# Copying all files 
-cp -a ./_install/lib/* ../../build/home/yi-hack/lib/
-
-#rsync -a ./_install/lib/libuClibc* ../../build/home/yi-hack/lib/
-#rsync -a ./_install/lib/libc.so.0 ../../build/home/yi-hack/lib/
-#rsync -a ./_install/lib/ld-uClibc* ../../build/home/yi-hack/lib/
-#rsync -a ./_install/lib/libm* ../../build/home/yi-hack/lib/
-
-# Deleting all symlinks from the folder
-find ../../build/home/yi-hack/lib -type l -delete
-
-# Copying files due to symlink issues
-cp -f ../../build/home/yi-hack/lib/ld-uClibc-0.9.33.2.so ../../build/home/yi-hack/lib/ld-uClibc.so.0 
-cp -f ../../build/home/yi-hack/lib/libcrypt-0.9.33.2.so ../../build/home/yi-hack/lib/libcrypt.so.0
-cp -f ../../build/home/yi-hack/lib/libuClibc-0.9.33.2.so ../../build/home/yi-hack/lib/libc.so.0
-cp -f ../../build/home/yi-hack/lib/libdl-0.9.33.2.so ../../build/home/yi-hack/lib/libdl.so.0 
-cp -f ../../build/home/yi-hack/lib/libm-0.9.33.2.so ../../build/home/yi-hack/lib/libm.so.0
-cp -f ../../build/home/yi-hack/lib/libnsl-0.9.33.2.so ../../build/home/yi-hack/lib/libnsl.so.0 
-cp -f ../../build/home/yi-hack/lib/libpthread-0.9.33.2.so ../../build/home/yi-hack/lib/libpthread.so.0
-cp -f ../../build/home/yi-hack/lib/libresolv-0.9.33.2.so ../../build/home/yi-hack/lib/libresolv.so.0
-cp -f ../../build/home/yi-hack/lib/librt-0.9.33.2.so ../../build/home/yi-hack/lib/librt.so.0
-cp -f ../../build/home/yi-hack/lib/libthread_db-0.9.33.2.so ../../build/home/yi-hack/lib/libthread_db.so.1 
-cp -f ../../build/home/yi-hack/lib/libutil-0.9.33.2.so ../../build/home/yi-hack/lib/libutil.so.0
-
-# kept for just in case
-cp -a ./_install/lib/libuClibc* ../../build/rootfs/lib/
-cp -a ./_install/lib/libc.so.0 ../../build/rootfs/lib/
-cp -a ./_install/lib/ld-uClibc* ../../build/rootfs/lib/
-cp -a ./_install/lib/libm* ../../build/rootfs/lib/
-
-ln -fs /tmp/sd/yi-hack/lib/libutil-0.9.33.2.so ../../build/rootfs/lib/libutil-0.9.33.2.so
-ln -fs libutil-0.9.33.2.so ../../build/rootfs/lib/libutil.so.0
-
-ln -fs /tmp/sd/yi-hack/lib/libcrypt-0.9.33.2.so ../../build/rootfs/lib/libcrypt-0.9.33.2.so
-ln -fs libcrypt-0.9.33.2.so ../../build/rootfs/lib/libcrypt.so.0
+# Stock never shipped these (dropbear/SSH needs them):
+ship_lib libutil-0.9.33.2.so   libutil.so.0
+ship_lib libcrypt-0.9.33.2.so  libcrypt.so.0

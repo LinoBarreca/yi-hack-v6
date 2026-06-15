@@ -95,6 +95,61 @@ compress_in_dir() {
     done
 }
 
+# Stock OTA updates ship as a sibling folder of home_extracted/ named after the release
+# (e.g. 2.1.0.0E_201809191630/) carrying a partial home/ tree with per-subdir version files
+# (.basever/.appver/.libver/.hisikover) and a top-level homever. The stock updater
+# (home/app/script/update.sh) version-gates each managed subdir and, when the update differs,
+# wipes the subdir and drops the update's copy in. We fold that into the image at build time.
+#
+# Version strings end in a monotonic timestamp (..._YYYYMMDDHHMM); compare on that to decide
+# "newer", falling back to plain inequality if absent.
+ver_stamp() { printf '%s\n' "$1" | sed -n 's/.*_\([0-9]\{8,\}\).*/\1/p'; }
+ver_gt() {                                   # ver_gt NEW CUR -> true if NEW strictly newer
+    local n c; n=$(ver_stamp "$1"); c=$(ver_stamp "$2")
+    if [ -n "$n" ] && [ -n "$c" ]; then [ "$n" -gt "$c" ] 2>/dev/null; return; fi
+    [ "$1" != "$2" ]                         # no parseable stamp -> treat any difference as newer
+}
+
+# Apply every stock update folder found under $stock_root to $home_dir, oldest->newest,
+# mirroring app/script/update.sh: per managed subdir, replace wholesale only when the update
+# is newer; then refresh the top-level homever marker.
+apply_stock_updates() {
+    local home_dir=$1 stock_root=$2
+    local updlist upd
+    # NB: the loop's last iteration may be a dir without home/homever, so the pipeline exits
+    # non-zero under pipefail -> `|| true` stops `set -e` aborting on a normal/empty result.
+    updlist=$(for d in "$stock_root"/*/; do
+                  [ -f "${d}home/homever" ] && basename "$d"
+              done | sort -t_ -k2 -n) || true
+    if [ -z "$updlist" ]; then
+        log "$MODEL: no stock update folder found (no */home/homever) — using base home as-is"
+        return 0
+    fi
+    for upd in $updlist; do
+        local uhome="$stock_root/$upd/home"
+        log "$MODEL: stock update '$upd' (homever $(cat "$uhome/homever" 2>/dev/null)) — current home homever $(cat "$home_dir/homever" 2>/dev/null || echo '<none>')"
+        local spec sub vf newv curv
+        for spec in "base:.basever" "app:.appver" "lib:.libver" "hisiko:.hisikover"; do
+            sub=${spec%%:*}; vf=${spec##*:}
+            [ -f "$uhome/$sub/$vf" ] || { log "$MODEL:   $sub: not in this update — skip"; continue; }
+            newv=$(cat "$uhome/$sub/$vf") || true
+            curv=$(cat "$home_dir/$sub/$vf" 2>/dev/null) || true
+            if [ "$newv" = "${curv:-}" ]; then
+                log "$MODEL:   $sub: already at $newv — skip"
+            elif ver_gt "$newv" "${curv:-}"; then
+                log "$MODEL:   $sub: REPLACE  ${curv:-<none>} -> $newv  ($(find "$uhome/$sub" -type f | wc -l) files)"
+                rm -rf "$home_dir/$sub"
+                mkdir -p "$home_dir/$sub"
+                cp -a "$uhome/$sub/." "$home_dir/$sub/" || die "$MODEL: failed copying update $sub"
+            else
+                log "$MODEL:   $sub: update $newv NOT newer than $curv — keep current"
+            fi
+        done
+        log "$MODEL:   homever -> $(cat "$uhome/homever")"
+        cp -a "$uhome/homever" "$home_dir/homever"
+    done
+}
+
 # Build a jffs2 from $srcdir, then wrap it as the uImage U-Boot's do_auto_sd_update
 # expects: file named <type>_<MODEL> (no extension), type=filesystem, comp=none.
 make_partition_image() {
@@ -140,12 +195,19 @@ pack_model() {
     log "$MODEL: copying stock home..."
     cp -a "$MODEL_STOCK/home_extracted" "$IMG_DIR/home"
 
+    # --- Step 1-bis: fold in stock OTA update(s) so the base is current before our overlay ---
+    log "$MODEL: applying stock firmware update(s)..."
+    apply_stock_updates "$IMG_DIR/home" "$MODEL_STOCK"
+
     # --- Step 2: overlay v6 build artifacts ---
     log "$MODEL: overlaying build/rootfs/ (busybox, init.d, profile)..."
-    cp -a "$BUILD_DIR/rootfs/." "$IMG_DIR/rootfs/"
+    # --remove-destination: an overlay file must REPLACE a stock symlink at the same path, not
+    # be written THROUGH it. e.g. our regular-file usr/bin/lsusb shim over stock's
+    # usr/bin/lsusb -> ../../bin/busybox would otherwise clobber the busybox binary.
+    cp -a --remove-destination "$BUILD_DIR/rootfs/." "$IMG_DIR/rootfs/"
 
     log "$MODEL: overlaying build/home/ (yi-hack base: scripts, www-min, dropbear, wpa, busybox_tools)..."
-    cp -a "$BUILD_DIR/home/." "$IMG_DIR/home/"
+    cp -a --remove-destination "$BUILD_DIR/home/." "$IMG_DIR/home/"
 
     # --- Step 3: remove orphan uClibc copy (stock rootfs already has these in /lib) ---
     log "$MODEL: removing yi-hack/lib/ (uClibc duplicate, stock has /lib/)..."
@@ -215,7 +277,7 @@ pack_model() {
     local payload_staging="$IMG_DIR/payload"
     mkdir -p "$payload_staging/yi-hack/extra"
     cp -a "$BUILD_DIR/extra/." "$payload_staging/yi-hack/extra/"
-    echo "$VERSION" > "$payload_staging/yi-hack/version"
+        echo "$VERSION" > "$payload_staging/yi-hack/version"
 
     # extra/ holds only regular files (busybox binary + service binaries) - the applet
     # symlinks live in the flash farm (base/bin), not here - so the payload is FAT-safe and

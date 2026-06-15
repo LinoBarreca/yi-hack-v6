@@ -29,7 +29,9 @@
 # Run from repo root:  python3 scripts/simulate_boot.py [model]   (default model: y20)
 #   -> writes simulated_boot.log, exits non-zero if any ERROR was found.
 
-import os, sys
+import os, sys, subprocess, shutil
+
+HAVE_OBJDUMP = shutil.which("objdump") is not None
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "y20"
@@ -219,6 +221,44 @@ def check_cgi_shebang(fs, cgi_abspath, critical=True, label=""):
         else:
             warns += 1
 
+def check_elf_libs(fs, binpath, ld_dirs, label=""):
+    """Resolve an ELF's NEEDED shared libraries in the runtime LD search path. A binary can
+    resolve on PATH yet fail at exec because a NEEDED lib is missing or a dangling symlink
+    (e.g. /lib/libutil.so.0 -> /tmp/sd/... ). ld_dirs = LD_LIBRARY_PATH dirs + /lib,/usr/lib.
+    Follows symlinks through the merged FS and accepts libs shipped compressed (.7z)."""
+    global errors, warns
+    if not HAVE_OBJDUMP:
+        return
+    loc = fs.to_image(binpath)
+    if loc is None or not os.path.exists(loc):
+        return  # binary absent/compressed here — existence covered by other checks
+    try:
+        dump = subprocess.check_output(["objdump", "-p", loc], stderr=subprocess.DEVNULL, text=True)
+    except Exception:
+        return
+    needed = [ln.split()[1] for ln in dump.splitlines() if "NEEDED" in ln]
+    if not needed:
+        return
+    missing = []
+    for lib in needed:
+        ok = False
+        for d in ld_dirs:
+            cand = os.path.join(d, lib)
+            if not fs.lexists(cand):
+                continue
+            kind, _ = fs.realtarget(cand)
+            if kind in ("file", "compressed"):
+                ok = True
+                break
+        if not ok:
+            missing.append(lib)
+    if missing:
+        out(f"      FAIL {os.path.basename(binpath):<18} NEEDED unresolved: {', '.join(missing)}"
+            f"  <-- won't load at exec  {label}")
+        errors += 1
+    else:
+        out(f"      ok   {os.path.basename(binpath):<18} all {len(needed)} NEEDED libs resolve  {label}")
+
 def check_exec(fs, abspath, label=""):
     """For a script/binary invoked by absolute path (not sourced, not via PATH): it must
     exist AND have an execute bit, else execve() fails with EACCES at boot."""
@@ -331,7 +371,7 @@ def run_scenario(name, payload_mounted):
         for h in ("check_conf.sh", "wd_rtsp.sh", "conf2mqtt.sh", "ptz_presets.sh",
                   "clean_records.sh", "ftppush.sh", "check_update.sh", "configure_wifi.sh"):
             check_file(fs, f"/home/yi-hack/base/script/{h}")
-        check_file(fs, "/home/yi-hack/base/script/mqtt_advertise/startup.sh")
+        check_exec(fs, "/home/yi-hack/base/script/mqtt_advertise/startup.sh", "run by system.sh (must be +x)")
         out("    httpd + applets resolve through the farm (base/bin -> extra/bin/busybox):")
         for c in ("httpd", "telnetd", "sh", "head", "readlink"):
             check_cmd(fs, c, full_path)
@@ -340,6 +380,12 @@ def run_scenario(name, payload_mounted):
         for c in ("rRTSPServer", "h264grabber", "mqttv4", "ipc_cmd",
                   "onvif_notify_server", "ipc2file", "wsd_simple_server"):
             check_cmd(fs, c, full_path, label="payload daemon")
+        out("    ELF NEEDED shared libs resolve in the LD path (LD_LIBRARY_PATH + /lib,/usr/lib):")
+        LD_FULL = ["/lib", "/usr/lib", "/home/lib", "/home/app/locallib", "/home/hisiko/hisilib",
+                   "/home/yi-hack/extra/lib", "/home/yi-hack/base/lib"]
+        check_elf_libs(fs, "/home/yi-hack/base/bin/dropbearmulti", LD_FULL, "dropbear/SSH")
+        for b in ("rRTSPServer", "mqttv4", "onvif_notify_server", "h264grabber"):
+            check_elf_libs(fs, f"/home/yi-hack/extra/bin/{b}", LD_FULL, "payload service")
         out("    ONVIF SOAP = CGI: httpd routes /onvif/* to www/onvif/* (not a PATH daemon).")
         out("    Each CGI service file's #! interpreter must resolve via the www logical view:")
         check_file(fs, "/home/yi-hack/www/onvif/onvif_simple_server", "ONVIF CGI (via www->extra/www)")
@@ -360,8 +406,11 @@ def run_scenario(name, payload_mounted):
         check_cmd(fs, "telnetd", s20_path, label="recovery shell")
         out("    SSH recovery: dropbear launched by ABSOLUTE path (base/bin not on S20 PATH):")
         check_file(fs, "/home/yi-hack/base/bin/dropbear", "SSH recovery (-> dropbearmulti)")
-        out("    host keys: -R generates on demand at compiled path /home/yi-hack/config/dropbear/")
-        out("      --   /home/yi-hack/config/dropbear  (created at boot via mkdir -p; flash, writable)")
+        check_exec(fs, "/home/yi-hack/config/dropbear", "key dir (ships in home image; -R writes keys here)")
+        # dropbear's NEEDED libs must resolve in the minimal-boot LD path (no extra/lib: payload absent).
+        check_elf_libs(fs, "/home/yi-hack/base/bin/dropbearmulti",
+                       ["/home/lib", "/home/app/locallib", "/home/hisiko/hisilib", "/lib", "/usr/lib"],
+                       "dropbear/SSH (minimal)")
         out("    stock cloud daemons (cd /home/app; ./<bin>) unless privacy=on:")
         for b in ("dispatch", "rmm", "cloud", "mp4record", "p2p_tnp", "oss", "watch_process"):
             check_file(fs, f"/home/app/{b}", "stock", critical=False)
@@ -379,8 +428,8 @@ def run_scenario(name, payload_mounted):
     out("    sanity of common applets a recovering operator needs:")
     for c in ("sh", "ls", "cat", "vi", "mount", "flashcp", "tar", "nc"):
         check_cmd(fs, c, login_path)
-    out(f"    banner reads: cat /home/yi-hack/extra/../version  -> "
-        f"{'resolves to bundle version' if payload_mounted else 'extra ABSENT: cat fails (cosmetic)'}")
+    out("    banner reads: cat /home/yi-hack/version  (profile; payload-independent)")
+    check_file(fs, "/home/yi-hack/version", "banner version (profile reads /home/yi-hack/version)")
 
 
 # ---------------------------------------------------------------------------

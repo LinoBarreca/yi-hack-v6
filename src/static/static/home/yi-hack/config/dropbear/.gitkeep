@@ -1,0 +1,2 @@
+# placeholder: ships the (empty) dropbear key dir in the home image.
+# dropbear generates host keys here at first run (RSA/ECDSA/ED25519).

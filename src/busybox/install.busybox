@@ -4,3 +4,10 @@ SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
 cp -a ./_install/* ../../build/rootfs/
+
+# Replace the lsusb applet symlink with our shim (./lsusb), which normalizes output to stock
+# busybox 1.20.2 format so stock/OTA lsusb parsers keep working - see comments in ./lsusb.
+# rm FIRST so we overwrite the symlink itself, not the busybox binary it points to.
+rm -f ../../build/rootfs/usr/bin/lsusb
+cp ./lsusb ../../build/rootfs/usr/bin/lsusb
+chmod 0755 ../../build/rootfs/usr/bin/lsusb

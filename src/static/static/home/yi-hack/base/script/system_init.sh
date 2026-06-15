@@ -56,8 +56,7 @@ if [ ! -f $YI_PREFIX/cloudAPI_real ]; then
 	fi
 fi
 
-mkdir -p $YI_HACK_V5_PREFIX/yi-hack/config/crontabs
-mkdir -p $YI_HACK_V5_PREFIX/yi-hack/config/dropbear
+# config/crontabs and config/dropbear ship (empty) in the home image at build time - no runtime mkdir.
 
 # Patch the stock init scripts: comment out cloud daemons + bump swappiness in app/init.sh,
 # comment the hanging rtc command in base/init.sh.

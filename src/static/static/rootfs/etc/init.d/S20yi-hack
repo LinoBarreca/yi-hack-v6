@@ -28,8 +28,17 @@ if [ "$(get_config system.DEBUG_LOG)" = "yes" ]; then
         cat /dev/yi-boot.log > /tmp/sd/yi-boot.log 2>/dev/null
         exec >> /tmp/sd/yi-boot.log 2>&1
         echo "===== [bootlog] live on SD (sync) from here ====="
+        # Debug crash capture: send cores to the SD (gigabytes of space, pullable with the boot
+        # log, no pressure on the 16M /tmp tmpfs). Only enabled here, with the SD writable, so a
+        # crash loop can't fill RAM. core_pattern is global; ulimit -c is inherited by every
+        # daemon launched from here on - minimal-boot ones below AND system.sh + its services.
+        # (Cores hit the sync-mounted FAT, so each write is slow but durable - debug only.)
+        mkdir -p /tmp/sd/cores
+        echo "/tmp/sd/cores/core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null
+        ulimit -c unlimited
+        echo "[bootlog] core dumps enabled -> /tmp/sd/cores/core.%e.%p"
     else
-        echo "[bootlog] DEBUG_LOG=yes but no writable SD -> RAM only (/dev/yi-boot.log)"
+        echo "[bootlog] DEBUG_LOG=yes but no writable SD -> RAM only (/dev/yi-boot.log), cores disabled"
     fi
 fi
 # diag: dump key state at boot checkpoints (only when bootlog is on, to keep it quiet/fast otherwise).
@@ -78,9 +87,8 @@ else
     telnetd &
     # SSH recovery: dropbear lives in flash base/bin (no payload needed). Absolute path -
     # S20's PATH does not include base/bin. -R generates host keys on demand at the paths
-    # compiled into the binary (/home/yi-hack/config/dropbear/, flash); -B allows blank
-    # password so SSH is reachable exactly like telnet. mkdir is belt-and-suspenders.
-    mkdir -p /home/yi-hack/config/dropbear
+    # compiled into the binary (/home/yi-hack/config/dropbear/, which ships in the home image);
+    # -B allows blank password so SSH is reachable exactly like telnet.
     /home/yi-hack/base/bin/dropbear -R -B &
     if [ "$(cat /home/yi-hack/config/privacy 2>/dev/null)" != "on" ]; then
         (

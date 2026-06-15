@@ -13,18 +13,16 @@ MODEL_SUFFIX=$(cat /home/app/.camver)
 . /home/yi-hack/base/script/get_config.sh
 
 export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib:/home/yi-hack/extra/lib:/home/yi-hack/base/lib
-export PATH=/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/home/app/localbin:/home/base:/home/yi-hack/base/script
+# PATH order mirrors env.sh (§2.13 farm-first): base/bin + extra/bin FIRST so bare applet
+# names resolve through the flash farm to the full PATCHED busybox (extra/bin/busybox),
+# not the mini rootfs one. base/script kept last so helper scripts resolve by name.
+export PATH=/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/base/script
 
-if [ ! -L "/home/yi-hack/.ash_history" ]; then
-    ln -sf /dev/null /home/yi-hack/.ash_history
-fi
+# .ash_history -> /dev/null (discard shell history, no flash writes) is a static symlink
+# shipped in the home image at build time (src/.../home/yi-hack/.ash_history), not created here.
 
 ulimit -s 1024
 mkdir /dev/shm 2>/dev/null
-
-# Remove core files, if any
-rm -f /home/yi-hack/extra/bin/core
-rm -f /home/yi-hack/www/cgi-bin/core
 
 touch /tmp/httpd.conf
 
@@ -138,7 +136,7 @@ if [[ $(get_config system.DISABLE_CLOUD) == "no" ]] ; then
     (
         cd /home/app
         killall dispatch
-        LD_PRELOAD=/home/yi-hack/base/lib/ipc_multiplex.so ./dispatch &
+        LD_PRELOAD=/home/yi-hack/extra/lib/ipc_multiplex.so ./dispatch &
         sleep 3
         if [[ $(get_config system.TIME_OSD) == "yes" ]] ; then
             echo -ne '\x01\x00\x00\x00' | dd of=/tmp/mmap.info bs=1 seek=0 count=4 conv=notrunc
@@ -158,7 +156,7 @@ if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     (
         cd /home/app
         killall dispatch
-        LD_PRELOAD=/home/yi-hack/base/lib/ipc_multiplex.so ./dispatch &
+        LD_PRELOAD=/home/yi-hack/extra/lib/ipc_multiplex.so ./dispatch &
         sleep 3
         if [[ $(get_config system.TIME_OSD) == "yes" ]] ; then
             echo -ne '\x01\x00\x00\x00' | dd of=/tmp/mmap.info bs=1 seek=0 count=4 conv=notrunc
@@ -178,10 +176,9 @@ if [[ $(get_config system.HTTPD) == "yes" ]] ; then
     # Single logical web path; build_view.sh points it to extra/www (full) or base/www-min (rescue).
     # NOTE: recordings live at /home/yi-hack/output/record; the events CGIs read from there
     # (no www/record bind-mount - extra/www may be read-only CIFS).
-    # Explicit path: the full UI needs the patched busybox (onvif CGI routing + auth) which
-    # ships in the payload (extra/bin). A bare 'httpd' would resolve to the unpatched rootfs
-    # busybox first on PATH.
-    /home/yi-hack/extra/bin/httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
+    # bare 'httpd' resolves via the base/bin farm to the full PATCHED busybox (onvif CGI
+    # routing + auth) - base/bin/extra/bin are first on PATH (set above, §2.13 farm-first).
+    httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
 fi
 
 if [[ $(get_config system.TELNETD) == "yes" ]] ; then
@@ -197,7 +194,6 @@ if [[ $(get_config system.FTPD) == "yes" ]] ; then
 fi
 
 if [[ $(get_config system.SSHD) == "yes" ]] ; then
-    mkdir -p /home/yi-hack/config/dropbear
     if [ ! -f /home/yi-hack/config/dropbear/dropbear_ecdsa_host_key ]; then
         dropbearkey -t ecdsa -f /tmp/dropbear_ecdsa_host_key
         mv /tmp/dropbear_ecdsa_host_key /home/yi-hack/config/dropbear/
@@ -381,8 +377,6 @@ if [[ $(get_config system.ONVIF) == "yes" ]] ; then
     fi
 fi
 
-framefinder $MODEL_SUFFIX &
-
 # Add crontab
 CRONTAB=$(get_config system.CRONTAB)
 FREE_SPACE=$(get_config system.FREE_SPACE)
@@ -398,7 +392,7 @@ if [ "$FREE_SPACE" != "0" ]; then
     echo "0 * * * * /home/yi-hack/base/script/clean_records.sh $FREE_SPACE" >> /var/spool/cron/crontabs/root
 fi
 
-/usr/sbin/crond -c /var/spool/cron/crontabs/
+crond -c /var/spool/cron/crontabs/
 
 # Add MQTT Advertise
 if [ -f "/home/yi-hack/base/script/mqtt_advertise/startup.sh" ]; then

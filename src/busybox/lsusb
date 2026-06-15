@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# lsusb shim - yi-hack-v6
+#
+# Our rootfs ships busybox 1.38.0, whose `lsusb` appends the sysfs manufacturer/product
+# string to each line:
+#       Bus 001 Device 002: ID 148f:7601 MediaTek 802.11 n WLAN
+# Stock busybox 1.20.2 printed ONLY the bare ID:
+#       Bus 001 Device 002: ID 148f:7601
+#
+# Several stock/OTA scripts parse lsusb assuming the bare form. The boot-critical one is the
+# WiFi driver detection in /home/app/init.sh:
+#       bcmcmd1=$(lsusb|grep "7601"|cut -d':' -f3)      # expects "7601"
+# With our richer output, `cut -d':' -f3` yields "7601 MediaTek 802.11 n WLAN", the
+# `[ 7601 = ... ]` test errors out, and the wrong driver (rtl8189fs.ko, not shipped) is
+# loaded instead of mt7601Usta.ko -> no wlan0 -> camera unreachable.
+#
+# This shim trims the trailing description so the output matches stock busybox 1.20.2, keeping
+# every stock/OTA lsusb parser working without editing any of them or rebuilding busybox.
+# It is installed over /usr/bin/lsusb, which the early-boot scripts resolve (the base/bin farm
+# is not on PATH yet at that point). BRE sed (no -E) so it runs under the rootfs busybox.
+#
+/bin/busybox lsusb "$@" | sed 's/\(: ID [0-9a-fA-F]*:[0-9a-fA-F]*\).*$/\1/'
