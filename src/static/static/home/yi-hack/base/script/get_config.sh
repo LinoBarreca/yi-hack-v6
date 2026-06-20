@@ -22,14 +22,19 @@ get_config() {
     _gc_path=${1%.*}                              # before last dot
     _gc_file="$CONFIG_DIR/${_gc_path//./\/}.conf" # remaining dots -> slashes
 
+    # A missing file here means a typo/unknown section, or a known file deleted
+    # before check_conf re-seeded it (see check_conf.sh base/extra). The path in
+    # the message tells which: an unknown service -> bug; a known file -> state.
     if [ ! -f "$_gc_file" ]; then
-        echo "get_config: file $_gc_file not found (key $1)" >&2
+        echo "get_config[ERROR]: file $_gc_file not found (key $1)" >&2
         return 1
     fi
 
     # ^KEY= anchored (no spurious substring match); cut -f2- preserves '=' in values (passwords).
+    # A missing key (vs an empty value, which is legitimate and silent) usually
+    # means a caller was not migrated to the new key name.
     if ! grep -qE "^${_gc_key}=" "$_gc_file"; then
-        echo "get_config: key $_gc_key not found in $_gc_file" >&2
+        echo "get_config[ERROR]: key $_gc_key not found in $_gc_file" >&2
         return 1
     fi
 

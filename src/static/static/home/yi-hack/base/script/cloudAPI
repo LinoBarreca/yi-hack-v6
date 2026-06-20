@@ -21,7 +21,7 @@ if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
 else
     if [ "$4" == "https://api.xiaoyi.com/v4/ipc/check_did" ]; then
         echo '{"allow":true,"code":"20000"}'
-    elif [[ $(get_config system.PROXYCHAINSNG) == "yes" ]] ; then
+    elif [[ $(get_config services.proxychains.ENABLED) == "yes" ]] ; then
         cd /home/app
         /home/yi-hack/extra/bin/proxychains4 ./cloudAPI_real "$@"
     else

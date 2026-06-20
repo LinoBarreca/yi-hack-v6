@@ -41,7 +41,7 @@ echo $LAST_FILE_SENT > ${LAST_FILE_SENT_FILE}
 checkFiles ()
 {
 	#
-	FTP_FILE_DELETE_AFTER_UPLOAD="$(get_config system.FTP_FILE_DELETE_AFTER_UPLOAD)"
+	FTP_FILE_DELETE_AFTER_UPLOAD="$(get_config services.ftp_upload.FILE_DELETE_AFTER_UPLOAD)"
 	#
 	logAdd "[INFO] checkFiles"
 	#
@@ -160,11 +160,11 @@ uploadToFtp ()
 	# 	"1" on FAILURE
 	#
 	# Consts.
-	FTP_HOST="$(get_config system.FTP_HOST)"
-	FTP_DIR="$(get_config system.FTP_DIR)"
-	FTP_DIR_TREE="$(get_config system.FTP_DIR_TREE)"
-	FTP_USERNAME="$(get_config system.FTP_USERNAME)"
-	FTP_PASSWORD="$(get_config system.FTP_PASSWORD)"
+	FTP_HOST="$(get_config services.ftp_upload.HOST)"
+	FTP_DIR="$(get_config services.ftp_upload.DIR)"
+	FTP_DIR_TREE="$(get_config services.ftp_upload.DIR_TREE)"
+	FTP_USERNAME="$(get_config services.ftp_upload.USERNAME)"
+	FTP_PASSWORD="$(get_config services.ftp_upload.PASSWORD)"
 	#
 	# Variables.
 	UTF_FULLFN="${2}"
@@ -231,7 +231,7 @@ serviceMain ()
 			chmod -R 0755 "${FOLDER_TO_WATCH}"
 		fi
 		#
-		if [[ $(get_config system.FTP_UPLOAD) == "yes" ]] ; then
+		if [[ $(get_config services.ftp_upload.ENABLED) == "yes" ]] ; then
 			checkFiles
 		fi
 		#

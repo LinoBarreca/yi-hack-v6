@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <pthread.h>
 
-#define RECORD_PATH "/tmp/sd/record"
+#define RECORD_PATH "/home/yi-hack/output/record"
 
 typedef struct {
     pthread_t thread;

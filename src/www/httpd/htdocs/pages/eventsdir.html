@@ -21,7 +21,7 @@
                     <tr class="row">
                         <td>SD free space (%)</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="FREE_SPACE" id="FREE_SPACE"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="recording" data-key="FREE_SPACE" id="FREE_SPACE"/>
                             <span class="switch-description">
                                 Percentage of free space to keep in the SD (0 to disable).
                             </span>
@@ -43,7 +43,7 @@
                         <td>FTP Upload</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="FTP_UPLOAD" id="FTP_UPLOAD">
+                                <input type="checkbox" data-conf="ftp_upload" data-key="ENABLED" id="FTP_UPLOAD">
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -56,7 +56,7 @@
                         <td>FTP Delete (after upload)</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="FTP_FILE_DELETE_AFTER_UPLOAD" id="FTP_FILE_DELETE_AFTER_UPLOAD">
+                                <input type="checkbox" data-conf="ftp_upload" data-key="FILE_DELETE_AFTER_UPLOAD" id="FTP_FILE_DELETE_AFTER_UPLOAD">
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -72,7 +72,7 @@
                     <tr class="row">
                         <td>FTP Host</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="FTP_HOST" id="FTP_HOST">
+                            <input class="u-full-width" type="text" placeholder="" data-conf="ftp_upload" data-key="HOST" id="FTP_HOST">
                             <span class="switch-description">
                                 DNS or IP address of the FTP service.
                             </span>
@@ -81,7 +81,7 @@
                     <tr class="row">
                         <td>FTP Directory</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="FTP_DIR" id="FTP_DIR">
+                            <input class="u-full-width" type="text" placeholder="" data-conf="ftp_upload" data-key="DIR" id="FTP_DIR">
                             <span class="switch-description">
                                 Uploaded files will be placed into the specified directory. If it does not exist, it will be created. Leave empty to save files to the root directory of the FTP service.
                             </span>
@@ -91,7 +91,7 @@
                         <td>Create directory tree</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="FTP_DIR_TREE"/>
+                                <input type="checkbox" data-conf="ftp_upload" data-key="DIR_TREE"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -103,7 +103,7 @@
                     <tr class="row">
                         <td>FTP Username</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="FTP_USERNAME" id="FTP_USERNAME">
+                            <input class="u-full-width" type="text" placeholder="" data-conf="ftp_upload" data-key="USERNAME" id="FTP_USERNAME">
                             <span class="switch-description">
                                 Username to access the FTP service.
                             </span>
@@ -112,7 +112,7 @@
                     <tr class="row">
                         <td>FTP Password</td>
                         <td>
-                            <input class="u-full-width" type="password" placeholder="" data-key="FTP_PASSWORD" id="FTP_PASSWORD">
+                            <input class="u-full-width" type="password" placeholder="" data-conf="ftp_upload" data-key="PASSWORD" id="FTP_PASSWORD">
                             <span class="switch-description">
                                 Password to access the FTP service.
                             </span>

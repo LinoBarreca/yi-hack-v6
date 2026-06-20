@@ -58,13 +58,14 @@ fi
 CONF_TYPE="$(get_conf_type)"
 CONF_FILE=""
 
-if [ "$CONF_TYPE" == "mqtt" ] ; then
-    CONF_FILE="/home/yi-hack/config/services/mqtt.conf"
-elif [ "$CONF_TYPE" == "mqtt_advertise" ] ; then
-    CONF_FILE="/home/yi-hack/config/services/mqtt_advertise.conf"
-else
-    CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf"
-fi
+# Per-service config files live under config/services/; the rest (system,
+# recording, camera, identity, output) at config/ top level.
+case "$CONF_TYPE" in
+    snapshot|httpd|rtsp|onvif|telnetd|sshd|ftpd|ftp_upload|ntpd|proxychains|mqtt|mqtt_advertise)
+        CONF_FILE="/home/yi-hack/config/services/$CONF_TYPE.conf" ;;
+    *)
+        CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf" ;;
+esac
 
 read -r POST_DATA
 # Validate json
@@ -113,10 +114,6 @@ for ROW in $ROWS; do
         VALUE=$(echo $VALUE | sed 's/;/\\n/g')
         cat $CONF_FILE.template > $CONF_FILE
         echo -e $VALUE >> $CONF_FILE
-    elif [ "$KEY" == "TIMELAPSE_DT" ] ; then
-        if $(validateDT $VALUE); then
-            sed -i "s/^\(${KEY}\s*=\s*\).*$/\1${VALUE}/" $CONF_FILE
-        fi
 	else
         if [ "$KEY" == "TIMEZONE" ] ; then
             echo $VALUE > /etc/TZ

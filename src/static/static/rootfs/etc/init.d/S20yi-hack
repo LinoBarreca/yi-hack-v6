@@ -20,6 +20,10 @@ export PATH=/home/base/tools:$PATH
 # buffer onto the SD, then redirect live to the SD file. When off: SD stays standard (async),
 # no SD writes - only the free RAM log in /dev/yi-boot.log (readable via SSH).
 . /home/yi-hack/base/script/get_config.sh
+# Ensure the BASE config files (system, wifi, cifs, output) exist with defaults
+# BEFORE anything reads them - DEBUG_LOG just below, then wifi_up / mount_cifs /
+# build_view. Runs on every boot path (a deleted base file self-heals here).
+/home/yi-hack/base/script/check_conf.sh base
 BOOTLOG=
 if [ "$(get_config system.DEBUG_LOG)" = "yes" ]; then
     BOOTLOG=1
@@ -92,8 +96,8 @@ else
     /home/yi-hack/base/bin/dropbear -R -B &
     if [ "$(cat /home/yi-hack/config/privacy 2>/dev/null)" != "on" ]; then
         (
-            sleep 2
             cd /home/app
+            ./log_server &
             ./dispatch &
             sleep 2
             ./rmm &

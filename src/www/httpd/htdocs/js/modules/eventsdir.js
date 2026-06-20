@@ -36,65 +36,70 @@ APP.eventsdir = (function ($) {
         });
     }
 
+    // Fields carry data-conf (config file) and data-key (de-prefixed key):
+    // FREE_SPACE -> recording.conf, FTP_* -> services/ftp_upload.conf.
+    function fieldSelector() {
+        return $('[data-conf][data-key]');
+    }
+
     function fetchConfigs() {
         loadingStatusElem = $('#loading-status');
         loadingStatusElem.text("Loading...");
 
-        $.ajax({
-            type: "GET",
-            url: 'cgi-bin/get_configs.sh?conf=system',
-            dataType: "json",
-            success: function(response) {
-                loadingStatusElem.fadeOut(500);
+        var confs = {};
+        fieldSelector().each(function () { confs[$(this).attr('data-conf')] = true; });
+        confs = Object.keys(confs);
+        var pending = confs.length;
+        if (pending === 0) { loadingStatusElem.fadeOut(500); return; }
 
-                $.each(response, function (key, state) {
-                    if(key=="FREE_SPACE"  || key=="FTP_HOST" || key=="FTP_DIR" || key=="FTP_USERNAME")
-                        $('input[type="text"][data-key="' + key +'"]').prop('value', state);
-                    else if(key=="FTP_PASSWORD")
-                        $('input[type="password"][data-key="' + key +'"]').prop('value', state);
-                    else
-                        $('input[type="checkbox"][data-key="' + key +'"]').prop('checked', state === 'yes');
-                });
-            },
-            error: function(response) {
-                console.log('error', response);
-            }
+        $.each(confs, function (i, conf) {
+            $.ajax({
+                type: "GET",
+                url: 'cgi-bin/get_configs.sh?conf=' + conf,
+                dataType: "json",
+                success: function(response) {
+                    $.each(response, function (key, state) {
+                        if (key === 'NULL') return;
+                        var $el = $('[data-conf="' + conf + '"][data-key="' + key + '"]');
+                        if ($el.is(':checkbox')) $el.prop('checked', state === 'yes');
+                        else $el.prop('value', state);
+                    });
+                },
+                error: function(response) { console.log('error', response); },
+                complete: function () { if (--pending === 0) loadingStatusElem.fadeOut(500); }
+            });
         });
     }
 
 
    function saveConfigs() {
-        var saveStatusElem;
-        let configs = {};
-
-        saveStatusElem = $('#save-status');
-
+        var saveStatusElem = $('#save-status');
         saveStatusElem.text("Saving...");
 
-        $('.configs-switch input[type="checkbox"]').each(function () {
-            configs[$(this).attr('data-key')] = $(this).prop('checked') ? 'yes' : 'no';
+        var byConf = {};
+        fieldSelector().each(function () {
+            var conf = $(this).attr('data-conf');
+            var key = $(this).attr('data-key');
+            byConf[conf] = byConf[conf] || {};
+            byConf[conf][key] = $(this).is(':checkbox') ? ($(this).prop('checked') ? 'yes' : 'no') : $(this).prop('value');
         });
 
-        configs["FREE_SPACE"] = $('input[type="text"][data-key="FREE_SPACE"]').prop('value');
-        configs["FTP_HOST"] = $('input[type="text"][data-key="FTP_HOST"]').prop("value");
-        configs["FTP_DIR"] = $('input[type="text"][data-key="FTP_DIR"]').prop("value");
-        configs["FTP_USERNAME"] = $('input[type="text"][data-key="FTP_USERNAME"]').prop("value");
-        configs["FTP_PASSWORD"] = $('input[type="password"][data-key="FTP_PASSWORD"]').prop("value");
+        var confs = Object.keys(byConf);
+        var pending = confs.length;
+        var failed = false;
 
-        $.ajax({
-            type: "POST",
-            url: 'cgi-bin/set_configs.sh?conf=system',
-            data: JSON.stringify(configs),
-            dataType: "json",
-            success: function(response) {
-                saveStatusElem.text("Saved");
-            },
-            error: function(response) {
-                saveStatusElem.text("Error while saving");
-                console.log('error', response);
-            }
+        $.each(confs, function (i, conf) {
+            $.ajax({
+                type: "POST",
+                url: 'cgi-bin/set_configs.sh?conf=' + conf,
+                data: JSON.stringify(byConf[conf]),
+                dataType: "json",
+                error: function(response) { failed = true; console.log('error', response); },
+                complete: function () {
+                    if (--pending === 0) saveStatusElem.text(failed ? "Error while saving" : "Saved");
+                }
+            });
         });
-
     }
 
     function updateEventsDirPage() {

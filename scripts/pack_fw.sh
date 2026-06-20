@@ -150,6 +150,45 @@ apply_stock_updates() {
     done
 }
 
+# Exact whole-line edits with a count assertion (safer than sed: a missing/dup target line
+# ABORTS the build instead of being a silent no-op). Trailing whitespace is ignored.
+# remove_line <file> <line> : delete the line; require it present EXACTLY once.
+remove_line() {
+    awk -v t="$2" '{ l=$0; sub(/[ \t]+$/,"",l) } l==t { c++; next } { print } END { if (c!=1) exit 3 }' \
+        "$1" > "$1.tmp" || die "patch_stock_init: '$2' not found exactly once in $1"
+    mv "$1.tmp" "$1"
+}
+# replace_line <file> <old> <new> : in-place, position-preserving; require <old> exactly once.
+replace_line() {
+    awk -v o="$2" -v n="$3" '{ l=$0; sub(/[ \t]+$/,"",l) } l==o { print n; c++; next } { print } END { if (c!=1) exit 3 }' \
+        "$1" > "$1.tmp" || die "patch_stock_init: '$2' not found exactly once in $1"
+    mv "$1.tmp" "$1"
+}
+
+# Patch the stock Xiaomi init scripts at BUILD TIME (verifiable here, in the image, instead
+# of being re-applied on every camera at boot). The input is always pristine stock (fresh
+# overlay), and the v6 OTA channel is the SD/U-Boot flash (stock Xiaomi OTA is closed), so
+# the file is never reset under us - no runtime idempotency needed.
+#  - app/init.sh : the cloud daemons are relaunched by yi-hack after build_view, so REMOVE
+#                  the early stock launches (+ the now-orphan 'sleep 2'); bump swappiness 0->60.
+#  - base/init.sh: REMOVE the hanging rtc time read.
+patch_stock_init() {
+    local app="$1/app/init.sh" base="$1/base/init.sh"
+    log "$MODEL: patching stock init scripts (remove cloud daemons, swappiness, rtc)..."
+    remove_line  "$app"  './log_server &'
+    remove_line  "$app"  './dispatch &'
+    remove_line  "$app"  './rmm &'
+    remove_line  "$app"  './mp4record &'
+    remove_line  "$app"  './cloud &'
+    remove_line  "$app"  './p2p_tnp &'
+    remove_line  "$app"  './oss &'
+    remove_line  "$app"  './watch_process &'
+    remove_line  "$app"  'sleep 2'
+    replace_line "$app"  'echo 0 > /proc/sys/vm/swappiness'  'echo 60 > /proc/sys/vm/swappiness'
+    remove_line  "$base" 'rtctime=$(/home/base/tools/rtctool -g time)'
+    remove_line  "$base" 'date -s $rtctime'
+}
+
 # Build a jffs2 from $srcdir, then wrap it as the uImage U-Boot's do_auto_sd_update
 # expects: file named <type>_<MODEL> (no extension), type=filesystem, comp=none.
 make_partition_image() {
@@ -208,6 +247,9 @@ pack_model() {
 
     log "$MODEL: overlaying build/home/ (yi-hack base: scripts, www-min, dropbear, wpa, busybox_tools)..."
     cp -a --remove-destination "$BUILD_DIR/home/." "$IMG_DIR/home/"
+
+    # --- Step 2-bis: patch stock init scripts (build time -> verifiable in the image) ---
+    patch_stock_init "$IMG_DIR/home"
 
     # --- Step 3: remove orphan uClibc copy (stock rootfs already has these in /lib) ---
     log "$MODEL: removing yi-hack/lib/ (uClibc duplicate, stock has /lib/)..."

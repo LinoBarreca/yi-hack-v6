@@ -12,8 +12,9 @@ fi
 
 MODEL_SUFFIX=$(cat /home/app/.camver)
 
-LOG_FILE="/tmp/wd_rtsp.log"
-#LOG_FILE="/dev/null"
+# Routed through the output/log view (output.LOG matrix); on NO the view symlinks
+# this to /dev/null, so no separate switch is needed here.
+LOG_FILE="/home/yi-hack/output/log/wd_rtsp.log"
 
 . /home/yi-hack/base/script/get_config.sh
 
@@ -21,15 +22,15 @@ COUNTER=0
 COUNTER_LIMIT=10
 INTERVAL=10
 
-if [[ "$(get_config system.USERNAME)" != "" ]] ; then
-    USERNAME=$(get_config system.USERNAME)
-    PASSWORD=$(get_config system.PASSWORD)
+if [[ "$(get_config services.rtsp.USER)" != "" ]] ; then
+    USERNAME=$(get_config services.rtsp.USER)
+    PASSWORD=$(get_config services.rtsp.PASSWORD)
 fi
 
-RRTSP_RES=$(get_config system.RTSP_STREAM)
-RRTSP_AUDIO=$(get_config system.RTSP_AUDIO)
+RRTSP_RES=$(get_config services.rtsp.STREAM)
+RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_PORT=$(get_config system.RTSP_PORT)
+RRTSP_PORT=$(get_config services.rtsp.PORT)
 if [ ! -z $USERNAME ]; then
     RRTSP_USER="-u $USERNAME"
 fi
@@ -47,17 +48,17 @@ restart_grabber()
 {
     killall -q rRTSPServer
     killall -q h264grabber
-    if [[ $(get_config system.RTSP_STREAM) == "low" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "high" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "both" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_AUDIO) == "yes" ]]; then
+    if [[ $(get_config services.rtsp.AUDIO) == "yes" ]]; then
         h264grabber -r AUDIO -m $MODEL_SUFFIX -f &
     fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT $RRTSP_USER $RRTSP_PWD &
@@ -155,7 +156,7 @@ check_mqttv4()
     fi
 }
 
-if [[ $(get_config system.RTSP) == "no" ]] ; then
+if [[ $(get_config services.rtsp.ENABLED) == "no" ]] ; then
     exit
 fi
 

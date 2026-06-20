@@ -1,54 +1,71 @@
 #include "validate.h"
 
 char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
-    { "system", "HTTPD", "bool", "", "", "" , "", "", "" },
-    { "system", "TELNETD", "bool", "", "", "" , "", "", "" },
-    { "system", "SSHD", "bool", "", "", "" , "", "", "" },
-    { "system", "FTPD", "bool", "", "", "" , "", "", "" },
-    { "system", "BUSYBOX_FTPD", "bool", "", "", "" , "", "", "" },
+    /* system - generic settings (section = config/system.conf) */
     { "system", "DISABLE_CLOUD", "bool", "", "", "" , "", "", "" },
     { "system", "REC_WITHOUT_CLOUD", "bool", "", "", "" , "", "", "" },
-    { "system", "MQTT", "bool", "", "", "" , "", "", "" },
-    { "system", "RTSP", "bool", "", "", "" , "", "", "" },
-    { "system", "RTSP_ALT", "bool", "", "", "" , "", "", "" },
-    { "system", "RTSP_STREAM", "enum", "high", "low", "both" , "", "", "" },
-    { "system", "RTSP_AUDIO", "enum", "no", "pcm", "alaw", "ulaw", "aac", "" },
-    { "system", "RTSP_AUDIO_NR_LEVEL", "int", "0", "30", "" , "", "", "" },
-    { "system", "SPEAKER_AUDIO", "bool", "", "", "" , "", "", "" },
-    { "system", "SNAPSHOT", "bool", "", "", "" , "", "", "" },
-    { "system", "SNAPSHOT_VIDEO", "bool", "", "", "" , "", "", "" },
-    { "system", "SNAPSHOT_LOW", "bool", "", "", "" , "", "", "" },
-    { "system", "TIMELAPSE", "bool", "", "", "" , "", "", "" },
-    { "system", "TIMELAPSE_FTP", "bool", "", "", "" , "", "", "" },
-    { "system", "TIMELAPSE_DT", "int", "1", "1440", "" , "", "", "" },
-    { "system", "TIMELAPSE_VDT", "string", "1", "1440", "" , "", "", "" },
-    { "system", "ONVIF", "bool", "", "", "" , "", "", "" },
-    { "system", "ONVIF_WSDD", "bool", "", "", "" , "", "", "" },
-    { "system", "ONVIF_PROFILE", "enum", "high", "low", "both" , "", "", "" },
-    { "system", "ONVIF_WM_SNAPSHOT", "bool", "", "", "" , "", "", "" },
-    { "system", "ONVIF_NETIF", "string", "", "", "" , "", "", "" },
-    { "system", "TIME_OSD", "bool", "", "", "" , "", "", "" },
-    { "system", "NTPD", "bool", "", "", "" , "", "", "" },
-    { "system", "NTP_SERVER", "string" "", "", "" , "", "", "" },
-    { "system", "PROXYCHAINSNG", "bool", "", "", "" , "", "", "" },
-    { "system", "SWAP_FILE", "bool", "", "", "" , "", "", "" },
-    { "system", "SWAP_SWAPPINESS", "int", "0", "100", "" , "", "", "" },
-    { "system", "RTSP_PORT", "int", "1", "65535", "" , "", "", "" },
-    { "system", "HTTPD_PORT", "int", "1", "65535", "" , "", "", "" },
-    { "system", "USERNAME", "string", "", "", "" , "", "", "" },
-    { "system", "PASSWORD", "string", "", "", "" , "", "", "" },
     { "system", "TIMEZONE", "string", "", "", "" , "", "", "" },
-    { "system", "FREE_SPACE", "int", "0", "100", "" , "", "", "" },
-    { "system", "FTP_UPLOAD", "bool", "", "", "" , "", "", "" },
-    { "system", "FTP_HOST", "string", "", "", "" , "", "", "" },
-    { "system", "FTP_DIR", "string", "", "", "" , "", "", "" },
-    { "system", "FTP_DIR_TREE", "bool", "", "", "" , "", "", "" },
-    { "system", "FTP_USERNAME", "string" "", "", "" , "", "", "" },
-    { "system", "FTP_PASSWORD", "string" "", "", "" , "", "", "" },
-    { "system", "FTP_FILE_DELETE_AFTER_UPLOAD", "bool", "", "", "" , "", "", "" },
-    { "system", "SSH_PASSWORD", "string", "", "", "" , "", "", "" },
     { "system", "CRONTAB", "string", "", "", "" , "", "", "" },
     { "system", "DEBUG_LOG", "bool", "", "", "" , "", "", "" },
+
+    /* recording - retention (section = config/recording.conf) */
+    { "recording", "FREE_SPACE", "int", "0", "100", "" , "", "", "" },
+
+    /* snapshot (section = config/services/snapshot.conf) */
+    { "services/snapshot", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/snapshot", "LOW", "bool", "", "", "" , "", "", "" },
+
+    /* httpd (section = config/services/httpd.conf) */
+    { "services/httpd", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/httpd", "PORT", "int", "1", "65535", "" , "", "", "" },
+    { "services/httpd", "USER", "string", "", "", "" , "", "", "" },
+    { "services/httpd", "PASSWORD", "string", "", "", "" , "", "", "" },
+
+    /* rtsp - credentials shared with onvif (section = config/services/rtsp.conf) */
+    { "services/rtsp", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/rtsp", "STREAM", "enum", "high", "low", "both" , "", "", "" },
+    { "services/rtsp", "AUDIO", "enum", "no", "pcm", "alaw", "ulaw", "aac", "" },
+    { "services/rtsp", "AUDIO_NR_LEVEL", "int", "0", "30", "" , "", "", "" },
+    { "services/rtsp", "PORT", "int", "1", "65535", "" , "", "", "" },
+    { "services/rtsp", "TIME_OSD", "bool", "", "", "" , "", "", "" },
+    { "services/rtsp", "USER", "string", "", "", "" , "", "", "" },
+    { "services/rtsp", "PASSWORD", "string", "", "", "" , "", "", "" },
+
+    /* onvif (section = config/services/onvif.conf) */
+    { "services/onvif", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/onvif", "WSDD", "bool", "", "", "" , "", "", "" },
+    { "services/onvif", "PROFILE", "enum", "high", "low", "both" , "", "", "" },
+    { "services/onvif", "WM_SNAPSHOT", "bool", "", "", "" , "", "", "" },
+    { "services/onvif", "NETIF", "string", "", "", "" , "", "", "" },
+
+    /* telnetd (section = config/services/telnetd.conf) */
+    { "services/telnetd", "ENABLED", "bool", "", "", "" , "", "", "" },
+
+    /* sshd (section = config/services/sshd.conf) */
+    { "services/sshd", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/sshd", "PASSWORD", "string", "", "", "" , "", "", "" },
+
+    /* ftpd - server, tri-state (section = config/services/ftpd.conf) */
+    { "services/ftpd", "ENABLED", "enum", "no", "busybox", "pureftpd" , "", "", "" },
+
+    /* ftp_upload - client (section = config/services/ftp_upload.conf) */
+    { "services/ftp_upload", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/ftp_upload", "HOST", "string", "", "", "" , "", "", "" },
+    { "services/ftp_upload", "DIR", "string", "", "", "" , "", "", "" },
+    { "services/ftp_upload", "DIR_TREE", "bool", "", "", "" , "", "", "" },
+    { "services/ftp_upload", "USERNAME", "string", "", "", "" , "", "", "" },
+    { "services/ftp_upload", "PASSWORD", "string", "", "", "" , "", "", "" },
+    { "services/ftp_upload", "FILE_DELETE_AFTER_UPLOAD", "bool", "", "", "" , "", "", "" },
+
+    /* ntpd (section = config/services/ntpd.conf) */
+    { "services/ntpd", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/ntpd", "SERVER", "string", "", "", "" , "", "", "" },
+
+    /* proxychains (section = config/services/proxychains.conf) */
+    { "services/proxychains", "ENABLED", "bool", "", "", "" , "", "", "" },
+
+    /* mqtt - master enable (section = config/services/mqtt.conf) */
+    { "services/mqtt", "ENABLED", "bool", "", "", "" , "", "", "" },
 
     { "camera", "SWITCH_ON", "bool", "", "", "" , "", "", "ipc_cmd -t %s" },
     { "camera", "SAVE_VIDEO_ON_MOTION", "bool", "", "", "" , "", "", "ipc_cmd -v %s" },

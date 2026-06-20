@@ -27,24 +27,10 @@ APP.mqtt = (function ($) {
                 $.each(response, function (key, state) {
                     if(key == "BROKER_PASSWORD")
                         $('input[type="password"][data-key="' + key +'"]').prop('value', state);
+                    else if(key == "ENABLED")
+                        $('input[type="checkbox"][data-key="' + key +'"]').prop('checked', state === 'yes');
                     else
                         $('input[type="text"][data-key="' + key +'"]').prop('value', state);
-                });
-            },
-            error: function(response) {
-                console.log('error', response);
-            }
-        });
-
-        $.ajax({
-            type: "GET",
-            url: 'cgi-bin/get_configs.sh?conf=system',
-            dataType: "json",
-            success: function(response) {
-
-                $.each(response, function (key, state) {
-                    if(key == "MQTT")
-                        $('input[type="checkbox"][data-key="' + key +'"]').prop('checked', state === 'yes');
                 });
             },
             error: function(response) {
@@ -76,7 +62,6 @@ APP.mqtt = (function ($) {
         var saveStatusElem;
 
         let configs = {};
-        let configsSystem = {};
         let configsIdentity = {};
 
         saveStatusElem = $('#save-status');
@@ -90,12 +75,13 @@ APP.mqtt = (function ($) {
             configs[$(this).attr('data-key')] = $(this).prop('value');
         });
 
+        // Master enable now lives in services/mqtt.conf (key ENABLED).
+        configs["ENABLED"] = $("#enable-mqtt").prop('checked') ? 'yes' : 'no';
+
         // Split identity keys out to identity.conf
         IDENTITY_KEYS.forEach(function (k) {
             if (k in configs) { configsIdentity[k] = configs[k]; delete configs[k]; }
         });
-
-        configsSystem["MQTT"]=$("#enable-mqtt").prop('checked') ? 'yes' : 'no';
 
         $.ajax({
             type: "POST",
@@ -104,19 +90,6 @@ APP.mqtt = (function ($) {
             dataType: "json",
             success: function(response) {
                 saveStatusElem.text("Saved");
-            },
-            error: function(response) {
-                saveStatusElem.text("Error while saving");
-                console.log('error', response);
-            }
-        });
-
-        $.ajax({
-            type: "POST",
-            url: 'cgi-bin/set_configs.sh?conf=system',
-            data: JSON.stringify(configsSystem),
-            dataType: "json",
-            success: function(response) {
             },
             error: function(response) {
                 saveStatusElem.text("Error while saving");

@@ -717,17 +717,17 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Using native api\n");
 
         freopen ("/dev/null", "w", stdout);
-        main_cloud_cap_pic("/tmp/sd/snapshot.tmp");
+        main_cloud_cap_pic("/tmp/snapshot.tmp");
         usleep(500000);
         fclose(stdout);
         stdout = fdopen(old_stdout, "w"); 
 
-        aj = fopen("/tmp/sd/snapshot.tmp", "r");
+        aj = fopen("/tmp/snapshot.tmp", "r");
         while ((nj = fread(sj, 1, sizeof(sj), aj))) {
             fwrite(sj, 1, nj, stdout);
         }
         fclose(aj);
-        remove("/tmp/sd/snapshot.tmp");
+        remove("/tmp/snapshot.tmp");
         return 0;
     }
 #endif

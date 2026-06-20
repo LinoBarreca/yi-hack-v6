@@ -98,23 +98,31 @@ void message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_
     if (strlen(message->topic) < len + 2) {
         return;
     }
-    if (strchr(message->topic, '/') == NULL) {
+    strcpy(topic, &(message->topic)[len + 1]);
+    if (strlen(topic) == 0) {
+        if (debug) printf("Wrong message subtopic\n");
         return;
     }
-    strcpy(topic, &(message->topic)[len + 1]);
-    slash = strchr(topic, '/');
-    if (slash == NULL) {
-        strcpy(file, topic);
-        if (strlen(file) == 0) {
-            if (debug) printf("Wrong message subtopic\n");
+
+    // Dump request: empty payload on <prefix>/cmnd/<section>. The section may be a
+    // nested path (e.g. "services/snapshot"); reply with a full dump of the file.
+    if ((message->payload == NULL) || (strlen(message->payload) == 0)) {
+        if (strlen(topic) >= MAX_KEY_LENGTH) {
+            if (debug) printf("Message subtopic exceeds buffer size\n");
             return;
         }
-        if ((message->payload == NULL) || (strlen(message->payload) == 0)) {
-            // Send response with a dump of the configuration
-            sprintf(cmd_line, "%s %s", CONF2MQTT_SCRIPT, file);
-            if (debug) printf("Running system command \"%s\"\n", cmd_line);
-            system(cmd_line);
-        }
+        sprintf(cmd_line, "%s %s", CONF2MQTT_SCRIPT, topic);
+        if (debug) printf("Running system command \"%s\"\n", cmd_line);
+        system(cmd_line);
+        return;
+    }
+
+    // Set request: split on the LAST '/' so the section (file) may itself contain
+    // slashes, e.g. "services/snapshot/ENABLED" -> file "services/snapshot",
+    // param "ENABLED". The path is rebuilt as CONF_FILE_PATH/<file>.conf below.
+    slash = strrchr(topic, '/');
+    if (slash == NULL) {
+        if (debug) printf("Wrong message subtopic\n");
         return;
     }
     if (slash - topic >= MAX_KEY_LENGTH) {
@@ -129,10 +137,6 @@ void message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_
     strcpy(param, slash + 1);
     if (strlen(param) == 0) {
         if (debug) printf("Param is empty\n");
-        return;
-    }
-    if ((message->payload == NULL) || (strlen(message->payload) == 0)) {
-        if (debug) printf("Payload is empty\n");
         return;
     }
     // Convert to upper case before validating and saving

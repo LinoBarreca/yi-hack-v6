@@ -67,8 +67,8 @@ if [ "$c" = "138" ]; then
     #{"code":"20000","appParam":{"schedule_power":{"schedule_power_on":{"enable":0,"repeater":"","time":"2212220800"},"schedule_power_off":{"enable":0,"repeater":"","time":"2212222200"}}},"css_flag":0,"css_mode":0,"codingProtocol":"265","abilityTable":"","restartTpye":1}
 elif [ "$c" = "136" ]; then
     #CMD_do_syntime
-    if [[ $(get_config system.NTPD) == "yes" ]] ; then
-        NTP_SERVER=$(get_config system.NTP_SERVER)
+    if [[ $(get_config services.ntpd.ENABLED) == "yes" ]] ; then
+        NTP_SERVER=$(get_config services.ntpd.SERVER)
     else
         NTP_SERVER="pool.ntp.org"
     fi

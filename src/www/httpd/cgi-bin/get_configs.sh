@@ -15,13 +15,14 @@ printf "Content-type: application/json\r\n\r\n"
 CONF_TYPE="$(get_conf_type)"
 CONF_FILE=""
 
-if [ "$CONF_TYPE" = "mqtt" ] ; then
-    CONF_FILE="/home/yi-hack/config/services/mqtt.conf"
-elif [ "$CONF_TYPE" = "mqtt_advertise" ] ; then
-    CONF_FILE="/home/yi-hack/config/services/mqtt_advertise.conf"
-else
-    CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf"
-fi
+# Per-service config files live under config/services/; the rest (system,
+# recording, camera, identity, output) at config/ top level.
+case "$CONF_TYPE" in
+    snapshot|httpd|rtsp|onvif|telnetd|sshd|ftpd|ftp_upload|ntpd|proxychains|mqtt|mqtt_advertise)
+        CONF_FILE="/home/yi-hack/config/services/$CONF_TYPE.conf" ;;
+    *)
+        CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf" ;;
+esac
 
 printf "{\n"
 

@@ -8,6 +8,12 @@ ADV_DIR="/home/yi-hack/base/script/mqtt_advertise"
 # Config defaults (incl. mqtt_advertise.conf) are ensured at boot by the single
 # base/script/check_conf.sh (run from system.sh before this script).
 
+# HA advertise rides on top of the MQTT bridge: skip entirely if MQTT is off
+# (the advertisers publish to the broker configured in services/mqtt.conf).
+if [ "$(get_config services.mqtt.ENABLED)" != "yes" ]; then
+    exit 0
+fi
+
 LINK_ENABLE=$(get_config services.mqtt_advertise.LINK_ENABLE)
 LINK_BOOT=$(get_config services.mqtt_advertise.LINK_BOOT)
 LINK_CRON=$(get_config services.mqtt_advertise.LINK_CRON)

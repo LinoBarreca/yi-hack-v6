@@ -17,20 +17,20 @@ fi
 
 init_config()
 {
-    if [[ x$(get_config system.USERNAME) != "x" ]] ; then
-        USERNAME=$(get_config system.USERNAME)
-        PASSWORD=$(get_config system.PASSWORD)
+    if [[ x$(get_config services.rtsp.USER) != "x" ]] ; then
+        USERNAME=$(get_config services.rtsp.USER)
+        PASSWORD=$(get_config services.rtsp.PASSWORD)
         ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
         RTSP_USERPWD=$USERNAME:$PASSWORD@
     fi
 
-    case $(get_config system.RTSP_PORT) in
+    case $(get_config services.rtsp.PORT) in
         ''|*[!0-9]*) RTSP_PORT=554 ;;
-        *) RTSP_PORT=$(get_config system.RTSP_PORT) ;;
+        *) RTSP_PORT=$(get_config services.rtsp.PORT) ;;
     esac
-    case $(get_config system.HTTPD_PORT) in
+    case $(get_config services.httpd.PORT) in
         ''|*[!0-9]*) HTTPD_PORT=80 ;;
-        *) HTTPD_PORT=$(get_config system.HTTPD_PORT) ;;
+        *) HTTPD_PORT=$(get_config services.httpd.PORT) ;;
     esac
 
     if [[ $RTSP_PORT != "554" ]] ; then
@@ -45,8 +45,8 @@ init_config()
 start_rtsp()
 {
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_RES=$(get_config system.RTSP_STREAM)
-RRTSP_AUDIO=$(get_config system.RTSP_AUDIO)
+RRTSP_RES=$(get_config services.rtsp.STREAM)
+RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
 RRTSP_PORT=$RTSP_PORT
 RRTSP_USER=$USERNAME
 RRTSP_PWD=$PASSWORD
@@ -54,16 +54,16 @@ RRTSP_PWD=$PASSWORD
 
 # The below section to be also copied to system.sh
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
-    if [[ $(get_config system.RTSP_AUDIO) == "yes" ]]; then
+    if [[ $(get_config services.rtsp.AUDIO) == "yes" ]]; then
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "low" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "high" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "both" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
@@ -207,11 +207,13 @@ stop_wsdd()
 start_ftpd()
 {
     if [[ "$1" == "none" ]] ; then
-        if [[ $(get_config system.BUSYBOX_FTPD) == "yes" ]] ; then
-            FTPD_DAEMON="busybox"
-        else
-            FTPD_DAEMON="pure-ftpd"
-        fi
+        case $(get_config services.ftpd.ENABLED) in
+            busybox)  FTPD_DAEMON="busybox" ;;
+            pureftpd) FTPD_DAEMON="pure-ftpd" ;;
+            *)        FTPD_DAEMON="none" ;;
+        esac
+    elif [[ "$1" == "pureftpd" ]] ; then
+        FTPD_DAEMON="pure-ftpd"
     else
         FTPD_DAEMON=$1
     fi
@@ -226,11 +228,13 @@ start_ftpd()
 stop_ftpd()
 {
     if [[ "$1" == "none" ]] ; then
-        if [[ $(get_config system.BUSYBOX_FTPD) == "yes" ]] ; then
-            FTPD_DAEMON="busybox"
-        else
-            FTPD_DAEMON="pure-ftpd"
-        fi
+        case $(get_config services.ftpd.ENABLED) in
+            busybox)  FTPD_DAEMON="busybox" ;;
+            pureftpd) FTPD_DAEMON="pure-ftpd" ;;
+            *)        FTPD_DAEMON="none" ;;
+        esac
+    elif [[ "$1" == "pureftpd" ]] ; then
+        FTPD_DAEMON="pure-ftpd"
     else
         FTPD_DAEMON=$1
     fi

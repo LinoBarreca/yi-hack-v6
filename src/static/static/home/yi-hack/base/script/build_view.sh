@@ -85,7 +85,7 @@ mkdir -p "$LOGICAL/output"
 ram_link() { mkdir -p "$RAM_BASE/$1"; relink "$RAM_BASE/$1" "$LOGICAL/output/$1"; }
 fallback() {
     case "$1" in
-        snapshot|log) ram_link "$1"; log "fallback $1 -> RAM" ;;
+        log) ram_link "$1"; log "fallback $1 -> RAM" ;;
         *)            rm -f "$LOGICAL/output/$1"; log "fallback $1 -> disabled" ;;
     esac
 }
@@ -118,9 +118,50 @@ link_output() {
     esac
 }
 
-link_output record   "$(get_config output.RECORD)"
-link_output snapshot "$(get_config output.SNAPSHOT)"
-link_output log      "$(get_config output.LOG)"
-link_output swap     "$(get_config output.SWAP)"
+# Service log files routed through output/log (output.LOG matrix). "Ours" are written
+# straight into the view dir; "stock" Yi binaries hardcode /tmp/<name>, so we bridge
+# /tmp/<name> -> view so they obey the matrix too. On NO every known file -> /dev/null
+# (binaries fopen() the symlink and write into the void; rotation is size-gated so a
+# /dev/null target -> size 0 -> never rotates). NB: the stock bridge only captures a
+# logger that opens its file AFTER build_view (a daemon already running keeps its old fd).
+LOG_FILES_OURS="wd_rtsp.log onvif_simple_server.log onvif_notify_server.log wsd_simple_server.log"
+LOG_FILES_STOCK="log.txt debug_alarm.txt debug_p2p.txt debug_oss.txt log_oss.txt"
+
+setup_log() {
+    _dest="$1"; _dir="$LOGICAL/output/log"
+    case "$_dest" in
+        NO|"")
+            rm -f "$_dir"; mkdir -p "$_dir"
+            for _f in $LOG_FILES_OURS $LOG_FILES_STOCK; do relink /dev/null "$_dir/$_f"; done
+            log "log: NO -> all service logs -> /dev/null" ;;
+        *)
+            link_output log "$_dest" ;;   # view dir -> RAM/SD/CIFS (+ fallback)
+    esac
+    # Bridge the stock /tmp logs into the view so they follow the same matrix.
+    for _f in $LOG_FILES_STOCK; do relink "$_dir/$_f" "/tmp/$_f"; done
+}
+
+# record: the view is /home/yi-hack/output/record, seen by ftppush/clean_records/mqttv4.
+# SD is special-cased to the stock mp4record path (/tmp/sd/record, SD-fixed), so the stock
+# recorder and the consumers share one location. RAM/CIFS keep the matrix open for a future
+# native ffmpeg recorder (§9), which writes to the view directly (mp4record can only do SD).
+setup_record() {
+    _dest="$1"; _dir="$LOGICAL/output/record"
+    rm -f "$_dir"
+    case "$_dest" in
+        SD)
+            if writable "$SD_MNT"; then
+                mkdir -p "$SD_MNT/record"; relink "$SD_MNT/record" "$_dir"; log "record -> SD (/tmp/sd/record)"
+            else
+                log "record: SD not mounted/writable -> no view"
+            fi ;;
+        NO|"") log "record: NO (no view)" ;;
+        *)     link_output record "$_dest" ;;   # RAM/CIFS/FLASH: native recorder only (mp4record is SD-only)
+    esac
+}
+
+setup_record         "$(get_config output.RECORD)"
+setup_log            "$(get_config output.LOG)"
+link_output swap     "$(get_config output.SWAP_FILE)"
 
 [ -n "$EXTRA_SRC" ] && exit 0 || exit 1

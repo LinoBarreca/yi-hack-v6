@@ -16,7 +16,7 @@ if [ -z $LOCAL_IP ]; then
     get_network_addr wlan0
 fi
 
-HTTPD_PORT=$(get_config system.HTTPD_PORT)
+HTTPD_PORT=$(get_config services.httpd.PORT)
 HOSTNAME=$(hostname)
 MQTT_IP=$(get_config services.mqtt.BROKER_IP)
 MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)

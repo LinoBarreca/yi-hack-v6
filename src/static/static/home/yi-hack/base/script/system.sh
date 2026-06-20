@@ -68,14 +68,17 @@ if [ -f "/tmp/sd/recover/mtdblock2_recover.bin" ]; then
 	sync
 	sh /home/yi-hack/base/script/configure_wifi.sh
 fi
-/home/yi-hack/base/script/check_conf.sh
+# EXTRA config (services + recording/camera/identity/ptz): only the full
+# dispatcher needs it. Runs after apply_config so a share override still gets its
+# missing keys topped up. (BASE config was already seeded early in S20.)
+/home/yi-hack/base/script/check_conf.sh extra
 
 hostname -F /home/yi-hack/config/hostname
 
 export TZ=$(get_config system.TIMEZONE)
 
 # Swap: destination is decided by the output matrix; build_view.sh created
-# /home/yi-hack/output/swap (a symlink) only if output.SWAP != NO and the target is writable.
+# /home/yi-hack/output/swap (a symlink) only if output.SWAP_FILE != NO and the target is writable.
 if [ -d /home/yi-hack/output/swap ]; then
     SWAPFILE=/home/yi-hack/output/swap/swapfile
     if [ -f "$SWAPFILE" ]; then
@@ -95,17 +98,24 @@ if [ -d /home/yi-hack/output/swap ]; then
     sysctl -w vm.laptop_mode=5
 fi
 
-if [[ x$(get_config system.USERNAME) != "x" ]] ; then
-    USERNAME=$(get_config system.USERNAME)
-    PASSWORD=$(get_config system.PASSWORD)
-    RTSP_USERPWD=$USERNAME:$PASSWORD@
-    ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
+# Web (httpd) basic auth - isolated from the RTSP/ONVIF stream credentials.
+HTTPD_USER=$(get_config services.httpd.USER)
+HTTPD_PASSWORD=$(get_config services.httpd.PASSWORD)
+if [ -n "$HTTPD_USER" ] ; then
     echo "/onvif::" > /tmp/httpd.conf
-    echo "/:$USERNAME:$PASSWORD" >> /tmp/httpd.conf
+    echo "/:$HTTPD_USER:$HTTPD_PASSWORD" >> /tmp/httpd.conf
     chmod 0600 /tmp/httpd.conf
 fi
 
-SSH_PASSWORD=$(get_config system.SSH_PASSWORD)
+# RTSP/ONVIF stream credentials (shared; the ONVIF stream URL embeds them).
+USERNAME=$(get_config services.rtsp.USER)
+PASSWORD=$(get_config services.rtsp.PASSWORD)
+if [ -n "$USERNAME" ] ; then
+    RTSP_USERPWD=$USERNAME:$PASSWORD@
+    ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
+fi
+
+SSH_PASSWORD=$(get_config services.sshd.PASSWORD)
 if [ -n "$SSH_PASSWORD" ] ; then
     # Flash-wear: chpasswd rewrites /etc on the rootfs (mtd4) every time. Only run it when the
     # configured password actually changed, tracked by a marker (md5 of the configured pwd;
@@ -118,27 +128,31 @@ if [ -n "$SSH_PASSWORD" ] ; then
     fi
 fi
 
-case $(get_config system.RTSP_PORT) in
+case $(get_config services.rtsp.PORT) in
     ''|*[!0-9]*) RTSP_PORT=554 ;;
-    *) RTSP_PORT=$(get_config system.RTSP_PORT) ;;
+    *) RTSP_PORT=$(get_config services.rtsp.PORT) ;;
 esac
-case $(get_config system.HTTPD_PORT) in
+case $(get_config services.httpd.PORT) in
     ''|*[!0-9]*) HTTPD_PORT=80 ;;
-    *) HTTPD_PORT=$(get_config system.HTTPD_PORT) ;;
+    *) HTTPD_PORT=$(get_config services.httpd.PORT) ;;
 esac
 
-if [[ $(get_config system.NTPD) == "yes" ]] ; then
+if [[ $(get_config services.ntpd.ENABLED) == "yes" ]] ; then
     # Wait until all the other processes have been initialized
-    sleep 5 && ntpd -p $(get_config system.NTP_SERVER) &
+    sleep 5 && ntpd -p $(get_config services.ntpd.SERVER) &
 fi
 
 if [[ $(get_config system.DISABLE_CLOUD) == "no" ]] ; then
     (
         cd /home/app
+        # Stock logger first: the cloud daemons sendto its /tmp/logsock (best-effort, DGRAM).
+        # Starting it HERE (after build_view) means it (re)opens /tmp/log.txt through our bridge
+        # symlink -> the output/log view, so log.txt follows the output.LOG matrix.
+        killall log_server; ./log_server &
         killall dispatch
         LD_PRELOAD=/home/yi-hack/extra/lib/ipc_multiplex.so ./dispatch &
         sleep 3
-        if [[ $(get_config system.TIME_OSD) == "yes" ]] ; then
+        if [[ $(get_config services.rtsp.TIME_OSD) == "yes" ]] ; then
             echo -ne '\x01\x00\x00\x00' | dd of=/tmp/mmap.info bs=1 seek=0 count=4 conv=notrunc
         fi
         LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib" ./rmm &
@@ -155,10 +169,14 @@ fi
 if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     (
         cd /home/app
+        # Stock logger first: the cloud daemons sendto its /tmp/logsock (best-effort, DGRAM).
+        # Starting it HERE (after build_view) means it (re)opens /tmp/log.txt through our bridge
+        # symlink -> the output/log view, so log.txt follows the output.LOG matrix.
+        killall log_server; ./log_server &
         killall dispatch
         LD_PRELOAD=/home/yi-hack/extra/lib/ipc_multiplex.so ./dispatch &
         sleep 3
-        if [[ $(get_config system.TIME_OSD) == "yes" ]] ; then
+        if [[ $(get_config services.rtsp.TIME_OSD) == "yes" ]] ; then
             echo -ne '\x01\x00\x00\x00' | dd of=/tmp/mmap.info bs=1 seek=0 count=4 conv=notrunc
         fi
         LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib" ./rmm &
@@ -172,7 +190,7 @@ if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     )
 fi
 
-if [[ $(get_config system.HTTPD) == "yes" ]] ; then
+if [[ $(get_config services.httpd.ENABLED) == "yes" ]] ; then
     # Single logical web path; build_view.sh points it to extra/www (full) or base/www-min (rescue).
     # NOTE: recordings live at /home/yi-hack/output/record; the events CGIs read from there
     # (no www/record bind-mount - extra/www may be read-only CIFS).
@@ -181,19 +199,20 @@ if [[ $(get_config system.HTTPD) == "yes" ]] ; then
     httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
 fi
 
-if [[ $(get_config system.TELNETD) == "yes" ]] ; then
+if [[ $(get_config services.telnetd.ENABLED) == "yes" ]] ; then
     telnetd
 fi
 
-if [[ $(get_config system.FTPD) == "yes" ]] ; then
-    if [[ $(get_config system.BUSYBOX_FTPD) == "yes" ]] ; then
+case $(get_config services.ftpd.ENABLED) in
+    busybox)
         tcpsvd -vE 0.0.0.0 21 ftpd -w &
-    else
+        ;;
+    pureftpd)
         pure-ftpd -B
-    fi
-fi
+        ;;
+esac
 
-if [[ $(get_config system.SSHD) == "yes" ]] ; then
+if [[ $(get_config services.sshd.ENABLED) == "yes" ]] ; then
     if [ ! -f /home/yi-hack/config/dropbear/dropbear_ecdsa_host_key ]; then
         dropbearkey -t ecdsa -f /tmp/dropbear_ecdsa_host_key
         mv /tmp/dropbear_ecdsa_host_key /home/yi-hack/config/dropbear/
@@ -208,7 +227,7 @@ fi
 
 mqttv4 &
 
-if [[ $(get_config system.MQTT) == "yes" ]] ; then
+if [[ $(get_config services.mqtt.ENABLED) == "yes" ]] ; then
     mqtt-config &
     /home/yi-hack/base/script/conf2mqtt.sh &
 fi
@@ -221,22 +240,22 @@ if [[ $HTTPD_PORT != "80" ]] ; then
     D_HTTPD_PORT=:$HTTPD_PORT
 fi
 
-if [[ $(get_config system.SNAPSHOT) == "no" ]] ; then
+if [[ $(get_config services.snapshot.ENABLED) == "no" ]] ; then
     touch /tmp/snapshot.disabled
 fi
 
-if [[ $(get_config system.SNAPSHOT_LOW) == "yes" ]] ; then
+if [[ $(get_config services.snapshot.LOW) == "yes" ]] ; then
     touch /tmp/snapshot.low
 fi
 
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_RES=$(get_config system.RTSP_STREAM)
-RRTSP_AUDIO=$(get_config system.RTSP_AUDIO)
-RRTSP_PORT=$(get_config system.RTSP_PORT)
+RRTSP_RES=$(get_config services.rtsp.STREAM)
+RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
+RRTSP_PORT=$(get_config services.rtsp.PORT)
 RRTSP_USER=$USERNAME
 RRTSP_PWD=$PASSWORD
 
-if [[ $(get_config system.RTSP) == "yes" ]] ; then
+if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
 
     if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_home" ]] ; then
         HIGHWIDTH="1280"
@@ -245,24 +264,24 @@ if [[ $(get_config system.RTSP) == "yes" ]] ; then
         HIGHWIDTH="1920"
         HIGHHEIGHT="1080"
     fi
-    if [[ $(get_config system.RTSP_AUDIO) == "yes" ]]; then
+    if [[ $(get_config services.rtsp.AUDIO) == "yes" ]]; then
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "low" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK\ntype=H264"
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "high" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
         ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK\ntype=H264"
     fi
-    if [[ $(get_config system.RTSP_STREAM) == "both" ]]; then
+    if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
          h264grabber -r low -m $MODEL_SUFFIX -f &
          h264grabber -r high -m $MODEL_SUFFIX -f &
-        if [[ $(get_config system.ONVIF_PROFILE) == "low" ]] || [[ $(get_config system.ONVIF_PROFILE) == "both" ]] ; then
+        if [[ $(get_config services.onvif.PROFILE) == "low" ]] || [[ $(get_config services.onvif.PROFILE) == "both" ]] ; then
             ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK\ntype=H264"
         fi
-        if [[ $(get_config system.ONVIF_PROFILE) == "high" ]] || [[ $(get_config system.ONVIF_PROFILE) == "both" ]] ; then
+        if [[ $(get_config services.onvif.PROFILE) == "high" ]] || [[ $(get_config services.onvif.PROFILE) == "both" ]] ; then
             ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK\ntype=H264"
         fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
@@ -278,8 +297,8 @@ else
     SERIAL_NUMBER=$(dd bs=1 count=16 skip=596 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
 fi
 
-if [[ $(get_config system.ONVIF) == "yes" ]] ; then
-    if [[ $(get_config system.ONVIF_NETIF) == "wlan0" ]] ; then
+if [[ $(get_config services.onvif.ENABLED) == "yes" ]] ; then
+    if [[ $(get_config services.onvif.NETIF) == "wlan0" ]] ; then
         ONVIF_NETIF="wlan0"
     else
         ONVIF_NETIF="eth0"
@@ -372,14 +391,14 @@ if [[ $(get_config system.ONVIF) == "yes" ]] ; then
     ipc2file
     onvif_notify_server --conf_file $ONVIF_SRVD_CONF
 
-    if [[ $(get_config system.ONVIF_WSDD) == "yes" ]] ; then
+    if [[ $(get_config services.onvif.WSDD) == "yes" ]] ; then
         wsd_simple_server --pid_file /var/run/wsd_simple_server.pid --if_name $ONVIF_NETIF --xaddr "http://%s$D_HTTPD_PORT/onvif/device_service" -m yi_hack -n Yi
     fi
 fi
 
 # Add crontab
 CRONTAB=$(get_config system.CRONTAB)
-FREE_SPACE=$(get_config system.FREE_SPACE)
+FREE_SPACE=$(get_config recording.FREE_SPACE)
 mkdir -p /var/spool/cron/crontabs/
 if [ ! -z "$CRONTAB" ]; then
     echo "$CRONTAB" > /var/spool/cron/crontabs/root
@@ -399,7 +418,7 @@ if [ -f "/home/yi-hack/base/script/mqtt_advertise/startup.sh" ]; then
     /home/yi-hack/base/script/mqtt_advertise/startup.sh
 fi
 
-if [[ $(get_config system.FTP_UPLOAD) == "yes" ]] ; then
+if [[ $(get_config services.ftp_upload.ENABLED) == "yes" ]] ; then
     /home/yi-hack/base/script/ftppush.sh start &
 fi
 

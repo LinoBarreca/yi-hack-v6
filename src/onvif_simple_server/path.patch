@@ -8,7 +8,7 @@ diff -Naur onvif_simple_server.ori/onvif_notify_server.c onvif_simple_server/onv
 -#define DEFAULT_CONF_FILE "/etc/onvif_simple_server.conf"
 -#define DEFAULT_LOG_FILE "/var/log/onvif_notify_server.log"
 +#define DEFAULT_CONF_FILE "/tmp/onvif_simple_server.conf"
-+#define DEFAULT_LOG_FILE "/tmp/onvif_notify_server.log"
++#define DEFAULT_LOG_FILE "/home/yi-hack/output/log/onvif_notify_server.log"
  #define DEFAULT_PID_FILE "/var/run/onvif_notify_server.pid"
 -#define TEMPLATE_DIR "/etc/onvif_notify_server"
 +#define TEMPLATE_DIR "/tmp/sd/yi-hack/etc/onvif_notify_server"
@@ -25,7 +25,7 @@ diff -Naur onvif_simple_server.ori/onvif_simple_server.c onvif_simple_server/onv
 -#define DEFAULT_CONF_FILE "/etc/onvif_simple_server.conf"
 -#define DEFAULT_LOG_FILE "/var/log/onvif_simple_server.log"
 +#define DEFAULT_CONF_FILE "/tmp/onvif_simple_server.conf"
-+#define DEFAULT_LOG_FILE "/tmp/onvif_simple_server.log"
++#define DEFAULT_LOG_FILE "/home/yi-hack/output/log/onvif_simple_server.log"
  #define DEBUG_FILE "/tmp/onvif_simple_server.debug"
  
  #define ROTATION_LOG_LENGTH 3
@@ -38,7 +38,7 @@ diff -Naur onvif_simple_server.ori/wsd_simple_server.c onvif_simple_server/wsd_s
  
 -#define DEFAULT_LOG_FILE "/var/log/wsd_simple_server.log"
 -#define TEMPLATE_DIR "/etc/wsd_simple_server"
-+#define DEFAULT_LOG_FILE "/tmp/wsd_simple_server.log"
++#define DEFAULT_LOG_FILE "/home/yi-hack/output/log/wsd_simple_server.log"
 +#define TEMPLATE_DIR "/tmp/sd/yi-hack/etc/wsd_simple_server"
  
  #define RECV_BUFFER_LEN 4096

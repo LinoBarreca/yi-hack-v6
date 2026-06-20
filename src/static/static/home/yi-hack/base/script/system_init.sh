@@ -58,25 +58,6 @@ fi
 
 # config/crontabs and config/dropbear ship (empty) in the home image at build time - no runtime mkdir.
 
-# Patch the stock init scripts: comment out cloud daemons + bump swappiness in app/init.sh,
-# comment the hanging rtc command in base/init.sh.
-# Flash-wear: each `sed -i` rewrites the whole file, so collapse all edits per file into ONE
-# sed, and guard with a sentinel so we only write when NOT already patched (idempotent boots
-# -> zero flash writes here; re-patches automatically if a stock update resets the file).
-if ! grep -q '^#\./dispatch' /home/app/init.sh; then
-	sed -i -e '/^\.\/dispatch/s/^/#/' \
-	       -e '/^\.\/watch_process/s/^/#/' \
-	       -e '/^\.\/oss/s/^/#/' \
-	       -e '/^\.\/p2p_tnp/s/^/#/' \
-	       -e '/^\.\/cloud/s/^/#/' \
-	       -e '/^\.\/mp4record/s/^/#/' \
-	       -e '/^\.\/rmm/s/^/#/' \
-	       -e 's|^sleep 2$|#sleep 2|' \
-	       -e 's#echo 0 > /proc/sys/vm/swappiness#echo 60 > /proc/sys/vm/swappiness#' \
-	       /home/app/init.sh
-fi
-if ! grep -q '^#rtctime=' /home/base/init.sh; then
-	sed -i -e '/^rtctime=\$(\/home\/base\/tools\/rtctool -g time)/s/^/#/' \
-	       -e '/^date -s \$rtctime/s/^/#/' \
-	       /home/base/init.sh
-fi
+# NOTE: patching the stock init scripts (comment cloud daemons, swappiness, rtc) is no longer
+# done here at runtime - it is done at BUILD TIME in scripts/pack_fw.sh (patch_stock_init),
+# so the result is baked into and verifiable in the flashed image.

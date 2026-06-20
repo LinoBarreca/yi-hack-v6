@@ -21,7 +21,7 @@
                     <tr class="row">
                         <td>Hostname</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="HOSTNAME" id="HOSTNAME"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="system" data-key="HOSTNAME" id="HOSTNAME"/>
                             <span class="switch-description">
                                 Camera's hostname on the network. Leave blank to generate automatically.
                             </span>
@@ -30,7 +30,7 @@
                     <tr class="row">
                         <td>Timezone</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="TIMEZONE" id="TIMEZONE"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="system" data-key="TIMEZONE" id="TIMEZONE"/>
                             <span class="switch-description">
                                 Timezone. Get your timezone string from <a href="?page=tz">this page</a> and copy here.
                             </span>
@@ -40,7 +40,7 @@
                         <td>Disable Cloud</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="DISABLE_CLOUD"/>
+                                <input type="checkbox" data-conf="system" data-key="DISABLE_CLOUD"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -53,7 +53,7 @@
                         <td>Recording without Cloud</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="REC_WITHOUT_CLOUD"/>
+                                <input type="checkbox" data-conf="system" data-key="REC_WITHOUT_CLOUD"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -66,7 +66,7 @@
                         <td>RTSP</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="RTSP"/>
+                                <input type="checkbox" data-conf="rtsp" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -79,7 +79,7 @@
                         <td>RTSP Stream</td>
                         <td>
                             <div class="standard-select">
-                                <select data-key="RTSP_STREAM" id="RTSP_STREAM">
+                                <select data-conf="rtsp" data-key="STREAM" id="RTSP_STREAM">
                                     <option value="high">High</option>
                                     <option value="low">Low</option>
                                     <option value="both">Both</option>
@@ -94,10 +94,10 @@
                         <td>RTSP Audio</td>
                         <td>
                             <div class="standard-select">
-                                <select data-key="RTSP_AUDIO" id="RTSP_AUDIO">
+                                <select data-conf="rtsp" data-key="AUDIO" id="RTSP_AUDIO">
                                     <option value="no">Disabled (default)</option>
                                     <option value="yes">Enabled</option>
-                                    <!-- <option value="pcm">pcm</option> 
+                                    <!-- <option value="pcm">pcm</option>
                                     <option value="alaw">alaw</option>
                                     <option value="ulaw">ulaw</option>
                                     <option value="aac">aac (cpu expensive)</option>-->
@@ -114,7 +114,7 @@
                         <td>ONVIF</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="ONVIF"/>
+                                <input type="checkbox" data-conf="onvif" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -127,7 +127,7 @@
                         <td>ONVIF WS-Discovery</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="ONVIF_WSDD"/>
+                                <input type="checkbox" data-conf="onvif" data-key="WSDD"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -140,7 +140,7 @@
                         <td>ONVIF Profile</td>
                         <td>
                             <div class="standard-select">
-                                <select data-key="ONVIF_PROFILE" id="ONVIF_PROFILE">
+                                <select data-conf="onvif" data-key="PROFILE" id="ONVIF_PROFILE">
                                     <option value="high">High</option>
                                     <option value="low">Low</option>
                                     <option value="both">Both</option>
@@ -152,7 +152,7 @@
                         <td>ONVIF Network Interface</td>
                         <td>
                             <div class="standard-select">
-                                <select data-key="ONVIF_NETIF" id="ONVIF_NETIF">
+                                <select data-conf="onvif" data-key="NETIF" id="ONVIF_NETIF">
                                     <option value="eth0">Ethernet</option>
                                     <option value="wlan0">Wireless</option>
                                 </select>
@@ -163,7 +163,7 @@
                         <td>Enable/disable time OSD</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="TIME_OSD"/>
+                                <input type="checkbox" data-conf="rtsp" data-key="TIME_OSD"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -180,7 +180,7 @@
                         <td>Snapshot</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="SNAPSHOT"/>
+                                <input type="checkbox" data-conf="snapshot" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -195,7 +195,7 @@
                         <td>Force low resolution snapshot</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="SNAPSHOT_LOW"/>
+                                <input type="checkbox" data-conf="snapshot" data-key="LOW"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -218,7 +218,7 @@
                         <td>SSH</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="SSHD"/>
+                                <input type="checkbox" data-conf="sshd" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -230,30 +230,16 @@
                     <tr class="row">
                         <td>FTP</td>
                         <td>
-                            <label class="switch small">
-                                <input type="checkbox" data-key="FTPD"/>
-                                <span class="slider round"></span>
-                                <span class="switch-text"></span>
-                            </label>
+                            <div class="standard-select">
+                                <select data-conf="ftpd" data-key="ENABLED" id="FTPD">
+                                    <option value="no">Disabled</option>
+                                    <option value="pureftpd">Pure-FTPd</option>
+                                    <option value="busybox">BusyBox (legacy)</option>
+                                </select>
+                            </div>
                             <span class="switch-description">
-                                Enable or disable the FTP server.
-                            </span>
-                        </td>
-                    </tr>
-                    <tr class="row">
-                        <td>Legacy FTP</td>
-                        <td>
-                            <label class="switch small">
-                                <input type="checkbox" data-key="BUSYBOX_FTPD"/>
-                                <span class="slider round"></span>
-                                <span class="switch-text"></span>
-                            </label>
-                            <span class="switch-description">
-                                Switch to the legacy BusyBox FTP server.
-                            </span>
-                                <br/>
-                            <span class="italic">
-                                NOTE: If you are trying to disable Pure-FTPd as mentioned in <a target="_blank" href="https://github.com/shadow-1/yi-hack-v3/issues/129#issuecomment-361723075">this issue</a> you can enable this option instead of manually editing the system.sh file.
+                                Enable the FTP server and select the implementation. BusyBox is the
+                                lightweight legacy server; Pure-FTPd is the full-featured one.
                             </span>
                         </td>
                     </tr>
@@ -261,7 +247,7 @@
                         <td>Telnet</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="TELNETD"/>
+                                <input type="checkbox" data-conf="telnetd" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -276,7 +262,7 @@
                         <td>NTPD</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="NTPD"/>
+                                <input type="checkbox" data-conf="ntpd" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -288,7 +274,7 @@
                     <tr class="row">
                         <td>NTP Server</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="NTP_SERVER" id="NTP_SERVER"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="ntpd" data-key="SERVER" id="NTP_SERVER"/>
                             <span class="switch-description">
                                 NTP server name.
                             </span>
@@ -298,7 +284,7 @@
                         <td>HTTPD</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="HTTPD"/>
+                                <input type="checkbox" data-conf="httpd" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -313,7 +299,7 @@
                         <td>Proxychains-ng</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-key="PROXYCHAINSNG"/>
+                                <input type="checkbox" data-conf="proxychains" data-key="ENABLED"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
@@ -323,15 +309,16 @@
                         </td>
                     </tr>
                     <tr class="row">
-                        <td>Swap File</td>
+                        <td>Swap file</td>
                         <td>
-                            <label class="switch small">
-                                <input type="checkbox" data-key="SWAP_FILE"/>
-                                <span class="slider round"></span>
-                                <span class="switch-text"></span>
-                            </label>
+                            <div class="standard-select">
+                                <select data-conf="output" data-key="SWAP_FILE" id="SWAP_FILE">
+                                    <option value="NO">Disabled</option>
+                                    <option value="SD">SD card</option>
+                                </select>
+                            </div>
                             <span class="switch-description">
-                                Enable swap file on SD card. This option will create a file (/tmp/sd/swapfile) to expand your memory. (enforced by default on yi_home and yi_dome) - also recommended for mqtt and HomeAssistant integration.
+                                Use a swap file to expand memory (recommended for MQTT/HomeAssistant and snapshots). The swap file lives on the SD card; "Disabled" turns it off.
                             </span>
                         </td>
                     </tr>
@@ -348,7 +335,7 @@
                     <tr class="row">
                         <td>RTSP Port</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="RTSP_PORT" id="RTSP_PORT"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="rtsp" data-key="PORT" id="RTSP_PORT"/>
                             <span class="switch-description">
                                 TCP port used by RTSP Server (default 554).
                             </span>
@@ -357,7 +344,7 @@
                     <tr class="row">
                         <td>HTTPD Port</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="HTTPD_PORT" id="HTTPD_PORT"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="httpd" data-key="PORT" id="HTTPD_PORT"/>
                             <span class="switch-description">
                                 TCP port used by HTTPD Server (default 80).
                             </span>
@@ -374,20 +361,40 @@
                 <table class="u-full-width padded-table config-table">
                     <tbody>
                     <tr class="row">
-                        <td>Username</td>
+                        <td>RTSP / ONVIF Username</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-key="USERNAME" id="USERNAME"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="rtsp" data-key="USER" id="RTSP_USER"/>
                             <span class="switch-description">
-                                Username to access RTSP, ONVIF and HTTP (default empty).
+                                Username to access RTSP and ONVIF (default empty). The ONVIF stream URL embeds these credentials.
                             </span>
                         </td>
                     </tr>
                     <tr class="row">
-                        <td>Password</td>
+                        <td>RTSP / ONVIF Password</td>
                         <td>
-                            <input class="u-full-width" type="password" placeholder="" data-key="PASSWORD" id="PASSWORD"/>
+                            <input class="u-full-width" type="password" placeholder="" data-conf="rtsp" data-key="PASSWORD" id="RTSP_PASSWORD"/>
                             <span class="switch-description">
-                                Password to access RTSP, ONVIF and HTTP (default empty).
+                                Password to access RTSP and ONVIF (default empty).
+                                <br/>
+                                Allowed special chars: \ | ! &quot; $ % &amp; / ( ) &apos; ? ^ [ ] @ &lt; &gt; , ; . : - _
+                            </span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Web Username</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="httpd" data-key="USER" id="HTTPD_USER"/>
+                            <span class="switch-description">
+                                Username to access the web interface (default empty). May differ from the RTSP/ONVIF one.
+                            </span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Web Password</td>
+                        <td>
+                            <input class="u-full-width" type="password" placeholder="" data-conf="httpd" data-key="PASSWORD" id="HTTPD_PASSWORD"/>
+                            <span class="switch-description">
+                                Password to access the web interface (default empty).
                                 <br/>
                                 Allowed special chars: \ | ! &quot; $ % &amp; / ( ) &apos; ? ^ [ ] @ &lt; &gt; , ; . : - _
                             </span>
@@ -396,7 +403,7 @@
                     <tr class="row">
                         <td>Root Password</td>
                         <td>
-                            <input class="u-full-width" type="password" placeholder="" data-key="SSH_PASSWORD" id="SSH_PASSWORD"/>
+                            <input class="u-full-width" type="password" placeholder="" data-conf="sshd" data-key="PASSWORD" id="SSH_PASSWORD"/>
                             <span class="switch-description">
                                 Password for SSH, Telnet and FTP root user (default empty).
                                 <br/>
@@ -427,7 +434,7 @@
 # | | | | |<br/>
 # * * * * * &lt;command to execute&gt;<br/>
                             </span>
-                            <textarea class="u-full-width" rows="4" cols="50" data-key="CRONTAB" id="CRONTAB"/>
+                            <textarea class="u-full-width" rows="4" cols="50" data-conf="system" data-key="CRONTAB" id="CRONTAB"></textarea>
                             <span class="switch-description">
                                 Insert here your scheduled process using crontab syntax.
                                 <br/>
