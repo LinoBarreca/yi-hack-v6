@@ -60,6 +60,25 @@ build_image() {
 # trusts the mounted repo (no "dubious ownership"). HOME -> /tmp (writable for the uid).
 run_in_image() { docker run --rm --platform="$PLATFORM" --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT:/work" "$IMAGE" "$@"; }
 
+# Static boot-simulation gate: every packaged image must pass scripts/simulate_boot.py before we
+# consider the pack good. It catches dead-boot defects the toolchain can't (e.g. a boot script
+# that lost its execute bit = execve EACCES = brick). Runs on the HOST (python3/objdump live here,
+# not in the build container). Any ERROR aborts the build.
+boot_sim_gate() {
+    command -v python3 >/dev/null 2>&1 || { log "boot-sim gate: python3 not found — SKIPPED"; return 0; }
+    local m
+    for m in "$ROOT"/build/images/*/; do
+        [ -d "$m" ] || continue
+        m=$(basename "$m")
+        log "boot-sim gate: simulating boot of '$m' ..."
+        if ! python3 "$ROOT/scripts/simulate_boot.py" "$m" >/dev/null; then
+            log "!!!! BOOT SIMULATION FAILED for '$m' — see simulated_boot.log — PACK REJECTED !!!!"
+            exit 1
+        fi
+    done
+    log "boot-sim gate: all packaged images PASS"
+}
+
 hello() {
     log "smoke-test: cross-compiling docker/hello.c (uClibc ARMv5) in $IMAGE ..."
     mkdir -p "$ROOT/build"
@@ -100,6 +119,7 @@ case "${1:-help}" in
     pack)    ensure_binfmt
              log "packing firmware images for ${2:-all} models (in container)..."
              run_in_image bash scripts/pack_fw.sh "${2:-all}"
+             boot_sim_gate
              log "done — images in build/images/." ;;
     clean)   cleanup_binfmt; docker rmi "$IMAGE" 2>/dev/null || true; log "teardown done (image $IMAGE + qemu binfmt removed)." ;;
     all)     trap cleanup_binfmt EXIT
@@ -109,6 +129,7 @@ case "${1:-help}" in
              run_in_image bash scripts/compile.sh ""
              log "packing firmware images for all models..."
              run_in_image bash scripts/pack_fw.sh all
+             boot_sim_gate
              log "all done. Images in build/images/." ;;
     *)       echo "usage: $0 {image|hello|shell|sysroot|compile|pack|all|clean}" >&2; exit 2 ;;
 esac

@@ -156,13 +156,13 @@ apply_stock_updates() {
 remove_line() {
     awk -v t="$2" '{ l=$0; sub(/[ \t]+$/,"",l) } l==t { c++; next } { print } END { if (c!=1) exit 3 }' \
         "$1" > "$1.tmp" || die "patch_stock_init: '$2' not found exactly once in $1"
-    mv "$1.tmp" "$1"
+    cat "$1.tmp" > "$1" && rm -f "$1.tmp"   # cat>dest keeps dest's mode (mv would drop +x)
 }
 # replace_line <file> <old> <new> : in-place, position-preserving; require <old> exactly once.
 replace_line() {
     awk -v o="$2" -v n="$3" '{ l=$0; sub(/[ \t]+$/,"",l) } l==o { print n; c++; next } { print } END { if (c!=1) exit 3 }' \
         "$1" > "$1.tmp" || die "patch_stock_init: '$2' not found exactly once in $1"
-    mv "$1.tmp" "$1"
+    cat "$1.tmp" > "$1" && rm -f "$1.tmp"   # cat>dest keeps dest's mode (mv would drop +x)
 }
 
 # Patch the stock Xiaomi init scripts at BUILD TIME (verifiable here, in the image, instead
@@ -234,11 +234,11 @@ pack_model() {
     log "$MODEL: copying stock home..."
     cp -a "$MODEL_STOCK/home_extracted" "$IMG_DIR/home"
 
-    # --- Step 1-bis: fold in stock OTA update(s) so the base is current before our overlay ---
+    # --- Step 2: fold in stock OTA update(s) so the base is current before our overlay ---
     log "$MODEL: applying stock firmware update(s)..."
     apply_stock_updates "$IMG_DIR/home" "$MODEL_STOCK"
 
-    # --- Step 2: overlay v6 build artifacts ---
+    # --- Step 3: overlay v6 build artifacts ---
     log "$MODEL: overlaying build/rootfs/ (busybox, init.d, profile)..."
     # --remove-destination: an overlay file must REPLACE a stock symlink at the same path, not
     # be written THROUGH it. e.g. our regular-file usr/bin/lsusb shim over stock's
@@ -248,35 +248,47 @@ pack_model() {
     log "$MODEL: overlaying build/home/ (yi-hack base: scripts, www-min, dropbear, wpa, busybox_tools)..."
     cp -a --remove-destination "$BUILD_DIR/home/." "$IMG_DIR/home/"
 
-    # --- Step 2-bis: patch stock init scripts (build time -> verifiable in the image) ---
+    # --- Step 4: patch stock init scripts (build time -> verifiable in the image) ---
     patch_stock_init "$IMG_DIR/home"
 
-    # --- Step 3: remove orphan uClibc copy (stock rootfs already has these in /lib) ---
+    # --- Step 5: remove orphan uClibc copy (stock rootfs already has these in /lib) ---
     log "$MODEL: removing yi-hack/lib/ (uClibc duplicate, stock has /lib/)..."
     rm -rf "$IMG_DIR/home/yi-hack/lib"
 
-    # --- Step 4: one-time substitutions ---
+    # --- Step 6: one-time substitutions ---
     # Replace stock wpa binaries with our build (security upgrade, WEXT-only)
     if [ -d "$BUILD_DIR/home/yi-hack/base/tools" ]; then
         log "$MODEL: upgrading wpa binaries in base/tools..."
         cp -a "$BUILD_DIR/home/yi-hack/base/tools/." "$IMG_DIR/home/base/tools/" 2>/dev/null || true
     fi
 
-    # --- Step 5: strip comments from shell scripts (save flash space) ---
-    log "$MODEL: stripping comments from shell scripts..."
-    find "$IMG_DIR/home/yi-hack" "$IMG_DIR/rootfs/etc" -name '*.sh' -o -name '*.conf' | while read -r f; do
+    # --- Step 7: strip comments + blank lines from shell scripts AND .conf (save flash space) ---
+    # DELIBERATE: config comments live only in the source tree; the flashed .conf are terse
+    # key=value (user edits them in the source/web UI, not by reading on-camera comments).
+    log "$MODEL: stripping comments from scripts and .conf..."
+    find "$IMG_DIR/home/yi-hack" "$IMG_DIR/rootfs/etc" \( -name '*.sh' -o -name '*.conf' \) | while read -r f; do
         [ -f "$f" ] || continue
         sed -i '/^[[:space:]]*#[^!]/d; /^[[:space:]]*$/d' "$f"
     done
 
-    # --- Step 6: inject version ---
+    # --- Step 8: restore the EXECUTE BIT on every deployed script. A rewrite (sed -i strip,
+    # patch_stock_init's awk>tmp, the static-overlay copy) can drop +x, and a non-executable boot
+    # script = execve EACCES = dead boot. This is EXACTLY how base/init.sh (patched by
+    # patch_stock_init, then non-+x) killed the boot: S01udev could not exec it, so the SD was
+    # never mounted and the WiFi driver never loaded. .sh that are only sourced get +x too
+    # (harmless); .conf are intentionally left non-executable. ---
+    log "$MODEL: ensuring +x on all deployed scripts..."
+    find "$IMG_DIR/home" "$IMG_DIR/rootfs" -name '*.sh' -exec chmod 0755 {} +
+    chmod 0755 "$IMG_DIR/rootfs/etc/init.d/"S[0-9]* 2>/dev/null || true
+
+    # --- Step 9: inject version ---
     mkdir -p "$IMG_DIR/home/yi-hack"
     echo "$VERSION" > "$IMG_DIR/home/yi-hack/version"
 
     # Camera model marker
     echo "$MODEL" > "$IMG_DIR/home/app/.camver"
 
-    # --- Step 7: shrink — replace non-US audio with symlinks ---
+    # --- Step 10: shrink — replace non-US audio with symlinks ---
     log "$MODEL: replacing non-US audio files with symlinks..."
     local audio_ext="*.aac"
     case "$MODEL" in
@@ -295,7 +307,7 @@ pack_model() {
         done
     fi
 
-    # --- Step 7-bis: compress big files (system_init.sh extracts them on first boot) ---
+    # --- Step 11: compress big files (system_init.sh extracts them on first boot) ---
     # The home partition is tight (~13 MB). Big binaries/libs ship compressed and are
     # expanded once into the live /home on first boot by system_init.sh, which globs *.7z
     # in /home/app, /home/base/tools, /home/lib (and /home/yi-hack/yi-hack.7z).
@@ -304,17 +316,17 @@ pack_model() {
     compress_in_dir "$IMG_DIR/home/base/tools" wpa_supplicant wpa_passphrase wpa_cli
     compress_in_dir "$IMG_DIR/home/app"        cloudAPI oss p2p_tnp rmm
 
-    # --- Step 8: fix ownership ---
+    # --- Step 12: fix ownership ---
     log "$MODEL: fixing ownership (root:root)..."
     chown -R root:root "$IMG_DIR/rootfs" "$IMG_DIR/home"
 
-    # --- Step 9: build jffs2 then wrap as uImage (U-Boot do_auto_sd_update format) ---
+    # --- Step 13: build jffs2 then wrap as uImage (U-Boot do_auto_sd_update format) ---
     # The bootloader's SD-flash routine reads files named rootfs_<model>/home_<model>
     # (NO .jffs2 extension) in uImage format. A raw jffs2 is ignored. See design §2.11-bis.
     make_partition_image rootfs "$IMG_DIR/rootfs"
     make_partition_image home   "$IMG_DIR/home"
 
-    # --- Step 10: SD/CIFS payload zip ---
+    # --- Step 14: SD/CIFS payload zip ---
     log "$MODEL: creating SD/CIFS payload zip..."
     local payload_staging="$IMG_DIR/payload"
     mkdir -p "$payload_staging/yi-hack/extra"

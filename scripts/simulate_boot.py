@@ -48,6 +48,18 @@ errors = 0
 warns = 0
 def out(s=""): log_lines.append(s)
 
+def err(msg):
+    """Record a boot-fatal problem - rendered LOUD and UPPERCASE so it cannot be missed
+    in the wall of 'ok' lines (a swallowed NOEXEC on base/init.sh once cost us hours)."""
+    global errors
+    errors += 1
+    out("      " + "!" * 8 + " ERROR " + "!" * 8 + "  " + msg.upper())
+
+def warn(msg):
+    global warns
+    warns += 1
+    out("      ~~ WARNING ~~  " + msg)
+
 
 # ---------------------------------------------------------------------------
 # Merged filesystem model
@@ -176,19 +188,11 @@ def check_file(fs, abspath, label="", critical=True):
             note = "  (ships .7z, expanded first boot)"
         elif kind == "dangling":
             # path exists (lexists true) but symlink target unresolved
-            out(f"      DANGLING {abspath} -> {detail}   {label}")
-            if critical:
-                errors += 1
-            else:
-                warns += 1
+            (err if critical else warn)(f"DANGLING SYMLINK {abspath} -> {detail}  {label}")
             return
         out(f"      ok   {abspath}  [{short(detail)}]{note}  {label}")
     else:
-        out(f"      MISS {abspath}   <-- MISSING IN IMAGE   {label}")
-        if critical:
-            errors += 1
-        else:
-            warns += 1
+        (err if critical else warn)(f"MISSING IN IMAGE {abspath}  {label}")
 
 def check_cgi_shebang(fs, cgi_abspath, critical=True, label=""):
     """A CGI invoked by httpd is exec'd; the kernel reads its #! interpreter and runs it.
@@ -197,9 +201,7 @@ def check_cgi_shebang(fs, cgi_abspath, critical=True, label=""):
     global errors, warns
     loc = fs.to_image(cgi_abspath)
     if loc is None or not os.path.lexists(loc):
-        out(f"      MISS {cgi_abspath}   <-- CGI MISSING   {label}")
-        errors += 1 if critical else 0
-        warns += 0 if critical else 1
+        (err if critical else warn)(f"CGI MISSING {cgi_abspath}  {label}")
         return
     try:
         with open(loc, "rb") as fh:
@@ -214,12 +216,8 @@ def check_cgi_shebang(fs, cgi_abspath, critical=True, label=""):
     if kind in ("file", "compressed"):
         out(f"      ok   {os.path.basename(cgi_abspath):<16} #!{interp}  [{short(detail)}]  {label}")
     else:
-        out(f"      FAIL {os.path.basename(cgi_abspath):<16} #!{interp}  <-- INTERPRETER NOT FOUND "
-            f"({'unmounted/absent' if detail else 'missing'})  {label}")
-        if critical:
-            errors += 1
-        else:
-            warns += 1
+        (err if critical else warn)(f"CGI INTERPRETER NOT FOUND {os.path.basename(cgi_abspath)} "
+                                    f"#!{interp} ({'unmounted/absent' if detail else 'missing'})  {label}")
 
 def check_elf_libs(fs, binpath, ld_dirs, label=""):
     """Resolve an ELF's NEEDED shared libraries in the runtime LD search path. A binary can
@@ -253,33 +251,28 @@ def check_elf_libs(fs, binpath, ld_dirs, label=""):
         if not ok:
             missing.append(lib)
     if missing:
-        out(f"      FAIL {os.path.basename(binpath):<18} NEEDED unresolved: {', '.join(missing)}"
-            f"  <-- won't load at exec  {label}")
-        errors += 1
+        err(f"NEEDED LIB UNRESOLVED (won't load at exec) {os.path.basename(binpath)}: "
+            f"{', '.join(missing)}  {label}")
     else:
         out(f"      ok   {os.path.basename(binpath):<18} all {len(needed)} NEEDED libs resolve  {label}")
 
 def check_exec(fs, abspath, label=""):
     """For a script/binary invoked by absolute path (not sourced, not via PATH): it must
     exist AND have an execute bit, else execve() fails with EACCES at boot."""
-    global errors
     if not fs.lexists(abspath):
-        out(f"      MISS {abspath}   <-- MISSING IN IMAGE   {label}")
-        errors += 1
+        err(f"MISSING IN IMAGE {abspath}  {label}")
         return
     kind, detail = fs.realtarget(abspath)
     if kind not in ("file", "compressed"):
-        out(f"      DANGLING {abspath} -> {detail}   {label}")
-        errors += 1
+        err(f"DANGLING SYMLINK {abspath} -> {detail}  {label}")
         return
     try:
         mode = os.stat(detail).st_mode
         if mode & 0o111:
             out(f"      ok   {abspath}  [{short(detail)}, +x]  {label}")
         else:
-            out(f"      NOEXEC {abspath}  [{short(detail)}, mode {oct(mode & 0o777)}]"
-                f"  <-- NOT EXECUTABLE (execve EACCES)  {label}")
-            errors += 1
+            err(f"NOT EXECUTABLE - execve EACCES, DEAD BOOT - {abspath} "
+                f"[{short(detail)}, mode {oct(mode & 0o777)}]  {label}")
     except OSError:
         out(f"      ?    {abspath}  (stat failed)  {label}")
 
@@ -294,11 +287,7 @@ def check_cmd(fs, cmd, path_list, critical=True, label=""):
         extra = "  (.7z)" if r["kind"] == "compressed" else ""
         out(f"      ok   {cmd:<14} -> {r['found_dir']}  [{short(r['target'])}]{extra}{skipnote}  {label}")
     else:
-        out(f"      FAIL {cmd:<14} -> NOT FOUND on PATH{skipnote}  {label}")
-        if critical:
-            errors += 1
-        else:
-            warns += 1
+        (err if critical else warn)(f"COMMAND NOT FOUND ON PATH: {cmd}{skipnote}  {label}")
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +310,7 @@ def run_scenario(name, payload_mounted):
     # -- S01udev -> system_init.sh + base/init.sh --
     stage("S01udev: mount /home, run system_init.sh + base/init.sh  (PATH = init default)")
     check_exec(fs, "/home/yi-hack/base/script/system_init.sh", "run by S01udev")
-    check_file(fs, "/home/base/init.sh", "stock")
+    check_exec(fs, "/home/base/init.sh", "stock - run by S01udev via absolute path (needs +x)")
     out("    system_init.sh first-boot extraction + helpers (uses ABSOLUTE /home/base/tools/7za):")
     check_file(fs, "/home/base/tools/7za", "needed to expand *.7z on first boot")
     for f in ("cloudAPI", "cloudAPI_fake", "default.script", "wifidhcp.sh"):
@@ -331,7 +320,7 @@ def run_scenario(name, payload_mounted):
         check_cmd(fs, c, INIT_PATH)
 
     stage("base/init.sh [stock] -> app/init.sh [stock]: modules, tmpfs, mount SD, WiFi up")
-    check_file(fs, "/home/app/init.sh", "stock")
+    check_exec(fs, "/home/app/init.sh", "stock - run by base/init.sh via absolute path (needs +x)")
     check_file(fs, "/home/app/.camver", "stock (MODEL_SUFFIX source)")
     out("    (WiFi driver + HW modules loaded; SD mounted at /tmp/sd if present)")
 
@@ -433,6 +422,169 @@ def run_scenario(name, payload_mounted):
 
 
 # ---------------------------------------------------------------------------
+# BOOT I/O TRACE: open the real boot scripts in execution order and simulate the
+# kernel mount table + the boot-log (stdout/stderr) redirect chain. This answers the
+# question the static checks cannot: WHEN is /tmp/sd mounted, and is it mounted at the
+# moment S20yi-hack tries to persist the official yi-boot.log (DEBUG_LOG=yes path)?
+# ---------------------------------------------------------------------------
+import re
+
+def _read_lines(path):
+    try:
+        with open(path, encoding="latin-1") as fh:
+            return fh.readlines()
+    except OSError:
+        return None
+
+def trace_boot_io():
+    out("")
+    out("#" * 78)
+    out("# BOOT I/O TRACE - virtual mount table + boot-log (stdout/stderr) redirect")
+    out("# Q: is /tmp/sd mounted when S20 persists the official yi-boot.log?")
+    out("#" * 78)
+
+    mtab = {}            # mountpoint -> source device/fs  (global kernel mount table)
+    devs = {}            # device -> mountpoint  (to detect a 2nd mount of the same device)
+    fd = ["console/ttyAMA0 (volatile, lost on reboot)"]   # where stdout/stderr points
+
+    def _clean(s):
+        # drop trailing redirections / list operators so the mount/umount parser sees only args
+        for cut in ("2>", "&&", "||", ";", "|", ">>", ">"):
+            i = s.find(cut)
+            if i != -1 and not s[:i].rstrip().endswith("exec"):
+                s = s[:i]
+        return s.strip()
+
+    def _mount_args(rest):
+        # rest = everything after the word 'mount'. Strip -t TYPE / -o OPTS, collect positionals + opts string.
+        toks = rest.split()
+        opts, pos = "", []
+        i = 0
+        while i < len(toks):
+            t = toks[i]
+            if t in ("-t", "-o"):
+                if t == "-o" and i + 1 < len(toks): opts += toks[i+1]
+                i += 2; continue
+            if t.startswith("-"):
+                i += 1; continue
+            pos.append(t); i += 1
+        return pos, opts
+
+    def step(script, raw):
+        s = s0 = raw.strip()
+        if not s or s.startswith("#"):
+            return
+        # (a) CONFIG READS: every get_config <section>.KEY on the line -> which flag, which file.
+        for ref in re.findall(r'get_config\s+([A-Za-z0-9_./]+)', s0):
+            sect = ref.split(".", 1)[0]
+            out(f"  [{script:13}] CONFIG READ  {ref:28} <- config/{sect}.conf")
+        # (b) boot-log redirect
+        if s.startswith("exec") and ">>" in s:
+            tgt = s.split(">>", 1)[1].split()[0]
+            fd[0] = tgt
+            out(f"  [{script:13}] LOG REDIRECT exec >> {tgt}   <-- stdout/stderr (boot-log) now writes HERE")
+            return
+        sc = _clean(s)
+        if sc.startswith("umount"):
+            mp = [t for t in sc.split()[1:] if not t.startswith("-")]
+            mp = mp[-1] if mp else "?"
+            if mp in mtab:
+                devs.pop(mtab[mp], None); mtab.pop(mp, None)
+                out(f"  [{script:13}] umount {mp}")
+            else:
+                out(f"  [{script:13}] umount {mp}   (was NOT mounted - no-op)")
+            return
+        if sc.startswith("mount"):
+            pos, opts = _mount_args(sc[len("mount"):])
+            if "remount" in opts:
+                mp = pos[-1] if pos else "?"
+                ok = mp in mtab
+                out(f"  [{script:13}] MOUNT remount {mp}   ({'ok, was mounted' if ok else 'FAIL: NOT mounted'})")
+                return
+            src = pos[0] if pos else "?"
+            mp  = pos[1] if len(pos) > 1 else (pos[0] if pos else "?")
+            bind = "bind" in opts
+            if src.startswith("/dev/") and src in devs and not bind:
+                out(f"  [{script:13}] MOUNT {src} -> {mp}   *** REFUSED: {src} already mounted at "
+                    f"{devs[src]} (same device twice) -> {mp} STAYS UNMOUNTED ***")
+                return
+            mtab[mp] = src
+            if src.startswith("/dev/"): devs[src] = mp
+            out(f"  [{script:13}] MOUNT {src} -> {mp}{' [bind]' if bind else ''}    (mounted now: {sorted(mtab)})")
+            return
+        if sc.startswith("checkdisk"):
+            out(f"  [{script:13}] checkdisk  (stock: fdisk /dev/mmcblk0; may transiently mount/umount /tmp/sd)")
+            return
+        # (c) the /tmp/sd persistence GUARD
+        if "grep" in s0 and " /tmp/sd " in s0 and "mount" in s0:
+            ok = "/tmp/sd" in mtab
+            out(f"  [{script:13}] GUARD 'mount|grep \" /tmp/sd \"' = {ok}  =>  "
+                f"{'persist yi-boot.log to SD' if ok else 'NOT mounted -> RAM-only -> NO SD log'}")
+            return
+        # (d) file I/O - but only to NOTABLE paths (boot-log, /tmp/sd, wifi markers, config,
+        # core_pattern), so echo-string noise is filtered out. Strip stderr redirects (2>... are
+        # NOT writes - they only silence errors) and take the first command of a compound line.
+        def _p(x): return x.strip().strip('";).')
+        io = re.sub(r'2>&1|2>\S+|&>\S+', '', s0)
+        io = re.split(r'\s*(?:&&|\|\||;)\s*', io)[0].strip()   # first command only
+        toks = io.split(); c0 = toks[0] if toks else ""
+        NOTABLE = re.compile(r'yi-boot\.log|/tmp/sd|ramlog|/tmp/(?:MTK|BCM)|\.conf|core_pattern|/dbgsd')
+        nt = lambda *ps: any(p and NOTABLE.search(p) for p in ps)
+        if c0 == "touch":
+            f = next((t for t in toks[1:] if not t.startswith("-")), "")
+            if nt(f): out(f"  [{script:13}] touch {_p(f)}   (create-if-absent; does NOT truncate)")
+            return
+        if c0 in ("cat", "echo", "printf", "dd") and ">" in io:
+            dst = io.split(">", 1)[1].split()[0]
+            if nt(dst):
+                src = toks[1] if (c0 == "cat" and len(toks) > 1 and not toks[1].startswith("-")) else ""
+                out(f"  [{script:13}] {'COPY' if src else 'WRITE'} {(_p(src)+' -> ') if src else '-> '}{_p(dst)}")
+            return
+        if c0 in ("cp", "mv"):
+            a = [t for t in toks[1:] if not t.startswith("-")]
+            if len(a) >= 2 and nt(a[0], a[-1]):
+                out(f"  [{script:13}] {'COPY' if c0=='cp' else 'MOVE'} {_p(a[0])} -> {_p(a[-1])}")
+            return
+        if c0 == ".":
+            if len(toks) > 1: out(f"  [{script:13}] SOURCE {_p(toks[1])}   (read + run)")
+            return
+        m = re.search(r'(?:^|\s)1?>>?\s*(/[^\s&|;<>]+)', io)
+        if m and nt(m.group(1)) and not s.startswith("exec"):
+            out(f"  [{script:13}] WRITE -> {_p(m.group(1))}"); return
+
+    SCR = os.path.join(HOME, "yi-hack/base/script")
+    out("")
+    out("-- Process tree A: S01udev -> system_init.sh -> base/init.sh -> app/init.sh  (shared fd) --")
+    for name, path in (("S01udev",      os.path.join(ROOTFS, "etc/init.d/S01udev")),
+                       ("system_init",  os.path.join(SCR, "system_init.sh")),
+                       ("base/init.sh", os.path.join(HOME, "base/init.sh")),
+                       ("app/init.sh",  os.path.join(HOME, "app/init.sh"))):
+        lines = _read_lines(path)
+        if lines is None:
+            out(f"  [{name:13}] <NOT FOUND: {path}>"); continue
+        for ln in lines:
+            step(name, ln)
+
+    out("")
+    out("-- Process B: S20yi-hack  (rcS child: fresh fd = console; inherits global mount table) --")
+    fd[0] = "console/ttyAMA0 (volatile)"
+    for ln in (_read_lines(os.path.join(ROOTFS, "etc/init.d/S20yi-hack")) or []):
+        step("S20yi-hack", ln)
+
+    out("")
+    out("-- Process C: scripts S20 invokes, in order (full-boot path): apply_config, wifi_up,")
+    out("              mount_cifs, apply_config, build_view, system.sh  (each a child: shared mounts) --")
+    for name in ("apply_config.sh", "wifi_up.sh", "mount_cifs.sh", "apply_config.sh",
+                 "build_view.sh", "system.sh"):
+        out(f"  --- {name} ---")
+        for ln in (_read_lines(os.path.join(SCR, name)) or [f"  <NOT FOUND {name}>\n"]):
+            step(name.replace(".sh", ""), ln)
+
+    out("")
+    out(f"  FINAL: /tmp/sd {'IS' if '/tmp/sd' in mtab else 'is NOT'} mounted | boot-log fd -> {fd[0]}")
+    out(f"  mount table at end: {dict(sorted(mtab.items()))}")
+
+# ---------------------------------------------------------------------------
 out("=" * 78)
 out(f" yi-hack-v6 - SIMULATED BOOT on packaged image  (model: {MODEL})")
 out(f" image: build/images/{MODEL}/{{rootfs,home}} + payload")
@@ -452,6 +604,7 @@ if not os.path.isdir(PAYLOAD_EXTRA):
 
 run_scenario("minimal boot (no SD/CIFS payload)", payload_mounted=False)
 run_scenario("full boot (payload present)", payload_mounted=True)
+trace_boot_io()
 
 out("")
 out("=" * 78)
