@@ -187,6 +187,22 @@ patch_stock_init() {
     replace_line "$app"  'echo 0 > /proc/sys/vm/swappiness'  'echo 60 > /proc/sys/vm/swappiness'
     remove_line  "$base" 'rtctime=$(/home/base/tools/rtctool -g time)'
     remove_line  "$base" 'date -s $rtctime'
+
+    # DEBUG_LOG=early boot-log: right AFTER base/init.sh mounts the SD at /tmp/sd, and BEFORE it
+    # runs app/init.sh (so the WiFi-driver detection IS captured), remount /tmp/sd -o sync and
+    # redirect the boot-log there. This catches a pre-S20 hang WITHOUT a separate mountpoint, so
+    # the FULL boot is preserved (no/yes boots leave the SD async/RAM exactly as before). Patched
+    # into the stock script that owns the SD mount. remount,sync is unreliable on FAT -> umount +
+    # 'mount -o sync'. The $(...) and tests are escaped to run on the CAMERA, not at pack time.
+    replace_line "$base" 'mount /dev/mmcblk0p1 /tmp/sd' \
+"mount /dev/mmcblk0p1 /tmp/sd
+if [ \"\$(sed -n 's/^DEBUG_LOG=//p' /home/yi-hack/config/system.conf 2>/dev/null)\" = early ]; then
+	umount /tmp/sd 2>/dev/null
+	mount -o sync /dev/mmcblk0p1 /tmp/sd
+	cp /dev/yi-boot.log /tmp/sd/yi-boot.log
+	exec >> /tmp/sd/yi-boot.log 2>&1
+	echo '===== [bootlog] DEBUG_LOG=early: live on SD /tmp/sd (-o sync) from base/init.sh ====='
+fi"
 }
 
 # Build a jffs2 from $srcdir, then wrap it as the uImage U-Boot's do_auto_sd_update

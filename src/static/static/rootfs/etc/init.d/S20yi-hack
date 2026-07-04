@@ -14,36 +14,42 @@ export LD_LIBRARY_PATH=/home/hisiko/hisilib:$LD_LIBRARY_PATH
 export PATH=/home/app/localbin:$PATH
 export PATH=/home/base/tools:$PATH
 
-# Boot log -> SD persistence, gated by DEBUG_LOG (troubleshooting only). /home is mounted now,
-# so the config is readable. When on: remount the SD sync (every write hits the card, so a
-# boot that hangs anywhere still leaves a complete log to pull out), copy the pre-S20 RAM
-# buffer onto the SD, then redirect live to the SD file. When off: SD stays standard (async),
-# no SD writes - only the free RAM log in /dev/yi-boot.log (readable via SSH).
+# Boot-log SD persistence, controlled by DEBUG_LOG (system.conf), /home/config readable now:
+#   no    -> RAM only (/dev/yi-boot.log, via SSH). Production default.
+#   yes   -> persist from HERE (S20): mount the SD SYNC at /tmp/sd, copy the pre-S20 RAM buffer,
+#            go live. Captures S20 onward + the buffer; FULL boot. Normal troubleshooting.
+#   early -> base/init.sh already opened /tmp/sd/yi-boot.log (-o sync) right after mounting the SD
+#            (patched in by pack_fw.sh), so it catches a pre-S20 hang (e.g. in app/init) while
+#            keeping the normal FULL boot. S20 is a separate process, so just re-attach to it.
+# NB: remount,sync is unreliable on FAT, so 'yes' does umount + 'mount -o sync' (durable per line).
 . /home/yi-hack/base/script/get_config.sh
-# Ensure the BASE config files (system, wifi, cifs, output) exist with defaults
-# BEFORE anything reads them - DEBUG_LOG just below, then wifi_up / mount_cifs /
-# build_view. Runs on every boot path (a deleted base file self-heals here).
+# Ensure the BASE config files (system, wifi, cifs, output) exist with defaults BEFORE anything
+# reads them - DEBUG_LOG just below, then wifi_up / mount_cifs / build_view (self-heals a deleted file).
 /home/yi-hack/base/script/check_conf.sh base
-BOOTLOG=
-if [ "$(get_config system.DEBUG_LOG)" = "yes" ]; then
-    BOOTLOG=1
-    if mount | grep -q " /tmp/sd " && touch /tmp/sd/yi-boot.log 2>/dev/null; then
-        mount -o remount,sync /tmp/sd 2>/dev/null && echo "[bootlog] /tmp/sd remounted sync"
-        cat /dev/yi-boot.log > /tmp/sd/yi-boot.log 2>/dev/null
+BOOTLOG=; _sdlog=
+case "$(get_config system.DEBUG_LOG)" in
+    early)
+        BOOTLOG=1; _sdlog=/tmp/sd
         exec >> /tmp/sd/yi-boot.log 2>&1
-        echo "===== [bootlog] live on SD (sync) from here ====="
-        # Debug crash capture: send cores to the SD (gigabytes of space, pullable with the boot
-        # log, no pressure on the 16M /tmp tmpfs). Only enabled here, with the SD writable, so a
-        # crash loop can't fill RAM. core_pattern is global; ulimit -c is inherited by every
-        # daemon launched from here on - minimal-boot ones below AND system.sh + its services.
-        # (Cores hit the sync-mounted FAT, so each write is slow but durable - debug only.)
-        mkdir -p /tmp/sd/cores
-        echo "/tmp/sd/cores/core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null
-        ulimit -c unlimited
-        echo "[bootlog] core dumps enabled -> /tmp/sd/cores/core.%e.%p"
-    else
-        echo "[bootlog] DEBUG_LOG=yes but no writable SD -> RAM only (/dev/yi-boot.log), cores disabled"
-    fi
+        echo "===== [bootlog] S20 REACHED (DEBUG_LOG=early, live on SD /tmp/sd) @ $(date '+%T') =====" ;;
+    yes)
+        if mount | grep -q " /tmp/sd "; then
+            BOOTLOG=1; _sdlog=/tmp/sd
+            umount /tmp/sd 2>/dev/null
+            mount -o sync /dev/mmcblk0p1 /tmp/sd      # -o sync at mount (remount,sync unreliable on FAT)
+            cp /dev/yi-boot.log /tmp/sd/yi-boot.log
+            exec >> /tmp/sd/yi-boot.log 2>&1
+            echo "===== [bootlog] live on SD /tmp/sd (-o sync) from S20 @ $(date '+%T') ====="
+        else
+            echo "[bootlog] DEBUG_LOG=yes but /tmp/sd not mounted -> RAM only"
+        fi ;;
+esac
+if [ -n "$_sdlog" ]; then
+    # Crash cores -> SD (space, pullable with the log, off the 16M /tmp tmpfs). Inherited by every
+    # daemon launched from here on. The sync-mounted FAT makes each write slow but durable (debug only).
+    mkdir -p "$_sdlog/cores"
+    echo "$_sdlog/cores/core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null
+    ulimit -c unlimited
 fi
 # diag: dump key state at boot checkpoints (only when bootlog is on, to keep it quiet/fast otherwise).
 diag() {
