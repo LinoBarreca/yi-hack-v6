@@ -104,11 +104,13 @@ ROTATE=no
 IR=yes
 MIC=yes"
 
+# Per-camera identity: shipped blank on purpose. set_defaults.sh (run from
+# system.sh) fills any empty value from the factory serial on first boot.
 PARMS_IDENTITY="
-MQTT_CLIENT_ID=yi-cam
-MQTT_PREFIX=yicam
-HOMEASSISTANT_NAME=Yi Camera
-HOMEASSISTANT_IDENTIFIERS=yi-cam"
+MQTT_CLIENT_ID=
+MQTT_PREFIX=
+HOMEASSISTANT_NAME=
+HOMEASSISTANT_IDENTIFIERS="
 
 PARMS_PTZ="
 0=
@@ -247,10 +249,13 @@ seed_defaults() {
     _parms="$2"
     mkdir -p "${_file%/*}"
     [ -f "$_file" ] || touch "$_file"
-    for _kv in $_parms; do
+    # Iterate LINE by line, not word by word: a default value may contain spaces
+    # (e.g. "HOMEASSISTANT_NAME=Yi Camera"). An unquoted `for _kv in $_parms` splits
+    # on that space and appends the stray "Camera" as a bogus key on EVERY boot.
+    echo "$_parms" | while IFS= read -r _kv; do
         [ -z "$_kv" ] && continue
-        _key=$(echo "$_kv" | cut -d= -f1)
-        grep -q "^$_key=" "$_file" || echo "$_kv" >> "$_file"
+        _key=${_kv%%=*}
+        grep -qE "^${_key}=" "$_file" || echo "$_kv" >> "$_file"
     done
 }
 

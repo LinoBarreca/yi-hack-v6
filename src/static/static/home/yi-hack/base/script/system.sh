@@ -73,6 +73,11 @@ fi
 # missing keys topped up. (BASE config was already seeded early in S20.)
 /home/yi-hack/base/script/check_conf.sh extra
 
+# Fill blank per-camera identity (hostname, MQTT/HA ids) from the factory serial.
+# Must run after check_conf (keys exist) and before `hostname -F` + the MQTT
+# daemons, which read the resolved values. Hostname priority: config > DHCP > serial.
+/home/yi-hack/base/script/set_defaults.sh
+
 hostname -F /home/yi-hack/config/hostname
 
 export TZ=$(get_config system.TIMEZONE)
