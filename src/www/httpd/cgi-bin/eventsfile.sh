@@ -18,9 +18,9 @@ fi
 printf "{\"date\":\"${DIR:0:4}-${DIR:5:2}-${DIR:8:2}\",\n"
 printf "\"records\":[\n"
 
-COUNT=`ls -r /tmp/sd/record/$DIR | grep mp4 -c`
+COUNT=`ls -r /home/yi-hack/output/record/$DIR | grep mp4 -c`
 IDX=1
-for f in `ls -r /tmp/sd/record/$DIR | grep mp4`; do
+for f in `ls -r /home/yi-hack/output/record/$DIR | grep mp4`; do
     if [ ${#f} == 10 ]; then
         printf "{\n"
         printf "\"%s\":\"%s\",\n" "time" "Time: ${DIR:11:2}:${f:0:2}"

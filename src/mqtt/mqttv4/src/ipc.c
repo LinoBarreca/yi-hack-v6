@@ -64,6 +64,8 @@ char *ipc_cmd_params[][2] = {
     { "cruise",               "yes"     },    //IPC_CMD_CRUISE_ON,
     { "cruise",               "presets" },    //IPC_CMD_CRUISE_PRESETS,
     { "cruise",               "360"     },    //IPC_CMD_CRUISE_360,
+    { "mic",                  "no"      },    //IPC_CMD_MIC_OFF,
+    { "mic",                  "yes"     },    //IPC_CMD_MIC_ON,
     { "",                     ""        }     //IPC_CMD_LAST
 };
 
@@ -459,6 +461,16 @@ static int parse_message(char *msg, ssize_t len)
     else if((len >= sizeof(IPC_IR_ON ) - 1) && (memcmp(msg, IPC_IR_ON, sizeof(IPC_IR_ON) - 1)==0))
     {
         handle_ipc_command(IPC_CMD_IR_ON);
+        return 0;
+    }
+    else if((len >= sizeof(IPC_MIC_OFF) - 1) && (memcmp(msg, IPC_MIC_OFF, sizeof(IPC_MIC_OFF) - 1)==0))
+    {
+        handle_ipc_command(IPC_CMD_MIC_OFF);
+        return 0;
+    }
+    else if((len >= sizeof(IPC_MIC_ON) - 1) && (memcmp(msg, IPC_MIC_ON, sizeof(IPC_MIC_ON) - 1)==0))
+    {
+        handle_ipc_command(IPC_CMD_MIC_ON);
         return 0;
     }
     else if((len >= sizeof(IPC_ROTATE_OFF) - 1) && (memcmp(msg, IPC_ROTATE_OFF , sizeof(IPC_ROTATE_OFF) - 1)==0))

@@ -41,7 +41,7 @@ fi
 validateFile $FILE
 
 if [ "$FILE" != "none" ] ; then
-    rm -f /tmp/sd/record/$FILE
+    rm -f /home/yi-hack/output/record/$FILE
 fi
 
 printf "Content-type: application/json\r\n\r\n"

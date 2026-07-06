@@ -27,7 +27,7 @@ APP.mqtt = (function ($) {
                 $.each(response, function (key, state) {
                     if(key == "BROKER_PASSWORD")
                         $('input[type="password"][data-key="' + key +'"]').prop('value', state);
-                    else if(key == "ENABLED")
+                    else if(key == "ENABLED" || key == "CONFIG_ENABLED")
                         $('input[type="checkbox"][data-key="' + key +'"]').prop('checked', state === 'yes');
                     else
                         $('input[type="text"][data-key="' + key +'"]').prop('value', state);
@@ -77,6 +77,7 @@ APP.mqtt = (function ($) {
 
         // Master enable now lives in services/mqtt.conf (key ENABLED).
         configs["ENABLED"] = $("#enable-mqtt").prop('checked') ? 'yes' : 'no';
+        configs["CONFIG_ENABLED"] = $("#enable-mqtt-config").prop('checked') ? 'yes' : 'no';
 
         // Split identity keys out to identity.conf
         IDENTITY_KEYS.forEach(function (k) {

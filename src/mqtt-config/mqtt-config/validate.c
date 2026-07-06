@@ -10,6 +10,7 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
 
     /* recording - retention (section = config/recording.conf) */
     { "recording", "FREE_SPACE", "int", "0", "100", "" , "", "", "" },
+    { "recording", "SEGMENT_TIME", "int", "1", "3600", "" , "", "", "" },
 
     /* snapshot (section = config/services/snapshot.conf) */
     { "services/snapshot", "ENABLED", "bool", "", "", "" , "", "", "" },
@@ -66,6 +67,7 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
 
     /* mqtt - master enable (section = config/services/mqtt.conf) */
     { "services/mqtt", "ENABLED", "bool", "", "", "" , "", "", "" },
+    { "services/mqtt", "CONFIG_ENABLED", "bool", "", "", "" , "", "", "" },
 
     { "camera", "SWITCH_ON", "bool", "", "", "" , "", "", "ipc_cmd -t %s" },
     { "camera", "SAVE_VIDEO_ON_MOTION", "bool", "", "", "" , "", "", "ipc_cmd -v %s" },
@@ -79,6 +81,7 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
     { "camera", "LED", "bool", "", "", "" , "", "", "ipc_cmd -l %s" },
     { "camera", "ROTATE", "bool", "", "", "" , "", "", "ipc_cmd -r %s" },
     { "camera", "IR", "bool", "", "", "", "", "", "ipc_cmd -i %s" },
+    { "camera", "MIC", "bool", "", "", "", "", "", "ipc_cmd -I %s" },
     { "camera", "SOUND_DETECTION", "bool", "", "", "", "", "", "ipc_cmd -b %s" },
     { "camera", "SOUND_SENSITIVITY", "int", "30", "90", "", "", "", "ipc_cmd -n %s" },
     { "camera", "MOTION_TRACKING", "bool", "", "", "", "", "", "ipc_cmd -o %s" },

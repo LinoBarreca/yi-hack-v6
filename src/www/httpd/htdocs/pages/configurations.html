@@ -309,6 +309,22 @@
                         </td>
                     </tr>
                     <tr class="row">
+                        <td>Recording (NVR)</td>
+                        <td>
+                            <div class="standard-select">
+                                <select data-conf="output" data-key="RECORD" id="RECORD">
+                                    <option value="NO">Disabled</option>
+                                    <option value="SD">SD card</option>
+                                    <option value="CIFS">Network share</option>
+                                    <option value="RAM">RAM (temporary)</option>
+                                </select>
+                            </div>
+                            <span class="switch-description">
+                                Record video locally with the built-in recorder (no cloud). Choose where to store the clips: SD card, the network share, or RAM (temporary, lost on reboot - only useful with FTP upload). "Disabled" turns recording off. Set the retention and browse the clips in the Events page.
+                            </span>
+                        </td>
+                    </tr>
+                    <tr class="row">
                         <td>Swap file</td>
                         <td>
                             <div class="standard-select">
@@ -320,6 +336,107 @@
                             <span class="switch-description">
                                 Use a swap file to expand memory (recommended for MQTT/HomeAssistant and snapshots). The swap file lives on the SD card; "Disabled" turns it off.
                             </span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <h4 class="no-margin">Network share (CIFS)</h4>
+        <hr class="tiny-margin"/>
+        <div class="row">
+            <p>
+                Load the firmware from a network shared folder (boot without an SD card) and/or
+                store recordings on it. Uses SMB/CIFS - the same "shared folder" a NAS provides.
+                See the Native NVR guide for the read-only / read-write share layouts.
+            </p>
+        </div>
+        <div class="row">
+            <div class="twelve columns configs-switch">
+                <table class="u-full-width padded-table config-table">
+                    <tbody>
+                    <tr class="row">
+                        <td>Boot from network (no SD)</td>
+                        <td>
+                            <label class="switch small">
+                                <input type="checkbox" data-conf="cifs" data-key="ENABLED"/>
+                                <span class="slider round"></span>
+                                <span class="switch-text"></span>
+                            </label>
+                            <span class="switch-description">
+                                Load the firmware from the share below instead of the SD card.
+                            </span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Server (host)</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="192.168.1.10" data-conf="cifs" data-key="HOST"/>
+                            <span class="switch-description">Your NAS/server IP address or name.</span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Firmware share</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="firmware" data-conf="cifs" data-key="SHARE"/>
+                            <span class="switch-description">The (read-only) shared folder that holds the firmware.</span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>User</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="USER"/>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Password</td>
+                        <td>
+                            <input class="u-full-width" type="password" placeholder="" data-conf="cifs" data-key="PASS"/>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <h5 class="no-margin">Recordings share (read-write)</h5>
+        <div class="row">
+            <p>
+                Where clips go when <b>Recording (NVR)</b> above is set to <b>Network share</b>.
+                Any field you leave <b>empty is inherited</b> from the firmware share above, so
+                usually you only set the share name. For tighter security use a separate,
+                write-only share/account here (see the Native NVR guide).
+            </p>
+        </div>
+        <div class="row">
+            <div class="twelve columns configs-switch">
+                <table class="u-full-width padded-table config-table">
+                    <tbody>
+                    <tr class="row">
+                        <td>Recordings share</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="recordings" data-conf="cifs" data-key="RECORDING_SHARE"/>
+                            <span class="switch-description">Empty = record to the firmware share above.</span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Recordings server</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="RECORDING_HOST"/>
+                            <span class="switch-description">Empty = same server as the firmware share.</span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Recordings user</td>
+                        <td>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="RECORDING_USER"/>
+                            <span class="switch-description">Empty = same user as the firmware share.</span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Recordings password</td>
+                        <td>
+                            <input class="u-full-width" type="password" placeholder="" data-conf="cifs" data-key="RECORDING_PASS"/>
+                            <span class="switch-description">Empty = same password as the firmware share.</span>
                         </td>
                     </tr>
                     </tbody>

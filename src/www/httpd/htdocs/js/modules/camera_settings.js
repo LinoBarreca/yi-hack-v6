@@ -62,6 +62,7 @@ APP.camera_settings = (function ($) {
                 '&baby_crying_detect=' + configs["BABY_CRYING_DETECT"] +
                 '&led=' + configs["LED"] +
                 '&ir=' + configs["IR"] +
+                '&mic=' + configs["MIC"] +
                 '&rotate=' + configs["ROTATE"] +
                 '&switch_on=' + configs["SWITCH_ON"],
             dataType: "json",

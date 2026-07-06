@@ -51,16 +51,17 @@ if [ "$INFO_GLOBAL_ENABLE" == "yes" ]; then
         echo "$INFO_GLOBAL_CRONTAB  $ADV_DIR/mqtt_adv_info_global.sh" > /var/spool/cron/crontabs/root
     fi
 fi
+# Camera-setting commands are handled by mqtt-config (cmnd/camera/<KEY>,
+# gated on services/mqtt.conf CONFIG_ENABLED); state is echoed per-key by
+# mqttv4 on stat/camera/<key>. Here we only advertise (see
+# mqtt_adv_homeassistant.sh) and dump the current state so HA starts populated.
 if [ "$CAMERA_SETTING_ENABLE" == "yes" ]; then
     if [ "$CAMERA_SETTING_BOOT" == "yes" ]; then
-        $ADV_DIR/mqtt_adv_config.sh &
+        /home/yi-hack/base/script/conf2mqtt.sh camera &
     fi
     if [ "$CAMERA_SETTING_CRON" == "yes" ]; then
-        echo "$CAMERA_SETTING_CRONTAB  $ADV_DIR/mqtt_adv_config.sh" > /var/spool/cron/crontabs/root
+        echo "$CAMERA_SETTING_CRONTAB  /home/yi-hack/base/script/conf2mqtt.sh camera" > /var/spool/cron/crontabs/root
     fi
-    FW_VERSION=$(cat /home/yi-hack/extra/../version)
-
-    $ADV_DIR/mqtt_set_config.sh &
 fi
 if [ "$TELEMETRY_ENABLE" == "yes" ]; then
     if [ "$TELEMETRY_BOOT" == "yes" ]; then

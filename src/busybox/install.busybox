@@ -11,3 +11,11 @@ cp -a ./_install/* ../../build/rootfs/
 rm -f ../../build/rootfs/usr/bin/lsusb
 cp ./lsusb ../../build/rootfs/usr/bin/lsusb
 chmod 0755 ../../build/rootfs/usr/bin/lsusb
+
+# Shim /bin/cmp over the stock Yi cmp binary (broken: 2KB strcmp, ignores -s, clamps to 0 -
+# see comments in ./cmp). The pack overlay (cp -a --remove-destination build/rootfs -> image)
+# replaces the stock /bin/cmp ELF with this shim, so apply_config's `cmp -s` is correct
+# regardless of PATH order at boot. busybox's own cmp applet also lands at /usr/bin/cmp.
+mkdir -p ../../build/rootfs/bin
+cp ./cmp ../../build/rootfs/bin/cmp
+chmod 0755 ../../build/rootfs/bin/cmp

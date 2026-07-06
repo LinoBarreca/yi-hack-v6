@@ -37,6 +37,21 @@
                         </td>
                     </tr>
                     <tr class="row">
+                        <td>Remote configuration</td>
+                        <td>
+                            <label class="switch small">
+                                <input type="checkbox" id="enable-mqtt-config" data-key="CONFIG_ENABLED"/>
+                                <span class="slider round"></span>
+                                <span class="switch-text"></span>
+                            </label>
+                            <span class="switch-description">
+                                Accept configuration commands on the cmnd/ topics (every
+                                parameter). Required by the Home Assistant camera-setting
+                                entities; disable to keep MQTT publish-only.
+                            </span>
+                        </td>
+                    </tr>
+                    <tr class="row">
                         <td>Server IP</td>
                         <td>
                             <input class="u-full-width" type="text" placeholder="" data-key="BROKER_IP"/>

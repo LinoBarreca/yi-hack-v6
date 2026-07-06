@@ -233,9 +233,11 @@
         <hr class="tiny-margin" />
         <div class="row">
             <p>
-                Camera Settings Advertise contain the information of Camera Settings page:
+                Advertise the Camera Settings page toggles as Home Assistant entities
+                (switch on/off, detections, led, IR, microphone, rotate, sensitivity, cruise...).
                 <br />
-                Switch on/off camera, Sound Detection, Status Led, IR Led, Rotate.
+                Commands use the MQTT configuration service (cmnd/ topics): it must be
+                enabled in the MQTT page ("Remote configuration") for the entities to work.
                 <br />
             </p>
         </div>
@@ -303,37 +305,6 @@
                                     data-key="CAMERA_SETTING_CRONTAB" id="CAMERA_SETTING_CRONTAB" />
                                 <span class="switch-description">
                                     Insert here your scheduled process using crontab syntax. </span>
-                            </td>
-                        </tr>
-                        <tr class="row">
-                            <td>Suffix topic</td>
-                            <td>
-                                <input class="u-full-width" type="text" placeholder="camera_setting"
-                                    data-key="CAMERA_SETTING_TOPIC" />
-                                <span class="switch-description">
-                                    MQTT Camera Settings Advertise suffix topic
-                                </span>
-                            </td>
-                        </tr>
-                        <tr class="row">
-                            <td>Retain for Camera Settings</td>
-                            <td>
-                                <input class="u-full-width" type="text" placeholder="1"
-                                    data-key="CAMERA_SETTING_RETAIN" />
-                                <span class="switch-description">
-                                    A retained message is a normal MQTT message with the retained flag set to true. The
-                                    broker stores the last retained message and the corresponding QoS for that topic. (1
-                                    = enabled, 0 = disabled)
-                                </span>
-                            </td>
-                        </tr>
-                        <tr class="row">
-                            <td>QoS</td>
-                            <td>
-                                <input class="u-full-width" type="text" placeholder="0" data-key="CAMERA_SETTING_QOS"/>
-                                <span class="switch-description">
-                                    The Quality of Service (QoS) level is an agreement between the sender of a message and the receiver of a message that defines the guarantee of delivery for a specific message.
-                                </span>
                             </td>
                         </tr>
                     </tbody>

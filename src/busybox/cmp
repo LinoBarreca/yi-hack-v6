@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+# cmp shim - yi-hack-v6
+#
+# Stock /bin/cmp on the Yi rootfs is a custom Yi binary (not GNU, not busybox): it reads only
+# the first 2048 bytes of each file, compares them with strcmp (so it stops at the first NUL
+# byte), and main() clamps a negative strcmp result to 0 - so it reports "equal" whenever the
+# first file sorts lexicographically before the second. It also understands no options: `cmp
+# -s A B` makes it open("-s"), fail, print "open -s fail" and exit 0.
+#
+# This shim overrides /bin/cmp with the real busybox cmp applet, so the result is correct
+# regardless of PATH order at boot (the base/bin full-busybox farm is not on PATH during early
+# boot). -s keeps it silent by design (equality test only); the caller's args follow.
+#
+exec /bin/busybox cmp -s "$@"

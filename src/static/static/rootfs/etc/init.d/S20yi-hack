@@ -82,6 +82,15 @@ diag "after wifi_up (WiFi associated? has IP?)"
 /home/yi-hack/base/script/mount_cifs.sh
 /home/yi-hack/base/script/apply_config.sh
 diag "after mount_cifs"
+# Recordings RW share: when output.RECORD=CIFS, mount the (separate, read-write)
+# recordings share and hand its mountpoint to build_view via CIFS_RW_MNT, so
+# output/record points at it. Empty RECORDING_* fields inherit the firmware
+# share's HOST/USER/PASS (see cifs.conf / mount_cifs_rec.sh).
+if [ "$(get_config output.RECORD)" = "CIFS" ]; then
+    _cifs_rw=$(/home/yi-hack/base/script/mount_cifs_rec.sh)
+    [ -n "$_cifs_rw" ] && export CIFS_RW_MNT="$_cifs_rw"
+    diag "after mount_cifs_rec (CIFS_RW_MNT=$CIFS_RW_MNT)"
+fi
 if /home/yi-hack/base/script/build_view.sh; then
     diag "build_view -> PAYLOAD (full dispatcher)"
     # Payload present -> full dispatcher (RTSP/ONVIF/MQTT/cloud/... per config)

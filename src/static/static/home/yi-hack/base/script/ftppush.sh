@@ -58,7 +58,13 @@ checkFiles ()
 	fi
 	#
 	echo "${L_FILE_LIST}" | while read file; do
-		FILE_DATE=${file:15:4}-${file:20:2}-${file:23:2}T${file:26:2}:${file:30:2}
+		# Derive the timestamp from the path components (hour dir + file), not from
+		# fixed character offsets: the view prefix (/home/yi-hack/output/record) is
+		# longer than the old /tmp/sd/record, so hardcoded offsets broke the dedup.
+		# Dir = YYYY'Y'MM'M'DD'D'HH'H'  ; file = MM'M'SS'S'.mp4
+		FILE_DIR="$(lbasename "$(dirname "${file}")")"
+		FILE_BASE="$(lbasename "${file}")"
+		FILE_DATE=${FILE_DIR:0:4}-${FILE_DIR:5:2}-${FILE_DIR:8:2}T${FILE_DIR:11:2}:${FILE_BASE:0:2}
 		FILE_YEAR=${FILE_DATE:0:4}
 		FILE_REMPART=${FILE_DATE:5:2}${FILE_DATE:8:2}${FILE_DATE:11:2}${FILE_DATE:14:2}
 		LAST_FILE_SENT=$(cat /tmp/last_file_sent)

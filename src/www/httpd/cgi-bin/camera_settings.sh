@@ -60,6 +60,12 @@ do
         else
             ipc_cmd -i on
         fi
+    elif [ "$CONF" == "mic" ] ; then
+        if [ "$VAL" == "no" ] ; then
+            ipc_cmd -I off
+        else
+            ipc_cmd -I on
+        fi
     elif [ "$CONF" == "rotate" ] ; then
         if [ "$VAL" == "no" ] ; then
             ipc_cmd -r off

@@ -45,10 +45,10 @@ if [ "$OLDNESS" -lt "0" ]; then
 
     # This section just wait until a new file comes or we timeout. After that, the next section will give the last modified file.
     # If oldness is negative, try to wait until a new file comes.
-    if [ -f "/tmp/sd/record/tmp.mp4.tmp" ]; then
+    if [ -f "/home/yi-hack/output/record/tmp.mp4.tmp" ]; then
         # A file is being recorded, therefore, try to get it when it finished saving.
         # First, we get the last directory.
-        for f in `ls -At /tmp/sd/record | grep H`; do
+        for f in `ls -At /home/yi-hack/output/record | grep H`; do
             if [ ${#f} == 14 ]; then
                 DIRNAME="$f"
                 break;
@@ -56,14 +56,14 @@ if [ "$OLDNESS" -lt "0" ]; then
         done
 
         # Now we get the number of directories and files in the last modified directory.
-        FILECOUNT=`ls -At /tmp/sd/record/$DIRNAME | grep .mp4 -c`
-        DIRCOUNT=`ls -At /tmp/sd/record/ | grep H -c`
+        FILECOUNT=`ls -At /home/yi-hack/output/record/$DIRNAME | grep .mp4 -c`
+        DIRCOUNT=`ls -At /home/yi-hack/output/record/ | grep H -c`
         SLEEPCOUNT=0
-        while [ "$FILECOUNT" -eq `ls -At /tmp/sd/record/$DIRNAME | grep .mp4 -c` ]; do
+        while [ "$FILECOUNT" -eq `ls -At /home/yi-hack/output/record/$DIRNAME | grep .mp4 -c` ]; do
             if [ "$SLEEPCOUNT" -gt 800 ]; then
                 # After 80 seconds, we break the wait.
                 break;
-            elif [ "$DIRCOUNT" -lt `ls -At /tmp/sd/record/ | grep H -c` ]; then
+            elif [ "$DIRCOUNT" -lt `ls -At /home/yi-hack/output/record/ | grep H -c` ]; then
                 # If a new dir comes, we break the wait.
                 break;
             fi
@@ -74,7 +74,7 @@ if [ "$OLDNESS" -lt "0" ]; then
 fi
 
 
-for f in `ls -At /tmp/sd/record | grep H`; do
+for f in `ls -At /home/yi-hack/output/record | grep H`; do
     if [ ${#f} == 14 ]; then
         DIRNAME="$f"
         break;
@@ -82,9 +82,9 @@ for f in `ls -At /tmp/sd/record | grep H`; do
 done
 # In $DIRNAME we now has the last modified directory.
 
-COUNT=`ls -At /tmp/sd/record/$DIRNAME | grep .mp4 -c`
+COUNT=`ls -At /home/yi-hack/output/record/$DIRNAME | grep .mp4 -c`
 IDX=1
-for f in `ls -At /tmp/sd/record/$DIRNAME`; do
+for f in `ls -At /home/yi-hack/output/record/$DIRNAME`; do
     if [ ${#f} == 12 ]; then
         VIDNAME="$f"
         if [ "$IDX" -ge "$OLDNESS" ]; then
@@ -103,14 +103,14 @@ if [ "$TYPE" == "2" ]; then
     [ -z "$HTTPD_PORT" ] && HTTPD_PORT=80
 
     printf "Content-type: text/plain\r\n\r\n"
-    echo "http://$LOCAL_IP:$HTTPD_PORT/record/$DIRNAME/$VIDNAME"
+    echo "http://$LOCAL_IP:$HTTPD_PORT/cgi-bin/playrecord.sh?dir=$DIRNAME&file=$VIDNAME"
 elif [ "$TYPE" == "3" ]; then
     printf "Content-type: video/mp4; charset=utf-8\r\nContent-Disposition: inline; filename=\"$VIDNAME\"\r\n\r\n"
-    cat /tmp/sd/record/$DIRNAME/$VIDNAME
+    cat /home/yi-hack/output/record/$DIRNAME/$VIDNAME
     exit
 elif [ "$TYPE" == "4" ]; then
     printf "Content-type: video/mp4; charset=utf-8\r\nContent-Disposition: attachment; filename=\"$VIDNAME\"\r\n\r\n"
-    cat /tmp/sd/record/$DIRNAME/$VIDNAME
+    cat /home/yi-hack/output/record/$DIRNAME/$VIDNAME
     exit
 else
     # Default and type=1

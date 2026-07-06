@@ -157,7 +157,11 @@ if [[ $(get_config system.DISABLE_CLOUD) == "no" ]] ; then
         fi
         LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib" ./rmm &
         sleep 8
-        ./mp4record &
+        # Stock mp4record only when the native recorder is off (output.RECORD=NO);
+        # otherwise both would write to /tmp/sd/record and collide.
+        if [[ $(get_config output.RECORD) == "NO" ]] ; then
+            ./mp4record &
+        fi
         ./cloud &
         ./p2p_tnp &
         if [[ $(cat /home/app/.camver) != "yi_dome" ]] ; then
@@ -181,7 +185,8 @@ if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
         fi
         LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib" ./rmm &
 		sleep 8
-        if [[ $(get_config system.REC_WITHOUT_CLOUD) == "yes" ]] ; then
+        # Stock mp4record to SD only when the native recorder is off (see above).
+        if [[ $(get_config system.REC_WITHOUT_CLOUD) == "yes" ]] && [[ $(get_config output.RECORD) == "SD" ]] ; then
             cd /home/app
             ./mp4record &
         fi
@@ -227,9 +232,13 @@ fi
 
 mqttv4 &
 
+# mqtt-config = remote configuration surface (cmnd/#, every parameter): own
+# gate so state publishing (mqttv4) can stay on with remote config off. The
+# HA camera-setting entities publish on cmnd/ and need it.
 if [[ $(get_config services.mqtt.ENABLED) == "yes" ]] ; then
-    mqtt-config &
-    /home/yi-hack/base/script/conf2mqtt.sh &
+    if [[ $(get_config services.mqtt.CONFIG_ENABLED) == "yes" ]] ; then
+        mqtt-config &
+    fi
 fi
 
 if [[ $RTSP_PORT != "554" ]] ; then
@@ -287,6 +296,13 @@ if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
     fi
     /home/yi-hack/base/script/wd_rtsp.sh &
+    # Native MP4 recorder (privacy-safe alternative to stock mp4record). Records
+    # the local RTSP stream to the output/record view (RAM/SD/CIFS) whenever
+    # output.RECORD != NO; wd_record.sh launches and supervises it. mp4record
+    # (SD-only, cloud path) is gated off when the native recorder is active.
+    if [[ $(get_config output.RECORD) != "NO" ]] ; then
+        /home/yi-hack/base/script/wd_record.sh &
+    fi
 fi
 
 if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then

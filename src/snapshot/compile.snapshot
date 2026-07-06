@@ -27,6 +27,9 @@ make || exit 1
 mkdir -p ../_install/bin || exit 1
 
 cp ./imggrabber ../_install/bin || exit 1
+# Ship the full ffmpeg binary (rtsp -> segmented mp4 remux) for the native
+# recorder. Built from the same ffmpeg-6.0 tree as imggrabber's static libs.
+cp ./ffmpeg-6.0/ffmpeg ../_install/bin || exit 1
 mkdir -p ../_install/etc/wm_res/low/
 cp ./wm_res/low/* ../_install/etc/wm_res/low/ || exit 1
 mkdir -p ../_install/etc/wm_res/high/

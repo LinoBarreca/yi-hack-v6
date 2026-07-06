@@ -38,7 +38,7 @@ else
 fi
 
 if [ "$DIR" != "none" ] ; then
-    rm -rf /tmp/sd/record/$DIR
+    rm -rf /home/yi-hack/output/record/$DIR
 fi
 
 printf "Content-type: application/json\r\n\r\n"

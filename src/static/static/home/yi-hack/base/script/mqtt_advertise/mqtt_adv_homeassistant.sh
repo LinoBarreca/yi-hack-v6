@@ -61,9 +61,6 @@ INFO_GLOBAL_TOPIC=$(get_config services.mqtt_advertise.INFO_GLOBAL_TOPIC)
 INFO_GLOBAL_RETAIN=$(get_config services.mqtt_advertise.INFO_GLOBAL_RETAIN)
 INFO_GLOBAL_QOS=$(get_config services.mqtt_advertise.INFO_GLOBAL_QOS)
 CAMERA_SETTING_ENABLE=$(get_config services.mqtt_advertise.CAMERA_SETTING_ENABLE)
-CAMERA_SETTING_TOPIC=$(get_config services.mqtt_advertise.CAMERA_SETTING_TOPIC)
-CAMERA_SETTING_RETAIN=$(get_config services.mqtt_advertise.CAMERA_SETTING_RETAIN)
-CAMERA_SETTING_QOS=$(get_config services.mqtt_advertise.CAMERA_SETTING_QOS)
 TELEMETRY_ENABLE=$(get_config services.mqtt_advertise.TELEMETRY_ENABLE)
 TELEMETRY_TOPIC=$(get_config services.mqtt_advertise.TELEMETRY_TOPIC)
 TELEMETRY_RETAIN=$(get_config services.mqtt_advertise.TELEMETRY_RETAIN)
@@ -274,53 +271,57 @@ MQTT_RETAIN_MOTION_IMAGE=$(get_config services.mqtt.RETAIN_MOTION_IMAGE)
 # fi
 CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS', "qos": "'$MQTT_QOS'", '$RETAIN' "topic":"'$MQTT_PREFIX'/'$TOPIC_MOTION_IMAGE'","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'", "platform": "mqtt"}'
 $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+# Camera-setting entities point at the mqtt-config command surface
+# (cmnd/camera/<KEY>) and at the per-key state echoed by mqttv4
+# (stat/camera/<key>). They require services/mqtt.conf CONFIG_ENABLED=yes.
+# Commands are published non-retained: a retained cmnd would be re-executed
+# by mqtt-config at every reconnection.
+CAMERA_SWITCHES="
+SWITCH_ON|Switch Status|mdi:video
+SAVE_VIDEO_ON_MOTION|Save Video on Motion|mdi:content-save
+MOTION_DETECTION|Motion Detection|mdi:motion-sensor
+SOUND_DETECTION|Sound Detection|mdi:music-note
+LED|Status Led|mdi:led-on
+IR|IR Led|mdi:remote
+MIC|Microphone|mdi:microphone
+ROTATE|Rotate|mdi:monitor
+AI_HUMAN_DETECTION|AI Human Detection|mdi:human
+AI_VEHICLE_DETECTION|AI Vehicle Detection|mdi:car
+AI_ANIMAL_DETECTION|AI Animal Detection|mdi:paw
+FACE_DETECTION|Face Detection|mdi:face-recognition
+MOTION_TRACKING|Motion Tracking|mdi:radar
+BABY_CRYING_DETECT|Baby Crying Detect|mdi:baby-face-outline"
+CAMERA_SELECTS="
+SENSITIVITY|Sensitivity|mdi:tune|\"low\",\"medium\",\"high\"
+SOUND_SENSITIVITY|Sound Sensitivity|mdi:tune|\"30\",\"35\",\"40\",\"45\",\"50\",\"60\",\"70\",\"80\",\"90\"
+CRUISE|Cruise|mdi:rotate-3d-variant|\"no\",\"presets\",\"360\""
+
 if [ "$CAMERA_SETTING_ENABLE" == "yes" ]; then
-    if [ "$CAMERA_SETTING_RETAIN" == "1" ]; then
-        RETAIN='"retain":true, '
-    else
-        RETAIN=""
-    fi
-    if [ "$CAMERA_SETTING_QOS" == "1" ] || [ "$CAMERA_SETTING_QOS" == "2" ]; then
-        QOS='"qos":'$CAMERA_SETTING_QOS', '
-    else
-        QOS=""
-    fi
-    # Switch On
-    UNIQUE_NAME="Switch Status"
-    UNIQUE_ID=$IDENTIFIERS"-SWITCH_ON"
-    TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/SWITCH_ON/config
-    CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS','$QOS' '$RETAIN' "icon":"mdi:video","state_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'","command_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'/SWITCH_ON/set","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","value_template":"{{ value_json.SWITCH_ON }}","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
-    $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
-    # Sound Detection
-    UNIQUE_NAME="Sound Detection"
-    UNIQUE_ID=$IDENTIFIERS"-SOUND_DETECTION"
-    TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/SOUND_DETECTION/config
-    CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS', '$QOS' '$RETAIN' "icon":"mdi:music-note","state_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'","command_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'/SOUND_DETECTION/set","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","value_template":"{{ value_json.SOUND_DETECTION }}","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
-    $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
-    # try to remove baby_crying topic
-    TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/BABY_CRYING_DETECT/config
-    $MOSQUITTO_PUB -i $HOSTNAME -h $HOST -t $TOPIC -n
-    # Led
-    UNIQUE_NAME="Status Led"
-    UNIQUE_ID=$IDENTIFIERS"-LED"
-    TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/LED/config
-    CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS','$QOS' '$RETAIN' "icon":"mdi:led-on","state_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'","command_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'/LED/set","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","value_template":"{{ value_json.LED }}","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
-    $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
-    # IR
-    UNIQUE_NAME="IR Led"
-    UNIQUE_ID=$IDENTIFIERS"-IR"
-    TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/IR/config
-    CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS','$QOS' '$RETAIN' "icon":"mdi:remote","state_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'","command_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'/IR/set","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","value_template":"{{ value_json.IR }}","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
-    $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
-    # Rotate
-    UNIQUE_NAME="Rotate"
-    UNIQUE_ID=$IDENTIFIERS"-ROTATE"
-    TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/ROTATE/config
-    CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS','$QOS' '$RETAIN' "icon":"mdi:monitor","state_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'","command_topic":"'$MQTT_PREFIX'/'$CAMERA_SETTING_TOPIC'/ROTATE/set","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","value_template":"{{ value_json.ROTATE }}","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
-    $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+    echo "$CAMERA_SWITCHES" | while IFS='|' read -r KEY UNIQUE_NAME ICON; do
+        [ -z "$KEY" ] && continue
+        LKEY=$(echo "$KEY" | tr 'A-Z' 'a-z')
+        UNIQUE_ID=$IDENTIFIERS"-"$KEY
+        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/$KEY/config
+        CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS',"icon":"'$ICON'","state_topic":"'$MQTT_PREFIX'/stat/camera/'$LKEY'","command_topic":"'$MQTT_PREFIX'/cmnd/camera/'$KEY'","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
+        $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+    done
+    echo "$CAMERA_SELECTS" | while IFS='|' read -r KEY UNIQUE_NAME ICON OPTIONS; do
+        [ -z "$KEY" ] && continue
+        LKEY=$(echo "$KEY" | tr 'A-Z' 'a-z')
+        UNIQUE_ID=$IDENTIFIERS"-"$KEY
+        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/select/$IDENTIFIERS/$KEY/config
+        CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS',"icon":"'$ICON'","state_topic":"'$MQTT_PREFIX'/stat/camera/'$LKEY'","command_topic":"'$MQTT_PREFIX'/cmnd/camera/'$KEY'","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","options":['$OPTIONS'], "platform": "mqtt"}'
+        $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+    done
 else
-    for ITEM in SWITCH_ON SOUND_DETECTION BABY_CRYING_DETECT LED IR ROTATE; do
-        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/$ITEM/config
+    echo "$CAMERA_SWITCHES" | while IFS='|' read -r KEY UNIQUE_NAME ICON; do
+        [ -z "$KEY" ] && continue
+        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/$KEY/config
+        $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -n
+    done
+    echo "$CAMERA_SELECTS" | while IFS='|' read -r KEY UNIQUE_NAME ICON OPTIONS; do
+        [ -z "$KEY" ] && continue
+        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/select/$IDENTIFIERS/$KEY/config
         $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -n
     done
 fi

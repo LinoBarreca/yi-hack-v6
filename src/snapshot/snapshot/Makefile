@@ -56,10 +56,18 @@ define build_ffmpeg
     fi
 
    # build
-    if [ ! -f $(FFMPEG)/libavcodec/libavcodec.a ] || [ ! -f $(FFMPEG)/libavutil/libavutil.a ]; then \
+    # The .yi_recorder stamp encodes the current config: imggrabber's decode
+    # path (h264 decoder/demuxer/parser) PLUS the native recorder's needs
+    # (rtsp/mov/aac demux, mov/mp4/segment mux, tcp/udp/rtp/file protocols,
+    # h264_mp4toannexb/aac_adtstoasc bsf, network). One ffmpeg build serves both
+    # imggrabber (static libav*.a) and the shipped ffmpeg binary. Bumping the
+    # flags below? change the stamp name to force a clean reconfigure.
+    if [ ! -f $(FFMPEG)/.yi_recorder ]; then \
          cd $(FFMPEG); \
-        ./configure --enable-cross-compile --cross-prefix=$(CROSSPREFIX) --arch=armel --target-os=linux --prefix=$(CROSSPATH) --disable-ffplay --disable-ffprobe --disable-doc  --disable-decoders --enable-decoder=h264 --disable-encoders --disable-demuxers --enable-demuxer=h264 --disable-muxers --disable-protocols --disable-parsers --enable-parser=h264 --disable-filters --disable-bsfs --disable-indevs --disable-outdevs && \
-         make; \
+         make distclean 2>/dev/null || true; \
+        ./configure --enable-cross-compile --cross-prefix=$(CROSSPREFIX) --arch=armel --target-os=linux --prefix=$(CROSSPATH) --disable-ffplay --disable-ffprobe --disable-doc --disable-decoders --enable-decoder=h264 --disable-encoders --disable-demuxers --enable-demuxer=h264,rtsp,mov,aac --disable-muxers --enable-muxer=mov,mp4,segment --disable-protocols --enable-protocol=file,pipe,tcp,udp,rtp --disable-parsers --enable-parser=h264,aac --disable-filters --disable-bsfs --enable-bsf=h264_mp4toannexb,aac_adtstoasc,extract_extradata --disable-indevs --disable-outdevs --enable-network && \
+         make && \
+         touch .yi_recorder; \
          cd ..;\
     fi
 endef
