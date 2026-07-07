@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # Centralized config reader. Source this file (". get_config.sh") to define
 # get_config(). Replaces the ~10 duplicated, buggy local definitions of v5.

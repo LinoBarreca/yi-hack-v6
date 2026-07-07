@@ -55,7 +55,7 @@ Some files are **never** overwritten from the share:
 The flash **base** and the share/SD **payload** are each versioned. A single version
 governs the whole bundle (binaries **and** config schema). The camera applies a
 payload's config/binaries **only if** base and payload share the same `MAJOR.MINOR`
-(the patch level may differ, e.g. `0.1.0 ↔ 0.1.7` is fine, `0.1 ↔ 0.2` is not).
+(the patch level may differ, e.g. `6.0.1 ↔ 6.0.7` is fine, `6.1 ↔ 6.2` is not).
 
 If they don't match, the camera applies **nothing** from that payload and falls back
 to a minimal boot. This is deliberate: pushing `0.2.x` config onto a `0.1.x` base
@@ -161,7 +161,7 @@ a `yi-hack/` bundle:
 ```
 payload/                         (== /share in the container, == //FILESERVER/firmware)
   yi-hack/
-    version                      # bundle version, e.g. 0.1.0 (governs extra + config)
+    version                      # bundle version, e.g. 6.0.1 (governs extra + config)
     extra/                       # binaries, libs, full web UI (the heavy payload)
       bin/  lib/  www/  ...
     config/                      # centrally-managed config copied to flash at boot
@@ -194,7 +194,7 @@ the camera learn how to reach the share, then mount it.
 
    ```
    yi-hack/
-     version                     # MUST match the cameras' base MAJOR.MINOR (e.g. 0.1.0)
+     version                     # MUST match the cameras' base MAJOR.MINOR (e.g. 6.0)
      config/
        cifs.conf
    ```

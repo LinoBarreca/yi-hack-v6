@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 #
 # Stream a recorded mp4 from the output/record view. Used instead of a static
 # /record URL because recordings live on the output matrix destination

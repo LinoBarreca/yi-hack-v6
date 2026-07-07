@@ -192,15 +192,29 @@
                         </td>
                     </tr>
                     <tr class="row">
-                        <td>Force low resolution snapshot</td>
+                        <td>Snapshot resolution</td>
+                        <td>
+                            <div class="standard-select">
+                                <select data-conf="snapshot" data-key="RESOLUTION" id="SNAPSHOT_RESOLUTION">
+                                    <option value="high">High</option>
+                                    <option value="low">Low</option>
+                                </select>
+                            </div>
+                            <span class="switch-description">
+                                Motion/event snapshot resolution. Low uses less memory/CPU.
+                            </span>
+                        </td>
+                    </tr>
+                    <tr class="row">
+                        <td>Snapshot watermark</td>
                         <td>
                             <label class="switch small">
-                                <input type="checkbox" data-conf="snapshot" data-key="LOW"/>
+                                <input type="checkbox" data-conf="snapshot" data-key="WATERMARK"/>
                                 <span class="slider round"></span>
                                 <span class="switch-text"></span>
                             </label>
                             <span class="switch-description">
-                                Take low resolution snapshots only and no watermark (useful for avoiding memory problems).
+                                Overlay the timestamp watermark on the motion/event snapshot.
                             </span>
                         </td>
                     </tr>

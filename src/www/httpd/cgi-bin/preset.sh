@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 PTZ_CONF_FILE=/home/yi-hack/config/ptz_presets.conf
 PTZ_SCRIPT=/home/yi-hack/base/script/ptz_presets.sh

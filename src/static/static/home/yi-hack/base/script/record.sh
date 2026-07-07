@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # record.sh - native MP4 recorder. Remux the local RTSP stream (H264, plus AAC
 # audio when enabled) into segmented MP4 files on the output/record view

@@ -29,9 +29,9 @@ This firmware will add the following features:
   - [New, simplified file layout](docs/simplified-file-layout.md)
   - [Minimized flash wear](docs/reduced-flash-wear.md) (reduced unnecessary writes introduced by all the previous yi-hack)
   - [Updated busybox & wpa_supplicant](docs/updated-busybox-wpa.md) (more secure)
-  - [Ability to run without an SD card](docs/run-without-sd-card.md) (recovery http)
   - [Ability to load the firmware from a network share](docs/load-firmware-from-network-share.md) (configurable through the recovery http)
-  - [Ability to load some configurations](docs/shared-configuration.md) (user chooses which ones) from the network share to have the same configurations applied to all the cameras.
+  - [Recovery mode](docs/recovery-mode.md) (recovery http when SD is corrupt or network share has issues)
+  - [Ability to share configurations](docs/shared-configuration.md) (user chooses which ones) from the network share to have the same configurations applied to all the cameras.
   - [Native NVR](docs/native-nvr-recording.md) (just make sure your network is fast enough, if you have lots of cameras)
   - [Control the camera from Home Assistant / MQTT](docs/home-assistant-control.md) (LED, IR, microphone and more — no cloud)
 
@@ -40,8 +40,8 @@ This firmware will add the following features:
   - **MQTT** - detect motion directly from your home server!
   - WebServer - user-friendly stats and configurations.
   - SSH server -  _Enabled by default._
-  - Telnet server -  _Disabled by default._
-  - FTP server -  _Enabled by default._
+  - Telnet server -  _Disabled by default. Enabled in recovery mode._
+  - FTP server -  _Disabled by default._
   - Web server -  _Enabled by default._
   - The possibility to change some camera settings (copied from the official app):
     - camera on/off
@@ -60,14 +60,15 @@ This firmware will add the following features:
 Currently, this project supports the following cameras:
 | Camera | rootfs partition | home partition | Base Firmware | Remarks |
 | --- | --- | --- | --- | ---- |
-| **Yi Home** | rootfs_y18 | home_y18 | 1.8.7.0F_201809191400 | Firmware files required for the Yi Home camera. |
-| **Yi 1080p Home** | rootfs_y20 | home_y20 | 2.1.0.0E_201809191630 | Firmware files required for the Yi 1080p Home camera. |
-| **Yi Dome** | rootfs_v201 | home_v201 | 1.9.1.0J_201809191135 | Firmware files required for the Yi Dome camera. |
-| **Yi 1080p Dome** | rootfs_h20 | home_h20 | 1.9.2.0I_201812141405 | Firmware files required for the Yi 1080p Dome camera. |
-| **Yi 1080p Cloud Dome** | rootfs_y19 | home_y19 | 1.9.3.0E_201812141519 | Firmware files required for the Yi 1080p Cloud Dome camera. |
-| **Yi Outdoor** | rootfs_h30 | home_h30 | 3.0.0.0D_201809111054 | Firmware files required for the Yi Outdoor camera. |
+| **Yi Home** | rootfs_y18 | home_y18 | 1.8.7.0F_201809191400 | Coming later (no hardware) |
+| **Yi 1080p Home** | rootfs_y20 | home_y20 | 2.1.0.0E_201809191630 | Already supported (no releases yet, I'm developing on it) |
+| **Yi Dome** | rootfs_v201 | home_v201 | 1.9.1.0J_201809191135 | Coming later (no hardware) |
+| **Yi 1080p Dome** | rootfs_h20 | home_h20 | 1.9.2.0I_201812141405 | Coming next |
+| **Yi 1080p Cloud Dome** | rootfs_y19 | home_y19 | 1.9.3.0E_201812141519 | Coming next |
+| **Yi Outdoor** | rootfs_h30 | home_h30 | 3.0.0.0D_201809111054 | Coming later (no hardware) |
 
-A higher base firmware number than listed above means this project does not support your camera.
+A higher base firmware number than listed above means this project does not support your camera yet.
+Get in contact with me and I'll see what I can do.
 
 ## Getting Started
 1. Check that you have a correct Xiaomi Yi camera. (see the section above)
@@ -115,7 +116,7 @@ Alternative way:
 
 </p></details>
 
-3. Get the correct firmware files for your camera from the latest baseline release link: https://github.com/LinoBarreca/yi-hack-v6/releases/tag/0.1.0
+3. Get the correct firmware files for your camera from the latest baseline release link: https://github.com/LinoBarreca/yi-hack-v6/releases/tag/6.0.1
 
 4. Save both files `rootfs_xx` and `home_xx`, and the `yi-hack-v6` folder on the root path of the microSD card.
 
@@ -131,18 +132,25 @@ Alternative way:
 
 9. Go into the browser and access the web interface of the camera as a website.
 
-Depending upon your network setup, accessing the web interface with the hostname **may not work**. In this case, the IP address of the camera has to be found.
+**_IMPORTANT: The default hostname is the one with the QR-CODE on the device._**
+Scan the qrcode with your phone (not the app), you will obtain a text which *starts* with the letters under the QR.
 
+Access the web interface by entering that text `http://<full text in the qr>` in a web browser. e.g. `http://48USYJ5205FD6E6F`
+
+Since 06-Jul-2026 you can also create a DHCP reservation to provide the hostname.
+
+Depending upon your network setup, accessing the web interface with the hostname **may not work**.
+In this case, the IP address of the camera has to be found.
 This can be done from the App. Please open the app, and go to the Camera Settings --> Network Info --> IP Address.
-
 Access the web interface by entering the IP address of the camera in a web browser. e.g. `http://192.168.1.5`
-
-**_IMPORTANT: If you have multiple cameras. It is important to configure each camera with a unique hostname. Otherwise, the web interface will only be accessible by IP address._**
 
 10. Done! You are now successfully running yi-hack-v6!
 
 ## Unbrick your camera
-_TO DO - (It happened a few times and it's often possible to recover from it)_
+It should not happen, if the instructions are followed correctly.
+Usually a proper reflash will solve.
+If you were tinkering and destroyed a partition different from rootfs or homefs by launching a wrong command, extracting the partition from a different camera usually works (unless it's the vd1 which is unique per camera)..
+So please avoid playing with partitions if you do not have a backup.
 
 ## Troubleshooting
 
@@ -154,7 +162,7 @@ Ensure you are using the correct app (Yi Home) to set up the wifi connection. Fo
 the settings will be lost.
 
 ## Introducing pre-releases
-Please follow this [guide](https://github.com/LinoBarreca/yi-hack-v6/discussions/248#discussion-5090628) if you want to test new features and improvements
+No pre-releases yet. If you have a camera that I do not own and want to help, please get in contact with me.
 
 ## Acknowledgments
 Special thanks to the following people and projects, without them `yi-hack-v6` wouldn't be possible.
@@ -167,9 +175,6 @@ Special thanks to the following people and projects, without them `yi-hack-v6` w
 - @dvv - [Ideas for the RSTP stream](https://github.com/shadow-1/yi-hack-v3/issues/126)
 - @andy2301 - [Ideas for the RSTP rtsp and rtsp2301](https://github.com/xmflsct/yi-hack-1080p/issues/5#issuecomment-294326131)
 - @roleoroleo - [PTZ Implementation](https://github.com/roleoroleo/yi-hack-MStar)
-
-## Acknowledgments #2
-As much as TheCrypt0 has made it possible for the 'yi-hack-v4', the latest features are based on the work from:
 - @roleoroleo - [https://github.com/roleoroleo](https://github.com/roleoroleo)
 
 ---
@@ -177,6 +182,11 @@ As much as TheCrypt0 has made it possible for the 'yi-hack-v4', the latest featu
 **I AM NOT RESPONSIBLE FOR ANY USE OR DAMAGE THIS SOFTWARE MAY CAUSE. THIS IS INTENDED FOR EDUCATIONAL PURPOSES ONLY. USE AT YOUR OWN RISK.**
 ---
 ### DONATIONS
-**I HAVE BEEN ASKED FOR A LINK MULTIPLE TIMES; THEREFORE, PLEASE FOLLOW THE BELOW**
----
-[![paypal](https://www.paypalobjects.com/en_US/GB/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=K3V4PSH2CV9AA)
+...are well accepted and will be used to buy the hardware to extend the firmware to other cameras
+
+Please use 
+[SEPA (for Europe)](https://www.bunq.me/Lino)
+or
+[paypal (international)](https://www.paypal.me/linobarreca)
+
+Thank you :)

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # mount_cifs.sh - bootstrap CIFS mount for diskless (no-SD) operation.
 #

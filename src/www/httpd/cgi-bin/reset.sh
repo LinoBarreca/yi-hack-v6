@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 #
 # Factory reset of the managed configuration: delete the declarative/runtime
 # config files (system, recording, camera, services/*) and let check_conf.sh

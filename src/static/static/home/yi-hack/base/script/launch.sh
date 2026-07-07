@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# 0.1.0
+# 6.0.1
 #
 #  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
 #  Copyright (c) 2021-2023 alienatedsec - v5 specific

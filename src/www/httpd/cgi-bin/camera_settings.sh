@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 CONF_FILE="/home/yi-hack/config/camera.conf"
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # version_compat.sh - base <-> payload version handshake.
 #
@@ -12,7 +12,7 @@
 # (build_view.sh) we require the two to be COMPATIBLE.
 #
 # Rule: compatible iff base and payload share the same MAJOR.MINOR (the patch
-# level may differ, e.g. base 0.1.0 <-> payload 0.1.7 is OK; 0.1.x <-> 0.2.x is not).
+# level may differ, e.g. base 6.0.1 <-> payload 6.0.7 is OK; 6.1.x <-> 6.2.x is not).
 # A missing/empty version on either side -> NOT compatible (refuse; safer).
 #
 # Usage:  . version_compat.sh ; payload_compatible <payload_root>   # 0=ok, 1=no
@@ -23,7 +23,7 @@
 # Test override: BASE_VERSION_FILE
 : "${BASE_VERSION_FILE:=/home/yi-hack/version}"
 
-# echo the MAJOR.MINOR of a version string (e.g. "0.1.7" -> "0.1")
+# echo the MAJOR.MINOR of a version string (e.g. "6.0.7" -> "6.0")
 _ver_mm() { echo "$1" | cut -d. -f1,2; }
 
 payload_compatible() {

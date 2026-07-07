@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # check_conf.sh [base|extra] - seed default values into the flash config files.
 # For each file, any default key that is MISSING is appended; existing keys are
@@ -127,7 +127,8 @@ PARMS_PTZ="
 
 PARMS_SNAPSHOT="
 ENABLED=yes
-LOW=no"
+RESOLUTION=high
+WATERMARK=yes"
 
 PARMS_HTTPD="
 ENABLED=yes

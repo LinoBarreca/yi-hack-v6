@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 
 . /home/yi-hack/www/cgi-bin/validate.sh

@@ -1,6 +1,6 @@
 #!/bin/ash
 #
-# 0.1.0
+# 6.0.1
 #
 # Command line:
 # 	ash "/home/yi-hack/base/script/ftppush.sh" cron

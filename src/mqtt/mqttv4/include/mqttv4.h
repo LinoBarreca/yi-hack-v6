@@ -14,13 +14,15 @@
 #include "mqtt.h"
 #include "files.h"
 
-#define MQTTV4_VERSION      "0.1.0"
+#define MQTTV4_VERSION      "6.0.1"
 #define SYSTEM_CONF_FILE    "/home/yi-hack/config/system.conf"
 #define MQTTV4_CONF_FILE    "/home/yi-hack/config/services/mqtt.conf"
 #define IDENTITY_CONF_FILE  "/home/yi-hack/config/identity.conf"
 #define CAMERA_CONF_FILE    "/home/yi-hack/config/camera.conf"
 
-#define MQTTV4_SNAPSHOT     "export MOD=$(cat /home/app/.camver); /home/yi-hack/extra/bin/imggrabber -m $MOD -r low -w"
+// Motion/event snapshot: the wrapper reads RESOLUTION/WATERMARK from
+// config/services/snapshot.conf and invokes imggrabber with the right flags.
+#define MQTTV4_SNAPSHOT     "/home/yi-hack/base/script/take_snapshot.sh"
 
 #define TH_AVAILABLE 0
 #define TH_WAITING   1

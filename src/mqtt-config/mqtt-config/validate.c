@@ -14,7 +14,8 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
 
     /* snapshot (section = config/services/snapshot.conf) */
     { "services/snapshot", "ENABLED", "bool", "", "", "" , "", "", "" },
-    { "services/snapshot", "LOW", "bool", "", "", "" , "", "", "" },
+    { "services/snapshot", "RESOLUTION", "enum", "high", "low", "" , "", "", "" },
+    { "services/snapshot", "WATERMARK", "bool", "", "", "" , "", "", "" },
 
     /* httpd (section = config/services/httpd.conf) */
     { "services/httpd", "ENABLED", "bool", "", "", "" , "", "", "" },

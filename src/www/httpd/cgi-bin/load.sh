@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 # Conf
 CONF_FILE="etc/camera.conf"

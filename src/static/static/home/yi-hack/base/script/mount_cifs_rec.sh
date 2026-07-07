@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # mount_cifs_rec.sh - mount the READ-WRITE CIFS share used by the native recorder
 # (output.RECORD=CIFS). This is a SEPARATE share from the read-only firmware

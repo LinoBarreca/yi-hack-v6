@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 #
 # conf2mqtt.sh <section> - publish every key of config/<section>.conf to MQTT as
 # <prefix>/stat/<section>/<key>. <section> may be a nested path (e.g.

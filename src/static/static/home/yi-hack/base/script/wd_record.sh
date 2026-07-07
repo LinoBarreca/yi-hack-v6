@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # wd_record.sh - launch and supervise the native MP4 recorder (record.sh), and
 # pre-create the hour directories it writes into. ffmpeg's segment muxer has no

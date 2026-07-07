@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # apply_config.sh - apply managed config overrides from the payload share into the
 # flash config/. A config file present on the share is "managed
@@ -15,7 +15,7 @@
 #
 # EVERYTHING is version-gated: the flash base and the share payload must share the
 # same MAJOR.MINOR, else NOTHING is applied -> flash base+config stay ALIGNED (a newer
-# payload, e.g. 0.2.0, never pushes its config onto an older 0.1.0 base, which would
+# payload, e.g. 6.2.0, never pushes its config onto an older 6.0.1 base, which would
 # brick). No exemptions: a provisioning SD must carry a matching <root>/version. The SD's
 # version is local (SD mounted first), so even cifs.conf can be gated without a chicken-egg.
 #

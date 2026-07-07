@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 printf "Content-type: application/json\r\n\r\n"
 printf "{\n"

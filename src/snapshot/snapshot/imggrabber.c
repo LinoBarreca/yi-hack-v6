@@ -689,12 +689,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Check if snapshot is low res
-    if (access("/tmp/snapshot.low", F_OK ) == 0 ) {
-        fprintf(stderr, "Snapshot is low res and watermark is disabled\n");
-        resolution = RESOLUTION_LOW;
-        watermark = 0;
-    }
+    // Resolution/watermark come from the caller's -r/-w flags. The motion/event
+    // snapshot flags are derived from config/services/snapshot.conf by the
+    // take_snapshot.sh wrapper; the web CGI passes its own per-request flags.
 
     // Check if the process is already running
     pid_t my_pid = getpid();

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # Fill per-camera identity defaults for any value left blank. Runs at boot AFTER
 # apply_config + check_conf(extra) and BEFORE `hostname -F` and the MQTT daemons,

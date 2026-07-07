@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # Boot dispatcher. Lives in flash (base/script) and is launched by S20yi-hack after
 # build_view.sh has set up the logical view. Uses the fixed logical paths
@@ -256,10 +256,6 @@ fi
 
 if [[ $(get_config services.snapshot.ENABLED) == "no" ]] ; then
     touch /tmp/snapshot.disabled
-fi
-
-if [[ $(get_config services.snapshot.LOW) == "yes" ]] ; then
-    touch /tmp/snapshot.low
 fi
 
 RRTSP_MODEL=$MODEL_SUFFIX

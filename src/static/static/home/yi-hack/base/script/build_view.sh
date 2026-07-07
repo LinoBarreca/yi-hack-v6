@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # build_view.sh - build the logical view /home/yi-hack/{extra,output}.
 #

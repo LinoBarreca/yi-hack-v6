@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 # Use. Available variables:
 # "oldness" variable. Defines which video to retrieve. 

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0
+# 6.0.1
 
 
 REMOTE_VERSION_FILE=/tmp/.hackremotever

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 0.1.0 - yi-hack-v6
+# 6.0.1 - yi-hack-v6
 #
 # wifi_up.sh - bring WiFi up BEFORE mount_cifs, decoupled from the stock 'dispatch'.
 #
