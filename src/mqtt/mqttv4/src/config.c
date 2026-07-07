@@ -118,7 +118,7 @@ void config_parse()
         fgets(buf, MAX_LINE_LENGTH, fp);
         if (buf[0]!='#') // ignore the comments
         {
-            parsed=sscanf(buf, "%[^=] = %s", key, value);
+            parsed=sscanf(buf, "%127[^=] = %127[^\n]", key, value);
             if (parsed==2 && fconf_handler!=NULL)
                 (*fconf_handler)(key, value);
         }
@@ -158,7 +158,7 @@ int config_replace(char *filename, char *key, char *value)
         line = fgets(buf, MAX_LINE_LENGTH, fpf);
         if (line == NULL) break;
         if (buf[0] != '#') {
-            parsed = sscanf(buf, "%[^=] = %s", oldkey, oldvalue);
+            parsed = sscanf(buf, "%127[^=] = %127[^\n]", oldkey, oldvalue);
             if((parsed == 2) && (strcasecmp(ukey, oldkey) == 0)) {
                 if (strcmp(oldvalue, value) == 0) {
                     unchanged = 1;   /* same value already on flash -> no rewrite needed */

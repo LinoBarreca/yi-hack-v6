@@ -96,13 +96,16 @@ PARMS_CAMERA="
 SWITCH_ON=yes
 SAVE_VIDEO_ON_MOTION=yes
 SENSITIVITY=low
-SOUND_DETECTION=no
 SOUND_SENSITIVITY=80
-BABY_CRYING_DETECT=no
 LED=yes
 ROTATE=no
 IR=yes
-MIC=yes"
+MIC=yes
+SOUND_DETECTION=no
+BABY_CRYING_DETECT=no
+AI_HUMAN_DETECTION=no
+AI_VEHICLE_DETECTION=no
+AI_ANIMAL_DETECTION=no"
 
 # Per-camera identity: shipped blank on purpose. set_defaults.sh (run from
 # system.sh) fills any empty value from the factory serial on first boot.

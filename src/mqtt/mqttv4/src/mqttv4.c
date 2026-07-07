@@ -663,7 +663,7 @@ static void handle_config(const char *key, const char *value)
 
     // If you think to have a better implementation.. PRs are welcome!
 
-    if(strcmp(key, "MQTT")==0)
+    if(strcmp(key, "ENABLED")==0)
     {
         if (strcasecmp("yes", value) == 0)
             conf.enable = 1;

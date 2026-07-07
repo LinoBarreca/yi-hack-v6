@@ -23,10 +23,11 @@ LD_LIBRARY_PATH="/usr/local/lib:/home/hisiko/hisilib:/lib:/usr/lib:/home/lib:/ho
 export PATH
 export LD_LIBRARY_PATH
 
+alias ll="ls -al"
+
 # ANSI COLORS
 CRE="
 [K"
-NORMAL="[0;39m"
 RED="[1;31m"
 GREEN="[1;32m"
 YELLOW="[1;33m"
@@ -34,6 +35,7 @@ BLUE="[1;34m"
 MAGENTA="[1;35m"
 CYAN="[1;36m"
 WHITE="[1;37m"
+NORMAL="[0;39m"
 
 umask 022
 
