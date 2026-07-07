@@ -29,7 +29,9 @@ pushd openssl-1.1.1w
 #make CC=arm-hisiv300-linux-gcc LD=arm-hisiv300-linux-ld RANLIB=arm-hisiv300-linux-ranlib MAKEDEPPROG=arm-hisiv300-linux-gcc PROCESSOR=ARM install  
 
 ./Configure --cross-compile-prefix=arm-hisiv300-linux- linux-generic32 -DL_ENDIAN -no-async --prefix=/${PREFIX} --openssldir=/${PREFIX}
-make install
+# install_sw (not install): only libs/headers/binaries, skipping install_docs -
+# OpenSSL's man3/HTML install is a huge, slow (qemu) step and nothing needs it.
+make install_sw
 
 popd
 

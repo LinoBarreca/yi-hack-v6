@@ -85,7 +85,18 @@ echo ""
 # Hisilicon Linux, Cross-Toolchain PATH
 export PATH="/opt/arm-hisiv300-linux/bin:$PATH"
 
-rm -rf "$(get_script_dir)/../build/"
+SRC_DIR=$(get_script_dir)/../src
+SELECTED_MODULE=$1
+
+# Full build (no module arg) wipes build/ for a clean tree. A targeted build
+# (compile.sh <module>) KEEPS build/ and only rebuilds/reinstalls that module's
+# artifacts, so a single module can be iterated - and its output deployed - without
+# recompiling everything.
+if [ -z "$SELECTED_MODULE" ]; then
+    rm -rf "$(get_script_dir)/../build/"
+else
+    echo "SELECTED_MODULE: $SELECTED_MODULE (incremental: keeping existing build/)"
+fi
 
 mkdir -p "$(get_script_dir)/../build/home"
 mkdir -p "$(get_script_dir)/../build/rootfs"
@@ -93,12 +104,6 @@ mkdir -p "$(get_script_dir)/../build/rootfs"
 # — NOT homefs/flash, which only ships base binaries + www-min (rescue).
 # The packager wraps this into the share structure (yi-hack/extra/) and adds version.
 mkdir -p "$(get_script_dir)/../build/extra"
-
-SRC_DIR=$(get_script_dir)/../src
-SELECTED_MODULE=$1
-if [ -n ${SELECTED_MODULE} ]; then
-    echo "SELECTED_MODULE: $SELECTED_MODULE"
-fi
 
 # Modules deliberately NOT built (space-separated basenames).
 #   uClibc++ : source unavailable (git.busybox.net TLS cert expired) and not linked by
@@ -118,7 +123,7 @@ for SUB_DIR in $SRC_DIR/* ; do
         case " $SKIP_MODULES " in
             *" $(basename "$SUB_DIR") "*) echo "Skip $SUB_DIR (disabled in SKIP_MODULES)"; continue ;;
         esac
-        if [ -n ${SELECTED_MODULE} ]; then
+        if [ -n "$SELECTED_MODULE" ]; then
             if [[ $SUB_DIR == *"$SELECTED_MODULE"* ]]; then
                 compile_module $(normalize_path "$SUB_DIR") || exit 1
             else

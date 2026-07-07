@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023 roleo.
+ * Copyright (c) 2026 Lino Barreca
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +18,6 @@
 /*
  * Read the last h264 i-frame from the buffer and convert it using libavcodec
  * and libjpeg.
- * The position of the frame is written in /tmp/iframe.idx
  */
 
 #define _GNU_SOURCE
@@ -188,16 +188,19 @@ long long current_timestamp() {
     return milliseconds;
 }
 
-int frame_decode(unsigned char *outbuffer, unsigned char *p, int length)
+// Decode the h264 buffer p (SPS+PPS+IDR, padded with FF_INPUT_BUFFER_PADDING_SIZE)
+// and return a malloc'ed YUV buffer (Y plane followed by interleaved UV).
+// Takes ownership of p and frees it as soon as the decoder has copied it,
+// so the peak memory usage stays as low as possible. Returns NULL on error.
+unsigned char *frame_decode(unsigned char *p, int length, int width, int height)
 {
     const AVCodec *codec;
     AVCodecContext *c= NULL;
     AVFrame *picture;
-    int got_picture, len;
-    FILE *fOut;
-    uint8_t *inbuf;
+    unsigned char *outbuffer;
+    int len;
     AVPacket avpkt;
-    int i, j, size;
+    int i, j;
 
 //////////////////////////////////////////////////////////
 //                    Reading H264                      //
@@ -210,72 +213,84 @@ int frame_decode(unsigned char *outbuffer, unsigned char *p, int length)
     codec = avcodec_find_decoder(AV_CODEC_ID_H264);
     if (!codec) {
         if (debug) fprintf(stderr, "Codec h264 not found\n");
-        return -2;
+        free(p);
+        return NULL;
     }
 
     c = avcodec_alloc_context3(codec);
     picture = av_frame_alloc();
 
-    // Removed check for truncated capabilities and flag assignment
+    // Auto-threading allocates one full set of frame buffers per thread but our cameras do not have that much ram.
+    // Probably would not change much as the CPU on these toys is not that powerful and would auto-chooses one thread anyway
+    // TODO: Check if this improves the situation and eventually make this parametric (per camera)
+    //c->thread_count = 1;
 
     if (avcodec_open2(c, codec, NULL) < 0) {
         if (debug) fprintf(stderr, "Could not open codec h264\n");
-        av_free(c);
-        return -2;
+        av_frame_free(&picture);
+        avcodec_free_context(&c);
+        free(p);
+        return NULL;
     }
 
-
-    // inbuf is already allocated in the main function
-    inbuf = p;
-    memset(inbuf + length, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-
-    // Get only 1 frame
-    memcpy(inbuf, p, length);
+    memset(p + length, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     avpkt.size = length;
-    avpkt.data = inbuf;
+    avpkt.data = p;
 
     // Decode frame
     if (debug) fprintf(stderr, "Decode frame\n");
-    if (c->codec_type == AVMEDIA_TYPE_VIDEO ||
-         c->codec_type == AVMEDIA_TYPE_AUDIO) {
-
-        len = avcodec_send_packet(c, &avpkt);
-        if (len < 0 && len != AVERROR(EAGAIN) && len != AVERROR_EOF) {
-            if (debug) fprintf(stderr, "Error decoding frame\n");
-            return -2;
-        } else {
-            if (len >= 0)
-                avpkt.size = 0;
-            len = avcodec_receive_frame(c, picture);
-            if (len >= 0)
-                got_picture = 1;
-        }
+    len = avcodec_send_packet(c, &avpkt);
+    // The packet is not refcounted so the decoder copied it: the h264
+    // buffer can be released before the frame-sized allocations below
+    free(p);
+    p = NULL;
+    if (len < 0 && len != AVERROR(EAGAIN) && len != AVERROR_EOF) {
+        if (debug) fprintf(stderr, "Error decoding frame\n");
+        av_frame_free(&picture);
+        avcodec_free_context(&c);
+        return NULL;
     }
-    if(!got_picture) {
+    len = avcodec_receive_frame(c, picture);
+
+    if(len < 0) {
         if (debug) fprintf(stderr, "No input frame\n");
         av_frame_free(&picture);
-        avcodec_close(c);
-        av_free(c);
-        return -2;
+        avcodec_free_context(&c);
+        return NULL;
     }
 
+    if ((c->width != width) || (c->height != height)) {
+        fprintf(stderr, "Unexpected frame size %dx%d (expected %dx%d)\n", c->width, c->height, width, height);
+        av_frame_free(&picture);
+        avcodec_free_context(&c);
+        return NULL;
+    }
+
+    // The decoded frame is refcounted and survives the context: free the
+    // decoder (reference frames, tables) before allocating the output
+    // buffer to lower the peak memory usage
+    if (debug) fprintf(stderr, "Cleaning ffmpeg memory\n");
+    avcodec_free_context(&c);
+
     if (debug) fprintf(stderr, "Writing yuv buffer\n");
-    memset(outbuffer, 0x80, c->width * c->height * 3 / 2);
-    memcpy(outbuffer, picture->data[0], c->width * c->height);
-    for(i=0; i<c->height/2; i++) {
-        for(j=0; j<c->width/2; j++) {
-            outbuffer[c->width * c->height + c->width * i +  2 * j] = *(picture->data[1] + i * picture->linesize[1] + j);
-            outbuffer[c->width * c->height + c->width * i +  2 * j + 1] = *(picture->data[2] + i * picture->linesize[2] + j);
+    outbuffer = (unsigned char *) malloc(width * height * 3 / 2);
+    if (outbuffer == NULL) {
+        fprintf(stderr, "Unable to allocate memory\n");
+        av_frame_free(&picture);
+        return NULL;
+    }
+    for(i = 0; i < height; i++) {
+        memcpy(outbuffer + width * i, picture->data[0] + i * picture->linesize[0], width);
+    }
+    for(i = 0; i < height / 2; i++) {
+        for(j = 0; j < width / 2; j++) {
+            outbuffer[width * height + width * i +  2 * j] = *(picture->data[1] + i * picture->linesize[1] + j);
+            outbuffer[width * height + width * i +  2 * j + 1] = *(picture->data[2] + i * picture->linesize[2] + j);
         }
     }
 
-    // Clean memory
-    if (debug) fprintf(stderr, "Cleaning ffmpeg memory\n");
     av_frame_free(&picture);
-    avcodec_close(c);
-    av_free(c);
-
-    return 0;
+    return outbuffer;
 }
 
 
@@ -366,7 +381,7 @@ void print_usage(char *prog_name)
     fprintf(stderr, "\t-r, --res RES                    Set resolution: \"low\" or \"high\" (default \"high\")\n");
     fprintf(stderr, "\t    --width WIDTH                Set width in pixel (alternative to res)\n");
     fprintf(stderr, "\t    --height HIGHT               Set height in pixel (alternative to res)\n");
-    fprintf(stderr, "\t-m, --model MODEL                Select cam model: yi_home, yi_home_1080p, yi_dome_1080p, yi_cloud_dome_1080p, yi_dome or yi_outdoor\n");
+    fprintf(stderr, "\t-m, --model MODEL                Select cam model: yi_home, yi_home_1080p, yi_dome_1080p, yi_cloud_dome_1080p, yi_dome or yi_outdoor (or use the code model, already known in the firmware)\n");
     fprintf(stderr, "\t    --table_offset VAL           Set the offset of the table for the resolution selected\n");
     fprintf(stderr, "\t    --table_record_size VAL      Set the size of the record in the table\n");
     fprintf(stderr, "\t    --table_record_num VAL       Set the number of record in the table\n");
@@ -485,7 +500,11 @@ int main(int argc, char **argv) {
             break;
 
         case 'm':
-            if (strcasecmp("yi_home", optarg) == 0) {
+            // Accept both the model name and the firmware suffix (README §models:
+            // y18=Yi Home, y20=Yi 1080p Home, y19=Yi 1080p Cloud Dome). .camver ships
+            // the suffix (e.g. "y20"), so match it here instead of silently falling
+            // back to the default set.
+            if (strcasecmp("yi_home", optarg) == 0 || strcasecmp("y18", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_HOME;
                 table_low_offset = TABLE_LOW_OFFSET_YI_HOME;
                 table_record_size = TABLE_RECORD_SIZE_YI_HOME;
@@ -501,7 +520,7 @@ int main(int argc, char **argv) {
                 h_low = H_LOW_YI_HOME;
                 w_high = W_HIGH_YI_HOME;
                 h_high = H_HIGH_YI_HOME;
-            } else if (strcasecmp("yi_home_1080p", optarg) == 0) {
+            } else if (strcasecmp("yi_home_1080p", optarg) == 0 || strcasecmp("y20", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_HOME_1080P;
                 table_low_offset = TABLE_LOW_OFFSET_YI_HOME_1080P;
                 table_record_size = TABLE_RECORD_SIZE_YI_HOME_1080P;
@@ -517,7 +536,7 @@ int main(int argc, char **argv) {
                 h_low = H_LOW_YI_HOME_1080P;
                 w_high = W_HIGH_YI_HOME_1080P;
                 h_high = H_HIGH_YI_HOME_1080P;
-            } else if (strcasecmp("yi_dome_1080p", optarg) == 0) {
+            } else if (strcasecmp("yi_dome_1080p", optarg) == 0 || strcasecmp("h20", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_DOME_1080P;
                 table_low_offset = TABLE_LOW_OFFSET_YI_DOME_1080P;
                 table_record_size = TABLE_RECORD_SIZE_YI_DOME_1080P;
@@ -533,7 +552,7 @@ int main(int argc, char **argv) {
                 h_low = H_LOW_YI_DOME_1080P;
                 w_high = W_HIGH_YI_DOME_1080P;
                 h_high = H_HIGH_YI_DOME_1080P;
-            } else if (strcasecmp("yi_cloud_dome_1080p", optarg) == 0) {
+            } else if (strcasecmp("yi_cloud_dome_1080p", optarg) == 0 || strcasecmp("y19", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_CLOUD_DOME_1080P;
                 table_low_offset = TABLE_LOW_OFFSET_YI_CLOUD_DOME_1080P;
                 table_record_size = TABLE_RECORD_SIZE_YI_CLOUD_DOME_1080P;
@@ -549,7 +568,7 @@ int main(int argc, char **argv) {
                 h_low = H_LOW_YI_CLOUD_DOME_1080P;
                 w_high = W_HIGH_YI_CLOUD_DOME_1080P;
                 h_high = H_HIGH_YI_CLOUD_DOME_1080P;
-            } else if (strcasecmp("yi_dome", optarg) == 0) {
+            } else if (strcasecmp("yi_dome", optarg) == 0 || strcasecmp("v201", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_DOME;
                 table_low_offset = TABLE_LOW_OFFSET_YI_DOME;
                 table_record_size = TABLE_RECORD_SIZE_YI_DOME;
@@ -565,7 +584,7 @@ int main(int argc, char **argv) {
                 h_low = H_LOW_YI_DOME;
                 w_high = W_HIGH_YI_DOME;
                 h_high = H_HIGH_YI_DOME;
-            } else if (strcasecmp("yi_outdoor", optarg) == 0) {
+            } else if (strcasecmp("yi_outdoor", optarg) == 0 || strcasecmp("h30", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_OUTDOOR;
                 table_low_offset = TABLE_LOW_OFFSET_YI_OUTDOOR;
                 table_record_size = TABLE_RECORD_SIZE_YI_OUTDOOR;
@@ -836,13 +855,14 @@ int main(int argc, char **argv) {
                 bufferh264_size += frame_length;
 
                 if (frame_type_sum == 20) {
-                    if (debug) fprintf(stderr, "%lld - frame found, exit loop\n", current_timestamp);
+                    if (debug) fprintf(stderr, "%lld - frame found, exit loop\n", current_timestamp());
                     // We saved SPS, PPS and I-FRAME: exit loop and create JPEG image
                     break;
                 }
             } else {
                 if (bufferh264 != NULL) {
                     free(bufferh264);
+                    bufferh264 = NULL;
                     bufferh264_size = 0;
                 }
                 frame_type_sum = 0;
@@ -870,21 +890,25 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Error, buffer is empty\n");
         return -5;
     }
+
+    // The h264 frame is already copied to bufferh264: unmap the buffer file
+    // before decoding to lower the peak memory usage
+    if (munmap(addr, buf_size) == -1) {
+        if (debug) fprintf(stderr, "Error munmapping file\n");
+    } else {
+        if (debug) fprintf(stderr, "Unmapping file %s, size %d, from %08x\n", BUFFER_FILE, buf_size, (unsigned int) addr);
+    }
+
     // Add FF_INPUT_BUFFER_PADDING_SIZE to make the size compatible with ffmpeg conversion
     bufferh264 = (unsigned char *) realloc(bufferh264, bufferh264_size + FF_INPUT_BUFFER_PADDING_SIZE);
 
-    bufferyuv = (unsigned char *) malloc(width * height * 3 / 2);
-    if (bufferyuv == NULL) {
-        fprintf(stderr, "Unable to allocate memory\n");
-        return -6;
-    }
-
     if (debug) fprintf(stderr, "Decoding h264 frame\n");
-    if(frame_decode(bufferyuv, bufferh264, bufferh264_size) < 0) {
+    // frame_decode takes ownership of bufferh264 and frees it
+    bufferyuv = frame_decode(bufferh264, bufferh264_size, width, height);
+    if (bufferyuv == NULL) {
         fprintf(stderr, "Error decoding h264 frame\n");
         return -7;
     }
-    free(bufferh264);
 
     if (watermark) {
         if (debug) fprintf(stderr, "Adding watermark\n");
@@ -908,13 +932,6 @@ int main(int argc, char **argv) {
     }
 
     free(bufferyuv);
-
-    // Unmap file from memory
-    if (munmap(addr, buf_size) == -1) {
-        if (debug) fprintf(stderr, "Error munmapping file\n");
-    } else {
-        if (debug) fprintf(stderr, "Unmapping file %s, size %d, from %08x\n", BUFFER_FILE, buf_size, (unsigned int) addr);
-    }
 
     return 0;
 }
