@@ -3,23 +3,17 @@
 # 6.0.1
 
 if [ -d "/usr/yi-hack" ]; then
-    YI_HACK_V5_PREFIX="/usr"
+    YI_HACK_V6_PREFIX="/usr"
     YI_PREFIX="/home"
-    UDHCPC_SCRIPT_DEST="/home/default.script"
 elif [ -d "/home/yi-hack" ]; then
-    YI_HACK_V5_PREFIX="/home"
+    YI_HACK_V6_PREFIX="/home"
     YI_PREFIX="/home/app"
     YI_BASE="/home/base/tools"
     YI_LIB="/home/lib"
-    UDHCPC_SCRIPT_DEST="/home/app/script/default.script"
 fi
 
-ARCHIVE_FILE="$YI_HACK_V5_PREFIX/yi-hack/yi-hack.7z"
-DESTDIR="$YI_HACK_V5_PREFIX/yi-hack"
-
-DHCP_SCRIPT_DEST="/home/app/script/wifidhcp.sh"
-UDHCP_SCRIPT="$YI_HACK_V5_PREFIX/yi-hack/base/script/default.script"
-DHCP_SCRIPT="$YI_HACK_V5_PREFIX/yi-hack/base/script/wifidhcp.sh"
+ARCHIVE_FILE="$YI_HACK_V6_PREFIX/yi-hack/yi-hack.7z"
+DESTDIR="$YI_HACK_V6_PREFIX/yi-hack"
 
 files=`find $YI_PREFIX -maxdepth 1 -name "*.7z" | awk 'END { print NR }'`
 if [ $files -gt 0 ]; then
@@ -44,20 +38,11 @@ if [ -f $ARCHIVE_FILE ]; then
 	rm $ARCHIVE_FILE
 fi
 
-if [ ! -f $YI_PREFIX/cloudAPI_real ]; then
-	mv $YI_PREFIX/cloudAPI $YI_PREFIX/cloudAPI_real
-	cp $YI_HACK_V5_PREFIX/yi-hack/base/script/cloudAPI $YI_PREFIX/
-	cp $YI_HACK_V5_PREFIX/yi-hack/base/script/cloudAPI_fake $YI_PREFIX/
-        rm $UDHCPC_SCRIPT_DEST
-        cp $UDHCP_SCRIPT $UDHCPC_SCRIPT_DEST
-	if [ -f $DHCP_SCRIPT_DEST ]; then
-		rm $DHCP_SCRIPT_DEST
-		cp $DHCP_SCRIPT $DHCP_SCRIPT_DEST
-	fi
-fi
-
 # config/crontabs and config/dropbear ship (empty) in the home image at build time - no runtime mkdir.
 
-# NOTE: patching the stock init scripts (comment cloud daemons, swappiness, rtc) is no longer
-# done here at runtime - it is done at BUILD TIME in scripts/pack_fw.sh (patch_stock_init),
-# so the result is baked into and verifiable in the flashed image.
+# NOTE: the "first-boot file placement" is no longer done here at runtime - it is baked at BUILD
+# TIME in scripts/pack_fw.sh, so the result is shipped in and verifiable from the flashed image:
+#   - patch_stock_init:  comment out stock cloud daemons, swappiness, rtc
+#   - bake_app_overlays: stock cloudAPI -> cloudAPI_real; install our cloudAPI/cloudAPI_fake +
+#                        udhcpc/dhcp scripts into /home/app.
+# This script now only extracts the *.7z shipped compressed (will be removed next).

@@ -205,6 +205,29 @@ if [ \"\$(sed -n 's/^DEBUG_LOG=//p' /home/yi-hack/config/system.conf 2>/dev/null
 fi"
 }
 
+# Bake the cloudAPI + udhcpc "first-boot file placement" into the home image at BUILD time.
+# It used to run at runtime in system_init.sh (gated on cloudAPI_real not existing). Same
+# rationale as patch_stock_init: the result is shipped in and verifiable from the flashed image,
+# and the camera does no first-boot dance. Neuters the stock cloud (our cloudAPI wrapper calls
+# cloudAPI_fake when DISABLE_CLOUD=yes, else cloudAPI_real) and installs our udhcpc/dhcp scripts.
+# cloudAPI* / default.script are NOT *.sh, so the later blanket chmod skips them -> chmod here.
+bake_app_overlays() {
+    local h="$1" s="$1/yi-hack/base/script"
+    log "$MODEL: baking cloudAPI + udhcpc overlays into /home/app (was runtime first-boot)..."
+    [ -f "$s/cloudAPI" ] && [ -f "$s/cloudAPI_fake" ] || die "bake_app_overlays: cloudAPI source missing in $s"
+    # stock cloudAPI -> cloudAPI_real (idempotent), then our wrapper + fake
+    [ -f "$h/app/cloudAPI" ] && [ ! -f "$h/app/cloudAPI_real" ] && mv "$h/app/cloudAPI" "$h/app/cloudAPI_real"
+    cp "$s/cloudAPI"      "$h/app/cloudAPI"
+    cp "$s/cloudAPI_fake" "$h/app/cloudAPI_fake"
+    chmod 0755 "$h/app/cloudAPI" "$h/app/cloudAPI_fake"
+    [ -f "$h/app/cloudAPI_real" ] && chmod 0755 "$h/app/cloudAPI_real"
+    # our udhcpc + dhcp scripts into /home/app/script
+    cp "$s/default.script" "$h/app/script/default.script"; chmod 0755 "$h/app/script/default.script"
+    if [ -f "$h/app/script/wifidhcp.sh" ]; then
+        cp "$s/wifidhcp.sh" "$h/app/script/wifidhcp.sh"; chmod 0755 "$h/app/script/wifidhcp.sh"
+    fi
+}
+
 # Build a jffs2 from $srcdir, then wrap it as the uImage U-Boot's do_auto_sd_update
 # expects: file named <type>_<MODEL> (no extension), type=filesystem, comp=none.
 make_partition_image() {
@@ -266,6 +289,7 @@ pack_model() {
 
     # --- Step 4: patch stock init scripts (build time -> verifiable in the image) ---
     patch_stock_init "$IMG_DIR/home"
+    bake_app_overlays "$IMG_DIR/home"
 
     # --- Step 5: remove orphan uClibc copy (stock rootfs already has these in /lib) ---
     log "$MODEL: removing yi-hack/lib/ (uClibc duplicate, stock has /lib/)..."
