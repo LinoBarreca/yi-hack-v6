@@ -161,6 +161,59 @@ class FS:
                 skipped_dangling.append((d, detail))
         return {"found_dir": None, "kind": "notfound", "target": None, "skipped": skipped_dangling}
 
+    def is_exec(self, target, kind):
+        if kind == "compressed":
+            return True   # best effort: assume the .7z expands to a +x file
+        try:
+            return bool(os.stat(target).st_mode & 0o111)
+        except OSError:
+            return False
+
+    def resolve_matrix(self, cmd, path_list):
+        """Full PATH scan implementing the shadowing matrix:
+          - no candidate anywhere            -> outcome 'notfound'
+          - exactly one, executable          -> 'ok'
+          - >=2 executable on PATH           -> 'ok' + dup=True (first wins, flag)
+          - a non-exec candidate BEFORE the first executable one -> 'ok' + shadow=True
+          - candidate(s) exist but none +x   -> 'nonexec' (would fail at exec)
+        `effective` = (dir, target, kind) the shell would actually run (first +x), or the
+        first real candidate when none is executable. `cands` lists every hit for the report."""
+        cands = []   # (dir, kind, target, is_exec)
+        for d in path_list:
+            cand = os.path.join(d, cmd)
+            loc = self.to_image(cand)
+            if loc is None:
+                continue
+            if not (os.path.lexists(loc) or os.path.lexists(loc + ".7z")):
+                continue
+            kind, detail = self.realtarget(cand)
+            if kind == "dangling":
+                cands.append((d, "dangling", detail, False)); continue
+            cands.append((d, kind, detail, self.is_exec(detail, kind)))
+        real = [c for c in cands if c[1] in ("file", "compressed")]
+        execs = [c for c in real if c[3]]
+        if not real:
+            return {"cands": cands, "effective": None, "outcome": "notfound",
+                    "shadow": False, "dup": False}
+        if execs:
+            eff = execs[0]
+            # A duplicate only matters if the other executables are DIFFERENT real files
+            # (the busybox farm - base/bin/* and extra/bin/* both -> one busybox - is by
+            # design, not an accident, so it is not flagged).
+            def _rp(t):
+                try:
+                    return os.path.realpath(t)
+                except OSError:
+                    return t
+            distinct = {_rp(e[2]) for e in execs}
+            is_bb = os.path.basename(eff[2]) == "busybox"
+            shadow = real.index(eff) > 0 and not is_bb   # a real non-exec candidate precedes it
+            return {"cands": cands, "effective": (eff[0], eff[2], eff[1]),
+                    "outcome": "ok", "shadow": shadow, "dup": len(distinct) > 1 and not is_bb}
+        first = real[0]
+        return {"cands": cands, "effective": (first[0], first[2], first[1]),
+                "outcome": "nonexec", "shadow": False, "dup": False}
+
 
 # ---------------------------------------------------------------------------
 # Reporting primitives
@@ -288,6 +341,415 @@ def check_cmd(fs, cmd, path_list, critical=True, label=""):
         out(f"      ok   {cmd:<14} -> {r['found_dir']}  [{short(r['target'])}]{extra}{skipnote}  {label}")
     else:
         (err if critical else warn)(f"COMMAND NOT FOUND ON PATH: {cmd}{skipnote}  {label}")
+
+
+# ===========================================================================
+# PARSER-DRIVEN LAUNCH ANALYSIS
+# Read each boot script line by line, find every command it launches, resolve
+# WHERE it lands on the PATH active at that point, and recurse into launched
+# scripts. Nothing is hardcoded except the kernel entry points (/etc/init.d/S*);
+# the order and the launches all come from parsing the real scripts.
+# ===========================================================================
+import re, shlex   # re is also imported below for the trace section (idempotent)
+
+# Shell keywords that introduce structure (not program launches).
+KW = {"if", "then", "elif", "else", "fi", "while", "until", "for", "do", "done",
+      "case", "esac", "in", "{", "}", "(", ")", "!", "time", "function", "select",
+      "[[", "]]", "then;", "do;"}
+# Builtins / non-launching words: presence as the command word = no external exec.
+BUILTINS = {"cd", "export", "unset", "echo", "printf", "read", "local", "set",
+    "shift", "return", "exit", "break", "continue", "eval", "trap", "wait", "umask",
+    "ulimit", "true", "false", ":", "test", "[", "alias", "unalias", "type", "hash",
+    "pwd", "readonly", "getopts", "let", "declare", "typeset", "times", "fg", "bg",
+    "jobs", "logout", "help", "enable", "builtin", "printenv"}
+INTERP = {"sh", "bash", "ash", "dash"}   # `sh SCRIPT` -> SCRIPT is launched (a new shell)
+
+def _strip_heredocs(lines):
+    """Drop here-doc BODIES (keep the command line) so the parser never reads a heredoc
+    payload as shell code."""
+    res = []; i = 0; n = len(lines)
+    while i < n:
+        ln = lines[i]; res.append(ln)
+        m = re.search(r'<<-?\s*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1', ln)
+        if m and "<<<" not in ln:
+            delim = m.group(2); i += 1
+            while i < n:
+                if lines[i].strip() == delim:
+                    break
+                i += 1
+        i += 1
+    return res
+
+def _logical_lines(lines):
+    """Join backslash line-continuations; yield whole logical lines (no trailing \\n)."""
+    buf = ""
+    for ln in lines:
+        ln = ln.rstrip("\n")
+        if buf:
+            ln = buf + " " + ln.lstrip(); buf = ""
+        if ln.endswith("\\") and not ln.endswith("\\\\"):
+            buf = ln[:-1]; continue
+        yield ln
+
+_SUBST = re.compile(r'\$\((?P<a>[^()]*(?:\([^()]*\)[^()]*)*)\)|`(?P<b>[^`]*)`')
+def _extract_substs(text):
+    """Pull $(...) / `...` command substitutions out (they run too, non-critically),
+    replacing them with a space so the outer command parses cleanly."""
+    subs = []
+    def repl(m):
+        subs.append(m.group("a") if m.group("a") is not None else m.group("b"))
+        return " "
+    return _SUBST.sub(repl, text), subs
+
+_REDIR = re.compile(r'(?:\d*>>?|\d*<|&>|>&\d*|\d*>&\d*)\s*[^\s;&|()]*')
+_ASSIGN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
+
+def _split_top(text):
+    """Split a logical line into (segment, terminator) at top-level ; & | && || ,
+    respecting quotes and $()/() nesting. terminator is the operator AFTER the segment."""
+    segs = []; buf = []; i = 0; n = len(text); q = None; depth = 0
+    while i < n:
+        c = text[i]
+        if q:
+            buf.append(c)
+            if c == q: q = None
+            i += 1; continue
+        if c in "'\"": q = c; buf.append(c); i += 1; continue
+        if c == "\\" and i + 1 < n: buf.append(c); buf.append(text[i+1]); i += 2; continue
+        if c == "$" and i + 1 < n and text[i+1] == "(": depth += 1; buf.append("$("); i += 2; continue
+        if c == "(": depth += 1; buf.append(c); i += 1; continue
+        if c == ")":
+            if depth > 0: depth -= 1
+            buf.append(c); i += 1; continue
+        if depth == 0:
+            if c == ";": segs.append(("".join(buf), ";")); buf = []; i += 1; continue
+            if c == "&":
+                if i + 1 < n and text[i+1] == "&": segs.append(("".join(buf), "&&")); buf = []; i += 2; continue
+                segs.append(("".join(buf), "&")); buf = []; i += 1; continue
+            if c == "|":
+                if i + 1 < n and text[i+1] == "|": segs.append(("".join(buf), "||")); buf = []; i += 2; continue
+                segs.append(("".join(buf), "|")); buf = []; i += 1; continue
+        buf.append(c); i += 1
+    segs.append(("".join(buf), ""))
+    return segs
+
+def _expand(val, env):
+    """Expand $VAR / ${VAR} / ${VAR:-default} from env (best effort; unknown -> empty)."""
+    val = re.sub(r'\$\{([A-Za-z_][A-Za-z0-9_]*):[-=]([^}]*)\}',
+                 lambda m: env.get(m.group(1)) or m.group(2), val)
+    return re.sub(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)',
+                  lambda m: env.get(m.group(1) or m.group(2), ""), val)
+
+def _tokens(seg):
+    """shlex the segment (redirections already stripped). Returns [] on parse error."""
+    try:
+        return shlex.split(seg, comments=False, posix=True)
+    except ValueError:
+        return seg.split()
+
+def _classify(target):
+    if target is None: return "?"
+    if target.startswith(PAYLOAD_EXTRA): return "extra"
+    base = os.path.join(HOME, "yi-hack/base")
+    if target.startswith(base): return "base"
+    if target.startswith(HOME): return "stock"
+    if target.startswith(ROOTFS): return "rootfs"
+    return "?"
+
+# Walk state
+_walk_errors = 0
+_walk_warns = 0
+_walk_seen = set()     # (payload, realpath) scripts already expanded -> collapse re-runs
+
+def _wl(depth, s): out(("    " * depth) + s)
+def _werr(depth, s):
+    global _walk_errors
+    _walk_errors += 1
+    out(("    " * depth) + "!!!! ERROR: " + s)
+def _wwarn(depth, s):
+    global _walk_warns
+    _walk_warns += 1
+    out(("    " * depth) + "~~ WARN: " + s)
+
+def _resolve_and_report(fs, word, env, depth, how, critical):
+    """Resolve one launched WORD (explicit path or bare name) and report it.
+    Returns the image location of a launched *script* to recurse into, or None.
+    how in {'exec','source','interp'} ; critical False -> failures downgraded to WARN."""
+    tag = {"exec": "", "source": "source ", "interp": "sh "}[how]
+    word = _expand(word, env)
+    # explicit path?
+    if "/" in word:
+        abspath = word if word.startswith("/") else os.path.normpath("/" + word)  # ./x handled by caller cwd; treat rel as unknown
+        if not word.startswith("/"):
+            _wl(depth, f"{tag}{word}   (relative path - cwd-dependent, not resolved)")
+            return None
+        if abspath.startswith(("/tmp/", "/dev/", "/proc/", "/sys/", "/var/", "/run/")):
+            _wl(depth, f"{tag}{word}   (runtime path - generated at boot, not in image)")
+            return None
+        kind, detail = fs.realtarget(abspath)
+        loctag = _classify(detail)
+        if kind == "missing":
+            (_werr if critical else _wwarn)(depth, f"{tag}{word}  -> MISSING in image")
+            return None
+        if kind == "dangling":
+            (_werr if critical else _wwarn)(depth, f"{tag}{word}  -> DANGLING symlink -> {detail}")
+            return None
+        if how in ("exec",) and not fs.is_exec(detail, kind):
+            (_werr if critical else _wwarn)(depth, f"{tag}{word}  [{short(detail)}] NOT +x (execve EACCES)")
+            return detail if _is_script(fs, detail) else None
+        _wl(depth, f"{tag}{word}  -> [{loctag}:{short(detail)}]{'  (.7z)' if kind=='compressed' else ''}  OK")
+        return detail if _is_script(fs, detail) else None
+    # bare name -> PATH matrix
+    r = fs.resolve_matrix(word, _pathlist(env))
+    if r["outcome"] == "notfound":
+        (_werr if critical else _wwarn)(depth, f"{tag}{word}  -> NOT FOUND on PATH")
+        return None
+    d, target, kind = r["effective"]
+    loctag = _classify(target)
+    note = []
+    if r["shadow"]:
+        note.append("shadowed by earlier non-exec candidate")
+    if r["dup"]:
+        note.append("also present +x elsewhere on PATH")
+    if r["outcome"] == "nonexec":
+        (_werr if critical else _wwarn)(depth, f"{tag}{word}  -> {d}/{word} [{loctag}] NOT +x (would fail)")
+        return None
+    line = f"{tag}{word}  -> {d}  [{loctag}:{short(target)}]{'  (.7z)' if kind=='compressed' else ''}"
+    if note:
+        _wwarn(depth, line + "   (" + "; ".join(note) + ")")
+    else:
+        _wl(depth, line + "  OK")
+    return target if _is_script(fs, target) else None
+
+def _is_script(fs, image_loc):
+    """A launched target is a script we should recurse into if it is a readable text file
+    with a #! shebang (or a .sh). ELF binaries are leaves."""
+    if image_loc is None: return False
+    real = image_loc[:-3] if image_loc.endswith(".7z") else image_loc
+    try:
+        with open(real, "rb") as fh:
+            head = fh.read(2)
+    except OSError:
+        return real.endswith(".sh")
+    return head == b"#!" or real.endswith(".sh")
+
+def _pathlist(env):
+    return [d for d in env.get("PATH", "").split(":") if d]
+
+_FUNC_DEF = re.compile(r'^\s*(?:([A-Za-z_][A-Za-z0-9_]+)\s*\(\s*\)|function\s+([A-Za-z_][A-Za-z0-9_]+))')
+def _scan_funcs(lines):
+    """Collect shell function names defined in a script ( name() {...} or function name {...} )."""
+    s = set()
+    for l in lines:
+        m = _FUNC_DEF.match(l)
+        if m:
+            s.add(m.group(1) or m.group(2))
+    return s
+
+def _launchable(cmd, funcs):
+    """False when the word is NOT an external program launch: a shell function, a $variable,
+    a comment/operator/case-pattern/test-bracket artifact, or an assignment leftover."""
+    if not cmd or cmd in funcs:
+        return False
+    if cmd[0] in "$#`'\"":
+        return False
+    if cmd.isdigit():                # redirection/comparison artifact (1, 2, ...)
+        return False
+    if cmd in ("[[", "]]", "[", "test", "{", "}", "(", ")"):
+        return False
+    if "=" in cmd or cmd.endswith(")") or cmd.endswith(";;"):
+        return False
+    if not re.match(r'^[A-Za-z0-9_./+-]+$', cmd):   # punctuation-only / glob artifacts
+        return False
+    return True
+
+def walk_script(fs, abspath, env, depth, sourced_into=None, funcs=None):
+    """Parse a script and report/recurse its launches. `env` PATH is the active PATH.
+    If sourced_into is a dict, mutations (PATH exports) propagate to the caller (sourcing)."""
+    loc = fs.to_image(abspath)
+    real = None
+    if loc is not None:
+        kind, detail = fs.realtarget(abspath)
+        if kind in ("file", "compressed"):
+            real = detail[:-3] if detail.endswith(".7z") else detail
+    if real is None or not os.path.exists(real):
+        _werr(depth, f"cannot read script {abspath}")
+        return
+    lines = _strip_heredocs(_read_lines(real) or [])
+    here_funcs = _scan_funcs(lines)
+    funcs = funcs if funcs is not None else set()
+    # Sourcing ALWAYS imports the file's functions into the caller - even if the body was
+    # already expanded elsewhere (the _walk_seen collapse below must not hide the functions,
+    # or every later `. get_config.sh` would lose get_config()).
+    funcs |= here_funcs
+    key = (fs.payload, os.path.realpath(real))
+    if key in _walk_seen:
+        _wl(depth, f"(already expanded {abspath} above)")
+        return
+    _walk_seen.add(key)
+
+    set_e = any(re.match(r'\s*set\s+(-e\b|-[a-z]*e|-o\s+errexit)', l) for l in lines)
+    env = env if sourced_into is not None else dict(env)   # sourced shares caller env
+    in_cond = False   # inside an if/while/until CONDITION (before then/do)
+
+    for ln in _logical_lines(lines):
+        st = ln.strip()
+        if not st or st.startswith("#"):
+            continue
+        clean, subs = _extract_substs(ln)
+        # command substitutions run too, but their failure does not abort the outer cmd
+        for sub in subs:
+            for word in _commands_in(sub, funcs):
+                _dispatch(fs, word, env, funcs, depth + 1, False)
+        head = st.split()[0] if st.split() else ""
+        opens_cond = head in ("if", "elif", "while", "until")
+        seg_in_cond = in_cond or opens_cond
+        for si, (seg, term) in enumerate(_split_top(clean)):
+            backgrounded = term == "&"
+            guarded = term in ("&&", "||", "|") or seg_in_cond
+            _parse_segment(fs, seg, env, funcs, depth, set_e, backgrounded, guarded)
+        if opens_cond and re.search(r'\b(then|do)\b', clean):
+            in_cond = False
+        elif opens_cond:
+            in_cond = True
+        elif in_cond and re.search(r'\b(then|do)\b', clean):
+            in_cond = False
+
+def _commands_in(text, funcs):
+    """Yield each launchable command WORD in a fragment (used for $() substitutions)."""
+    for seg, _ in _split_top(text):
+        w = _segment_command(seg, funcs)
+        if w:
+            yield w
+
+def _strip_redir(text):
+    return _REDIR.sub(" ", text)
+
+def _strip_leading(toks, saw_assign, env):
+    """Drop leading keywords / '!' / VAR=val assignments; return remaining tokens.
+    Returns None if the segment is a for/case header (data, not a launch)."""
+    while toks:
+        t = toks[0]
+        if t in KW:
+            if t in ("for", "case"):
+                return None
+            toks = toks[1:]; continue
+        if _ASSIGN.match(t):
+            if saw_assign is not None:
+                k, v = t.split("=", 1)
+                saw_assign[k] = _expand(v.strip("'\""), env)
+            toks = toks[1:]; continue
+        break
+    return toks
+
+def _segment_command(seg, funcs):
+    toks = _strip_leading(_tokens(_strip_redir(seg)), None, {})
+    if not toks:
+        return None
+    cmd = toks[0]
+    if cmd in BUILTINS or not _launchable(cmd, funcs):
+        return None
+    return cmd
+
+def _parse_segment(fs, seg, env, funcs, depth, set_e, backgrounded, guarded):
+    """Parse ONE command segment: assignments (PATH), source, sh SCRIPT, exec, normal
+    launches. Recurse into launched scripts (fresh funcs) / sourced scripts (shared funcs)."""
+    saw_assign = {}
+    toks = _strip_leading(_tokens(_strip_redir(seg)), saw_assign, env)
+    if toks is None:
+        return
+    if not toks:
+        for k, v in saw_assign.items():   # pure assignment line -> mutate env (PATH etc.)
+            env[k] = v
+        return
+    cmd = toks[0]
+    crit = not (backgrounded or guarded)
+    if not set_e:
+        crit = False   # user rule: without set -e a mid-script failure does not abort -> WARN
+    if cmd == "export":
+        for t in toks[1:]:
+            if _ASSIGN.match(t):
+                k, v = t.split("=", 1); env[k] = _expand(v.strip("'\""), env)
+        return
+    if cmd in (".", "source"):
+        if len(toks) > 1:
+            tgt = _resolve_source(fs, toks[1], env, depth)
+            if tgt:
+                walk_script(fs, tgt, env, depth + 1, sourced_into=env, funcs=funcs)
+        return
+    if cmd == "exec":
+        if len(toks) > 1 and _launchable(toks[1], funcs):
+            sub = _resolve_and_report(fs, toks[1], env, depth, "exec", True)
+            if sub:
+                walk_script(fs, _abs_of(fs, sub), env, depth + 1)
+        return
+    if cmd in INTERP:
+        script = next((t for t in toks[1:] if not t.startswith("-") and _launchable(t, funcs)), None)
+        if script:
+            sub = _resolve_and_report(fs, script, env, depth, "interp", crit)
+            if sub:
+                walk_script(fs, _abs_of(fs, sub), dict(env), depth + 1)
+        return
+    if cmd in BUILTINS or not _launchable(cmd, funcs):
+        return
+    sub = _resolve_and_report(fs, cmd, env, depth, "exec", crit)
+    if sub:
+        walk_script(fs, _abs_of(fs, sub), dict(env), depth + 1)
+
+def _abs_of(fs, image_loc):
+    """Invert to_image for the common trees so we can recurse by abspath."""
+    for base, pre in ((PAYLOAD_EXTRA, "/home/yi-hack/extra"), (HOME, "/home"), (ROOTFS, "")):
+        b = base
+        t = image_loc[:-3] if image_loc.endswith(".7z") else image_loc
+        if t.startswith(b):
+            rest = t[len(b):].lstrip("/")
+            return os.path.normpath(os.path.join(pre, rest)) if pre else "/" + rest
+    return image_loc
+
+def _resolve_source(fs, word, env, depth):
+    """Resolve a `.`/source target: explicit path or PATH (readable, no +x needed)."""
+    word = _expand(word, env)
+    if "/" in word:
+        if not word.startswith("/"):
+            _wl(depth, f"source {word}  (relative, not resolved)"); return None
+        kind, detail = fs.realtarget(word)
+        if kind in ("file", "compressed"):
+            _wl(depth, f"source {word}  -> [{_classify(detail)}:{short(detail)}]  OK")
+            return word
+        _werr(depth, f"source {word}  -> {kind.upper()}"); return None
+    r = fs.resolve_matrix(word, _pathlist(env))
+    if r["outcome"] == "notfound":
+        _werr(depth, f"source {word}  -> NOT FOUND on PATH"); return None
+    d, target, kind = r["effective"]
+    _wl(depth, f"source {word}  -> {d}  [{_classify(target)}:{short(target)}]  OK")
+    return _abs_of(fs, target)
+
+def _dispatch(fs, word, env, funcs, depth, crit):
+    if not _launchable(word, funcs):
+        return
+    sub = _resolve_and_report(fs, word, env, depth, "exec", crit)
+    if sub:
+        walk_script(fs, _abs_of(fs, sub), dict(env), depth + 1)
+
+def walk_scenario(name, payload_mounted):
+    global _walk_seen
+    fs = FS(payload_mounted)
+    _walk_seen = set()
+    out(""); out("#" * 78)
+    out(f"# LAUNCH MAP: {name}  (payload {'MOUNTED' if payload_mounted else 'ABSENT'})")
+    out("#" * 78)
+    # Roots: the kernel entry points (init default PATH). Discover S* from the rootfs.
+    initd = os.path.join(ROOTFS, "etc/init.d")
+    roots = []
+    if os.path.isdir(initd):
+        roots = sorted(f for f in os.listdir(initd) if re.match(r'S\d\d', f))
+    # Seed the base vars scripts read before their own assignment (so `. "$LOGICAL/..."`
+    # resolves and its functions get imported).
+    env = {"PATH": ":".join(INIT_PATH), "LOGICAL": "/home/yi-hack",
+           "CONFIG_DIR": "/home/yi-hack/config", "MODEL": MODEL, "MODEL_SUFFIX": MODEL}
+    for r in roots:
+        out(""); out(f"/etc/init.d/{r}   PATH={env['PATH']}")
+        walk_script(fs, f"/etc/init.d/{r}", dict(env), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -602,15 +1064,18 @@ if not os.path.isdir(PAYLOAD_EXTRA):
     out("")
     out(f" NOTE: {PAYLOAD_EXTRA} not found - 'full' scenario will report extra as absent.")
 
-run_scenario("minimal boot (no SD/CIFS payload)", payload_mounted=False)
-run_scenario("full boot (payload present)", payload_mounted=True)
+walk_scenario("minimal boot (no SD/CIFS payload)", payload_mounted=False)
+walk_scenario("full boot (payload present)", payload_mounted=True)
 trace_boot_io()
 
 out("")
 out("=" * 78)
-out(f" RESULT: {errors} error(s), {warns} warning(s)")
-out(" Legend: ok=resolves now | .7z=expanded on first boot | DANGLING/FAIL=boot risk")
+out(f" RESULT: {errors + _walk_errors} error(s), {warns + _walk_warns} warning(s)")
+out(f"   (launch map: {_walk_errors} error(s), {_walk_warns} warning(s))")
+out(" Legend: OK=resolves now | .7z=expanded on first boot | WARN=shadow/dup/non-critical | ERROR=boot risk")
 out("=" * 78)
+
+errors += _walk_errors
 
 with open(os.path.join(REPO, "simulated_boot.log"), "w") as f:
     f.write("\n".join(log_lines) + "\n")
