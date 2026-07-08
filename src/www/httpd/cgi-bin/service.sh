@@ -68,7 +68,7 @@ RRTSP_PWD=$PASSWORD
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
 #Seems to be killing the resource - fixed via #153
-    /home/yi-hack/base/script/wd_rtsp.sh &
+    /home/yi-hack/extra/script/wd_rtsp.sh &
 #The above section to be also copied to service.sh
 }
 
@@ -139,12 +139,12 @@ start_onvif()
         echo "move_down=/home/yi-hack/extra/bin/ipc_cmd -m down" >> $ONVIF_SRVD_CONF
         echo "move_stop=/home/yi-hack/extra/bin/ipc_cmd -m stop" >> $ONVIF_SRVD_CONF
         echo "move_preset=/home/yi-hack/extra/bin/ipc_cmd -p %d" >> $ONVIF_SRVD_CONF
-        echo "set_preset=/home/yi-hack/base/script/ptz_presets.sh -a add_preset -m %s" >> $ONVIF_SRVD_CONF
-        echo "set_home_position=/home/yi-hack/base/script/ptz_presets.sh -a set_home_position" >> $ONVIF_SRVD_CONF
-        echo "remove_preset=/home/yi-hack/base/script/ptz_presets.sh -a del_preset -n %d" >> $ONVIF_SRVD_CONF
+        echo "set_preset=/home/yi-hack/extra/script/ptz_presets.sh -a add_preset -m %s" >> $ONVIF_SRVD_CONF
+        echo "set_home_position=/home/yi-hack/extra/script/ptz_presets.sh -a set_home_position" >> $ONVIF_SRVD_CONF
+        echo "remove_preset=/home/yi-hack/extra/script/ptz_presets.sh -a del_preset -n %d" >> $ONVIF_SRVD_CONF
         echo "jump_to_abs=/home/yi-hack/extra/bin/ipc_cmd -j %f,%f" >> $ONVIF_SRVD_CONF
         echo "jump_to_rel=/home/yi-hack/extra/bin/ipc_cmd -J %f,%f" >> $ONVIF_SRVD_CONF
-        echo "get_presets=/home/yi-hack/base/script/ptz_presets.sh -a get_presets" >> $ONVIF_SRVD_CONF
+        echo "get_presets=/home/yi-hack/extra/script/ptz_presets.sh -a get_presets" >> $ONVIF_SRVD_CONF
         echo "" >> $ONVIF_SRVD_CONF
     fi
 

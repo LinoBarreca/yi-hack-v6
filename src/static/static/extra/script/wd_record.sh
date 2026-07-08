@@ -37,7 +37,7 @@ check_record()
 {
     if [ "$(ps | grep -w ffmpeg | grep -v grep | grep -c ^)" -eq 0 ]; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - recorder not running, starting record.sh ..." >> "$LOG_FILE"
-        /home/yi-hack/base/script/record.sh &
+        /home/yi-hack/extra/script/record.sh &
     fi
 }
 

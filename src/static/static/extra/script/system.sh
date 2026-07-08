@@ -18,9 +18,6 @@ export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/app/locallib:/home/hisiko/h
 # not the mini rootfs one. base/script kept last so helper scripts resolve by name.
 export PATH=/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/base/script
 
-# .ash_history -> /dev/null (discard shell history, no flash writes) is a static symlink
-# shipped in the home image at build time (src/.../home/yi-hack/.ash_history), not created here.
-
 ulimit -s 1024
 mkdir /dev/shm 2>/dev/null
 
@@ -47,15 +44,8 @@ if [ -f "$YI_HACK_UPGRADE_PATH/yi-hack/fw_upgrade_in_progress" ]; then
     exit
 fi
 
-# Update cloudAPI_fake if necessary
-if [[ "$(grep -m 3 -n '' /home/app/cloudAPI_fake | tail -n 1 | cut -d ':' -f 2 | cut -c 3-)" != "$(grep -m 3 -n '' /home/yi-hack/base/script/cloudAPI_fake | tail -n 1 | cut -d ':' -f 2 | cut -c 3-)" ]]; then
-  cp -f /home/yi-hack/base/script/cloudAPI_fake /home/app/
-fi
-
-# Update cloudAPI if necessary
-if [[ "$(grep -m 3 -n '' /home/app/cloudAPI | tail -n 1 | cut -d ':' -f 2 | cut -c 3-)" != "$(grep -m 3 -n '' /home/yi-hack/base/script/cloudAPI | tail -n 1 | cut -d ':' -f 2 | cut -c 3-)" ]]; then
-  cp -f /home/yi-hack/base/script/cloudAPI /home/app/
-fi
+# cloudAPI is baked into /home/app at BUILD time (pack_fw.sh bake_app_overlays); no runtime
+# re-copy from base/script is needed (a reflash re-bakes it). See TODO.md history.
 
 # Manual Wi-Fi config (recovery assets stay on the physical SD)
 if [ -f /tmp/sd/recover/configure_wifi.cfg ]; then
@@ -296,13 +286,13 @@ if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
         fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
     fi
-    /home/yi-hack/base/script/wd_rtsp.sh &
+    /home/yi-hack/extra/script/wd_rtsp.sh &
     # Native MP4 recorder (privacy-safe alternative to stock mp4record). Records
     # the local RTSP stream to the output/record view (RAM/SD/CIFS) whenever
     # output.RECORD != NO; wd_record.sh launches and supervises it. mp4record
     # (SD-only, cloud path) is gated off when the native recorder is active.
     if [[ $(get_config output.RECORD) != "NO" ]] ; then
-        /home/yi-hack/base/script/wd_record.sh &
+        /home/yi-hack/extra/script/wd_record.sh &
     fi
 fi
 
@@ -358,12 +348,12 @@ if [[ $(get_config services.onvif.ENABLED) == "yes" ]] ; then
         echo "move_down=/home/yi-hack/extra/bin/ipc_cmd -m down" >> $ONVIF_SRVD_CONF
         echo "move_stop=/home/yi-hack/extra/bin/ipc_cmd -m stop" >> $ONVIF_SRVD_CONF
         echo "move_preset=/home/yi-hack/extra/bin/ipc_cmd -p %d" >> $ONVIF_SRVD_CONF
-        echo "set_preset=/home/yi-hack/base/script/ptz_presets.sh -a add_preset -m %s" >> $ONVIF_SRVD_CONF
-        echo "set_home_position=/home/yi-hack/base/script/ptz_presets.sh -a set_home_position" >> $ONVIF_SRVD_CONF
-        echo "remove_preset=/home/yi-hack/base/script/ptz_presets.sh -a del_preset -n %d" >> $ONVIF_SRVD_CONF
+        echo "set_preset=/home/yi-hack/extra/script/ptz_presets.sh -a add_preset -m %s" >> $ONVIF_SRVD_CONF
+        echo "set_home_position=/home/yi-hack/extra/script/ptz_presets.sh -a set_home_position" >> $ONVIF_SRVD_CONF
+        echo "remove_preset=/home/yi-hack/extra/script/ptz_presets.sh -a del_preset -n %d" >> $ONVIF_SRVD_CONF
         echo "jump_to_abs=/home/yi-hack/extra/bin/ipc_cmd -j %f,%f" >> $ONVIF_SRVD_CONF
         echo "jump_to_rel=/home/yi-hack/extra/bin/ipc_cmd -J %f,%f" >> $ONVIF_SRVD_CONF
-        echo "get_presets=/home/yi-hack/base/script/ptz_presets.sh -a get_presets" >> $ONVIF_SRVD_CONF
+        echo "get_presets=/home/yi-hack/extra/script/ptz_presets.sh -a get_presets" >> $ONVIF_SRVD_CONF
         echo "" >> $ONVIF_SRVD_CONF
     fi
 
@@ -425,18 +415,18 @@ if [ "$FREE_SPACE" != "0" ]; then
     # user's scheduled jobs (system.CRONTAB). With > it silently dropped the user crontab
     # whenever FREE_SPACE != 0 (the default is 10). /var/spool is tmpfs (fresh each boot),
     # so no cross-boot accumulation.
-    echo "0 * * * * /home/yi-hack/base/script/clean_records.sh $FREE_SPACE" >> /var/spool/cron/crontabs/root
+    echo "0 * * * * /home/yi-hack/extra/script/clean_records.sh $FREE_SPACE" >> /var/spool/cron/crontabs/root
 fi
 
 crond -c /var/spool/cron/crontabs/
 
 # Add MQTT Advertise
-if [ -f "/home/yi-hack/base/script/mqtt_advertise/startup.sh" ]; then
-    /home/yi-hack/base/script/mqtt_advertise/startup.sh
+if [ -f "/home/yi-hack/extra/script/mqtt_advertise/startup.sh" ]; then
+    /home/yi-hack/extra/script/mqtt_advertise/startup.sh
 fi
 
 if [[ $(get_config services.ftp_upload.ENABLED) == "yes" ]] ; then
-    /home/yi-hack/base/script/ftppush.sh start &
+    /home/yi-hack/extra/script/ftppush.sh start &
 fi
 
 # Optional payload-provided startup hook
@@ -445,6 +435,6 @@ if [ -f "/home/yi-hack/extra/startup.sh" ]; then
 fi
 
 # First run on startup, then every day via crond
-/home/yi-hack/base/script/check_update.sh
+/home/yi-hack/extra/script/check_update.sh
 
 crond -c /home/yi-hack/config/crontabs

@@ -3,9 +3,9 @@
 # 6.0.1
 #
 # Command line:
-# 	ash "/home/yi-hack/base/script/ftppush.sh" cron
-# 	ash "/home/yi-hack/base/script/ftppush.sh" start
-# 	ash "/home/yi-hack/base/script/ftppush.sh" stop
+# 	ash "/home/yi-hack/extra/script/ftppush.sh" cron
+# 	ash "/home/yi-hack/extra/script/ftppush.sh" start
+# 	ash "/home/yi-hack/extra/script/ftppush.sh" stop
 #
 
 

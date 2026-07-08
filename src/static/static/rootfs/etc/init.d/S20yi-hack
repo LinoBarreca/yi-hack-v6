@@ -94,7 +94,7 @@ fi
 if /home/yi-hack/base/script/build_view.sh; then
     diag "build_view -> PAYLOAD (full dispatcher)"
     # Payload present -> full dispatcher (RTSP/ONVIF/MQTT/cloud/... per config)
-    /home/yi-hack/base/script/system.sh
+    /home/yi-hack/extra/script/system.sh
 else
     diag "build_view -> MINIMAL boot"
     # Minimal boot: no payload. Rescue web UI (www -> base/www-min), telnet and SSH are

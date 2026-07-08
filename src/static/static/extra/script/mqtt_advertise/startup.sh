@@ -1,7 +1,7 @@
 #!/bin/sh
 
 export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
-ADV_DIR="/home/yi-hack/base/script/mqtt_advertise"
+ADV_DIR="/home/yi-hack/extra/script/mqtt_advertise"
 
 . /home/yi-hack/base/script/get_config.sh
 
@@ -57,10 +57,10 @@ fi
 # mqtt_adv_homeassistant.sh) and dump the current state so HA starts populated.
 if [ "$CAMERA_SETTING_ENABLE" == "yes" ]; then
     if [ "$CAMERA_SETTING_BOOT" == "yes" ]; then
-        /home/yi-hack/base/script/conf2mqtt.sh camera &
+        /home/yi-hack/extra/script/conf2mqtt.sh camera &
     fi
     if [ "$CAMERA_SETTING_CRON" == "yes" ]; then
-        echo "$CAMERA_SETTING_CRONTAB  /home/yi-hack/base/script/conf2mqtt.sh camera" > /var/spool/cron/crontabs/root
+        echo "$CAMERA_SETTING_CRONTAB  /home/yi-hack/extra/script/conf2mqtt.sh camera" > /var/spool/cron/crontabs/root
     fi
 fi
 if [ "$TELEMETRY_ENABLE" == "yes" ]; then
