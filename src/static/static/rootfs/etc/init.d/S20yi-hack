@@ -71,26 +71,26 @@ diag "S20 entry (pre apply_config)"
 #                      must carry a <root>/version matching the flash base, else nothing applies.
 #   2. wifi_up       - associate WiFi BEFORE mount_cifs (creds from mtdblock2, overridable
 #                      by wifi.conf). Without this, mount_cifs has no network -> minimal boot.
-#   3. mount_cifs    - reads the (now bootstrapped) cifs.conf; mounts the CIFS if it is
-#                      configured + reachable.
+#   3. mount_cifs    - reads the (now bootstrapped) cifs.conf; mounts the firmware share
+#                      read-only on /tmp/cifs-ro if it is configured + reachable.
 #   4. apply_config  - the CIFS is now mounted and, having priority, overrides the
 #                      managed config (version-gated).
-#   5. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
+#   5. mount_cifs_rw - mounts the output (read-write) share on /tmp/cifs-rw if configured.
+#   6. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
 /home/yi-hack/base/script/apply_config.sh
 /home/yi-hack/base/script/wifi_up.sh
 diag "after wifi_up (WiFi associated? has IP?)"
 /home/yi-hack/base/script/mount_cifs.sh
 /home/yi-hack/base/script/apply_config.sh
 diag "after mount_cifs"
-# Recordings RW share: when output.RECORD=CIFS, mount the (separate, read-write)
-# recordings share and hand its mountpoint to build_view via CIFS_RW_MNT, so
-# output/record points at it. Empty RECORDING_* fields inherit the firmware
-# share's HOST/USER/PASS (see cifs.conf / mount_cifs_rec.sh).
-if [ "$(get_config output.RECORD)" = "CIFS" ]; then
-    _cifs_rw=$(/home/yi-hack/base/script/mount_cifs_rec.sh)
-    [ -n "$_cifs_rw" ] && export CIFS_RW_MNT="$_cifs_rw"
-    diag "after mount_cifs_rec (CIFS_RW_MNT=$CIFS_RW_MNT)"
-fi
+# Output RW share: mount the (separate, read-write) share at /tmp/cifs-rw whenever
+# it is configured (cifs.conf RW_HOST/RW_SHARE; the other RW_* fields inherit the
+# firmware share's HOST/USER/PASS). Not gated on output.RECORD: build_view routes
+# ANY output category set to CIFS (record, log) to CIFS_RW_MNT, and the script
+# no-ops when the RW share is not configured.
+_cifs_rw=$(/home/yi-hack/base/script/mount_cifs_rw.sh)
+[ -n "$_cifs_rw" ] && export CIFS_RW_MNT="$_cifs_rw"
+diag "after mount_cifs_rw (CIFS_RW_MNT=$CIFS_RW_MNT)"
 if /home/yi-hack/base/script/build_view.sh; then
     diag "build_view -> PAYLOAD (full dispatcher)"
     # Payload present -> full dispatcher (RTSP/ONVIF/MQTT/cloud/... per config)

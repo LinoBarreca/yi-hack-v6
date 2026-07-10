@@ -287,6 +287,18 @@ pack_model() {
     log "$MODEL: overlaying build/home/ (yi-hack base: scripts, www-min, dropbear, wpa, busybox_tools)..."
     cp -a --remove-destination "$BUILD_DIR/home/." "$IMG_DIR/home/"
 
+    # --- Step 3b: per-model static overlay (applied AFTER the generic trees so it wins).
+    # src/static/model/<MODEL>/{home,rootfs}/... mirrors the image layout. Used for
+    # build-time forced settings a model cannot afford at runtime, e.g.
+    # src/static/model/y20/home/yi-hack/config/locked.conf (see locked_conf.sh). ---
+    local sub
+    for sub in home rootfs; do
+        if [ -d "$BASE_DIR/src/static/model/$MODEL/$sub" ]; then
+            log "$MODEL: overlaying per-model static (src/static/model/$MODEL/$sub)..."
+            cp -a --remove-destination "$BASE_DIR/src/static/model/$MODEL/$sub/." "$IMG_DIR/$sub/"
+        fi
+    done
+
     # --- Step 4: patch stock init scripts (build time -> verifiable in the image) ---
     patch_stock_init "$IMG_DIR/home"
     bake_app_overlays "$IMG_DIR/home"

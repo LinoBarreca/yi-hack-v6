@@ -57,15 +57,21 @@ fi
 
 CONF_TYPE="$(get_conf_type)"
 CONF_FILE=""
+CONF_SECTION=""
 
 # Per-service config files live under config/services/; the rest (system,
 # recording, camera, identity, output) at config/ top level.
 case "$CONF_TYPE" in
     snapshot|httpd|rtsp|onvif|telnetd|sshd|ftpd|ftp_upload|ntpd|proxychains|mqtt|mqtt_advertise)
-        CONF_FILE="/home/yi-hack/config/services/$CONF_TYPE.conf" ;;
+        CONF_FILE="/home/yi-hack/config/services/$CONF_TYPE.conf"
+        CONF_SECTION="services.$CONF_TYPE" ;;
     *)
-        CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf" ;;
+        CONF_FILE="/home/yi-hack/config/$CONF_TYPE.conf"
+        CONF_SECTION="$CONF_TYPE" ;;
 esac
+
+# Build-time locked settings (config/locked.conf) cannot be changed from the UI.
+. /home/yi-hack/base/script/locked_conf.sh
 
 read -r POST_DATA
 # Validate json
@@ -86,6 +92,9 @@ for ROW in $ROWS; do
     KEY=$(echo $ROW | cut -d'=' -f1)
     # Change back tab with \n
     VALUE=$(echo $ROW | cut -d'=' -f2)
+    if is_locked "$CONF_SECTION.$KEY" ; then
+        continue
+    fi
     if [ "$KEY" == "HOSTNAME" ] ; then
         if [ -z $VALUE ] ; then
             # Use 2 last MAC address numbers to set a different hostname

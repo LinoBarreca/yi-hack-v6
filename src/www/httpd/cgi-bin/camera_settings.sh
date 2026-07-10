@@ -4,6 +4,9 @@
 
 CONF_FILE="/home/yi-hack/config/camera.conf"
 
+# Build-time locked settings (config/locked.conf) cannot be changed from the UI.
+. /home/yi-hack/base/script/locked_conf.sh
+
 CONF_LAST="CONF_LAST"
 
 for I in 1 2 3 4 5 6 7 8 9
@@ -15,6 +18,10 @@ do
         continue
     fi
     CONF_LAST=$CONF
+
+    if is_locked "camera.$(echo "$CONF" | tr 'a-z' 'A-Z')" ; then
+        continue
+    fi
 
     if [ "$CONF" == "switch_on" ] ; then
         if [ "$VAL" == "no" ] ; then

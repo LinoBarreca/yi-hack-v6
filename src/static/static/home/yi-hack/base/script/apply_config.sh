@@ -11,7 +11,7 @@
 # the SD config, incl. cifs.conf, so mount_cifs can reach the share) and once AFTER (the
 # CIFS, having priority, overrides). Source priority mirrors build_view.sh: CIFS (if
 # enabled+mounted) else SD. The managed config lives in the SAME payload tree as extra:
-# <payload>/config (per-model first, then flat), e.g. /tmp/cifs/yi-hack/config/.
+# <payload>/config (per-model first, then flat), e.g. /tmp/cifs-ro/yi-hack/config/.
 #
 # EVERYTHING is version-gated: the flash base and the share payload must share the
 # same MAJOR.MINOR, else NOTHING is applied -> flash base+config stay ALIGNED (a newer
@@ -29,7 +29,7 @@
 
 LOGICAL="${LOGICAL:-/home/yi-hack}"
 SD_MNT="${SD_MNT:-/tmp/sd}"
-CIFS_MNT="${CIFS_MNT:-/tmp/cifs}"
+CIFS_MNT="${CIFS_MNT:-/tmp/cifs-ro}"
 CONFIG_DIR="${CONFIG_DIR:-$LOGICAL/config}"
 . "$LOGICAL/base/script/get_config.sh"
 . "$LOGICAL/base/script/version_compat.sh"
@@ -43,7 +43,9 @@ is_mounted() { mount 2>/dev/null | grep -q " $1 "; }
 #  - identity.conf / hostname        : per-camera identity - a mass push would
 #                                      make cameras collide (same HA device / MQTT
 #                                      client id / topic prefix / hostname)
-EXCLUDE="camera.conf ptz_presets.conf identity.conf hostname"
+#  - locked.conf                     : build-time locked settings (per model) - the
+#                                      share must not be able to unlock/relock keys
+EXCLUDE="camera.conf ptz_presets.conf identity.conf hostname locked.conf"
 
 # Path of the managed config dir on a mounted source: per-model then flat.
 config_on() {
@@ -86,5 +88,10 @@ fi
         log "FAILED $rel"
     fi
 done
+
+# Locked settings win over the share: re-stamp them after any override (the copy
+# above is per-file, so a managed file may have brought a locked key along).
+. "$LOGICAL/base/script/locked_conf.sh"
+restore_locked_configs
 
 exit 0

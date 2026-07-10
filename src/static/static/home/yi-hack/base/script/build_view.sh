@@ -23,7 +23,7 @@
 
 LOGICAL="${LOGICAL:-/home/yi-hack}"
 SD_MNT="${SD_MNT:-/tmp/sd}"
-CIFS_MNT="${CIFS_MNT:-/tmp/cifs}"
+CIFS_MNT="${CIFS_MNT:-/tmp/cifs-ro}"
 RAM_BASE="${RAM_BASE:-/tmp/yi-hack}"
 CONFIG_DIR="${CONFIG_DIR:-$LOGICAL/config}"
 CIFS_RW_MNT="${CIFS_RW_MNT:-}"   # dedicated RW mount for output->CIFS (empty = unavailable; the CIFS payload is RO)

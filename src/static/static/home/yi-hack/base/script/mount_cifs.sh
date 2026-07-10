@@ -12,22 +12,25 @@
 # Responsibilities:
 #   1. read parameters from cifs.conf (flash, via the centralized get_config)
 #   2. insmod the CIFS modules (md4, hmac, cifs) - already present in flash
-#   3. mount the share read-only on /tmp/cifs with the verified-working SMB1/NTLMSSP options
+#   3. mount the share read-only on /tmp/cifs-ro with the verified-working SMB1/NTLMSSP options
 #   4. validate that the model payload is present on the share
+#
+# /tmp/cifs-ro is the INPUT mount (payload/config). The OUTPUT (read-write) share
+# is a separate mount, /tmp/cifs-rw, handled by mount_cifs_rw.sh.
 #
 # Exit code:
 #   0 = mounted and payload present  -> caller proceeds to boot from CIFS
 #   1 = disabled / not configured / failed after retries  -> minimal boot
 #   2 = mounted but payload missing (wrong share?)         -> minimal boot
 #
-# HANDOFF NOTE: running the payload from /tmp/cifs requires the logical
+# HANDOFF NOTE: running the payload from /tmp/cifs-ro requires the logical
 # view (no YI_HACK_PREFIX, /home/yi-hack/{config,extra,output}). This script only does
 # mount + validation; build_view.sh wires extra->source and the dispatcher boots it.
 
 # Bootstrap config: in FLASH, read before any payload mount.
 . /home/yi-hack/base/script/get_config.sh
 
-MOUNTPOINT="/tmp/cifs"
+MOUNTPOINT="/tmp/cifs-ro"
 KO_DIR="/home/app/localko"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') mount_cifs: $*"; }

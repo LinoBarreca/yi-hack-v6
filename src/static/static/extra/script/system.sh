@@ -63,6 +63,10 @@ fi
 # missing keys topped up. (BASE config was already seeded early in S20.)
 /home/yi-hack/base/script/check_conf.sh extra
 
+# Build-time locked settings win over everything: re-stamp them after the seeding
+# (a recreated file gets generic defaults, which may differ from the locked values).
+/home/yi-hack/base/script/restore_locked_configs.sh
+
 # Fill blank per-camera identity (hostname, MQTT/HA ids) from the factory serial.
 # Must run after check_conf (keys exist) and before `hostname -F` + the MQTT
 # daemons, which read the resolved values. Hostname priority: config > DHCP > serial.

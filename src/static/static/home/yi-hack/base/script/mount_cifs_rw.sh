@@ -2,35 +2,45 @@
 
 # 6.0.1 - yi-hack-v6
 #
-# mount_cifs_rec.sh - mount the READ-WRITE CIFS share used by the native recorder
-# (output.RECORD=CIFS). This is a SEPARATE share from the read-only firmware
-# share handled by mount_cifs.sh (the payload is RO; recordings need RW).
+# mount_cifs_rw.sh - mount the READ-WRITE CIFS share used for outputs (recordings,
+# service logs - any output.* category set to CIFS). This is a SEPARATE mount from
+# the read-only firmware share handled by mount_cifs.sh:
 #
-# Parameters come from cifs.conf RECORDING_* fields. Any empty RECORDING_* field
-# inherits the matching base field (HOST/SHARE/USER/PASS/SEC/VERS), so if the
-# recordings live on the same server with the same credentials you only need to
-# set RECORDING_SHARE. There is NO RECORDING_ENABLED: this script runs only when
-# output.RECORD=CIFS.
+#   /tmp/cifs-ro  = input  (payload/config, RO)   - mount_cifs.sh
+#   /tmp/cifs-rw  = output (record/log, RW)       - this script
 #
-# Invoked by S20yi-hack BEFORE build_view.sh (which then points output/record at
+# Parameters come from cifs.conf RW_* fields. The share is considered CONFIGURED
+# when RW_HOST or RW_SHARE is set; any other empty RW_* field inherits the matching
+# base field (HOST/SHARE/USER/PASS/SEC/VERS), so if the outputs live on the same
+# server with the same credentials you only need to set RW_SHARE. When configured,
+# the share is ALWAYS mounted at boot (not gated on output.RECORD: build_view routes
+# any output category to it, e.g. LOG=CIFS without RECORD=CIFS).
+#
+# Invoked by S20yi-hack BEFORE build_view.sh (which then points output/* views at
 # this mount via CIFS_RW_MNT). WiFi is already up at this point.
 #
 # Exit: 0 = mounted RW  ->  echo the mountpoint on stdout for the caller
-#       1 = disabled / not configured / failed
+#       1 = not configured / failed
 
 . /home/yi-hack/base/script/get_config.sh
 
-MOUNTPOINT="/tmp/cifs_rec"
+MOUNTPOINT="/tmp/cifs-rw"
 KO_DIR="/home/app/localko"
 
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') mount_cifs_rec: $*" >&2; }
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') mount_cifs_rw: $*" >&2; }
 
-# Only when the recorder is configured to write to CIFS.
-[ "$(get_config output.RECORD)" = "CIFS" ] || { log "output.RECORD != CIFS, nothing to mount"; exit 1; }
+# Configured = the user declared a distinct RW share (host and/or share name).
+# Without this, inheritance would silently RW-mount the firmware share every boot.
+RW_HOST=$(get_config cifs.RW_HOST)
+RW_SHARE=$(get_config cifs.RW_SHARE)
+if [ -z "$RW_HOST" ] && [ -z "$RW_SHARE" ]; then
+    log "RW share not configured (RW_HOST/RW_SHARE empty), nothing to mount"
+    exit 1
+fi
 
-# RECORDING_<key> if set, else the base cifs.<key> (inherit-when-empty).
+# RW_<key> if set, else the base cifs.<key> (inherit-when-empty).
 _p() {
-    _v=$(get_config "cifs.RECORDING_$1")
+    _v=$(get_config "cifs.RW_$1")
     [ -n "$_v" ] && { echo "$_v"; return; }
     get_config "cifs.$1"
 }
@@ -45,7 +55,7 @@ case $(get_config cifs.RETRY)       in ''|*[!0-9]*) RETRY=10 ;;      *) RETRY=$(
 case $(get_config cifs.RETRY_DELAY) in ''|*[!0-9]*) RETRY_DELAY=6 ;; *) RETRY_DELAY=$(get_config cifs.RETRY_DELAY) ;; esac
 
 if [ -z "$HOST" ] || [ -z "$SHARE" ]; then
-    log "recording share HOST or SHARE not configured (RECORDING_* / cifs.*)"
+    log "RW share HOST or SHARE still empty after inheritance (RW_* / cifs.*)"
     exit 1
 fi
 

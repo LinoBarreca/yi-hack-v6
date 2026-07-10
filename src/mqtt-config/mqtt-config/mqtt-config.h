@@ -14,6 +14,7 @@
 #define MQTT_CONF_FILE     "/home/yi-hack/config/services/mqtt.conf"
 #define IDENTITY_CONF_FILE "/home/yi-hack/config/identity.conf"
 #define CONF_FILE_PATH     "/home/yi-hack/config"
+#define LOCKED_CONF_FILE   CONF_FILE_PATH "/locked.conf"
 #define CONF2MQTT_SCRIPT   "/home/yi-hack/extra/script/conf2mqtt.sh"
 
 typedef struct

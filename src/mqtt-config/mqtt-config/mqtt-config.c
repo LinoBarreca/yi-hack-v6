@@ -49,6 +49,39 @@ void disconnect_callback(struct mosquitto *mosq, void *obj, int result)
 }
 
 /*
+ * Build-time locked settings (config/locked.conf): lines "<section>.<KEY>=<value>"
+ * in the get_config dotted syntax (the section uses '.' where the cmnd topic uses
+ * '/', e.g. "services.rtsp.STREAM=low" locks cmnd/services/rtsp/STREAM).
+ * Returns 1 when the parameter is locked and must not be set.
+ */
+int param_locked(const char *file, const char *param)
+{
+    FILE *fp;
+    char line[MAX_LINE_LENGTH];
+    char dotted[2 * MAX_KEY_LENGTH + 2];
+    int i, len;
+
+    snprintf(dotted, sizeof(dotted), "%s.%s=", file, param);
+    for (i = 0; dotted[i] != '\0'; i++) {
+        if (dotted[i] == '/')
+            dotted[i] = '.';
+    }
+    len = strlen(dotted);
+
+    fp = fopen(LOCKED_CONF_FILE, "r");
+    if (fp == NULL)
+        return 0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strncmp(line, dotted, len) == 0) {
+            fclose(fp);
+            return 1;
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
+/*
  * message callback when a message is published
  * mosq     - mosquitto instance
  * obj      - user data for mosquitto_new
@@ -144,6 +177,10 @@ void message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_
     while (*s) {
         *s = toupper((unsigned char) *s);
         s++;
+    }
+    if (param_locked(file, param)) {
+        printf("Locked parameter: \"%s/%s\" is locked by config/locked.conf - ignoring\n", file, param);
+        return;
     }
     if (debug) printf("Validating: file \"%s\", parameter \"%s\", value \"%s\"\n", file, param, (char *) message->payload);
     if (validate_param(file, param, message->payload) == 1) {

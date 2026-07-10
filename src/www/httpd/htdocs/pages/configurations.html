@@ -412,13 +412,14 @@
                 </table>
             </div>
         </div>
-        <h5 class="no-margin">Recordings share (read-write)</h5>
+        <h5 class="no-margin">Output share (read-write)</h5>
         <div class="row">
             <p>
-                Where clips go when <b>Recording (NVR)</b> above is set to <b>Network share</b>.
-                Any field you leave <b>empty is inherited</b> from the firmware share above, so
-                usually you only set the share name. For tighter security use a separate,
-                write-only share/account here (see the Native NVR guide).
+                Where the camera writes its outputs (recordings, service logs) when an
+                output above is set to <b>Network share</b>. Mounted at every boot when
+                configured. Any field you leave <b>empty is inherited</b> from the firmware
+                share above, so usually you only set the share name. For tighter security
+                use a separate, write-only share/account here (see the Native NVR guide).
             </p>
         </div>
         <div class="row">
@@ -426,30 +427,30 @@
                 <table class="u-full-width padded-table config-table">
                     <tbody>
                     <tr class="row">
-                        <td>Recordings share</td>
+                        <td>Output share</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="recordings" data-conf="cifs" data-key="RECORDING_SHARE"/>
-                            <span class="switch-description">Empty = record to the firmware share above.</span>
+                            <input class="u-full-width" type="text" placeholder="recordings" data-conf="cifs" data-key="RW_SHARE"/>
+                            <span class="switch-description">Share name for camera outputs. Set this (and/or the server) to enable the read-write mount.</span>
                         </td>
                     </tr>
                     <tr class="row">
-                        <td>Recordings server</td>
+                        <td>Output server</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="RECORDING_HOST"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="RW_HOST"/>
                             <span class="switch-description">Empty = same server as the firmware share.</span>
                         </td>
                     </tr>
                     <tr class="row">
-                        <td>Recordings user</td>
+                        <td>Output user</td>
                         <td>
-                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="RECORDING_USER"/>
+                            <input class="u-full-width" type="text" placeholder="" data-conf="cifs" data-key="RW_USER"/>
                             <span class="switch-description">Empty = same user as the firmware share.</span>
                         </td>
                     </tr>
                     <tr class="row">
-                        <td>Recordings password</td>
+                        <td>Output password</td>
                         <td>
-                            <input class="u-full-width" type="password" placeholder="" data-conf="cifs" data-key="RECORDING_PASS"/>
+                            <input class="u-full-width" type="password" placeholder="" data-conf="cifs" data-key="RW_PASS"/>
                             <span class="switch-description">Empty = same password as the firmware share.</span>
                         </td>
                     </tr>
