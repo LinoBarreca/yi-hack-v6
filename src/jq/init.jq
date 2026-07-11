@@ -1,22 +1,49 @@
 #!/bin/bash
 
-ARCHIVE=jq-1.6.tar.gz
+# jq 1.8.2 (jqlang). Upgraded from 1.6: the old release recompiled its ~1700-line
+# builtin library on every startup (accidentally quadratic - ~10-12 s per run on
+# this SoC). 1.7 fixed that; 1.8.2 is the current stable. Regex (oniguruma) and
+# decNumber ship bundled under vendor/ and are built in-tree, so no system libs are
+# needed on the ancient arm-hisiv300 / uClibc toolchain. Parser and lexer are
+# pre-generated in the tarball, so no bison/flex is required either.
+
+VERSION=1.8.2
+ARCHIVE=jq-${VERSION}.tar.gz
+URL=https://github.com/jqlang/jq/releases/download/jq-${VERSION}/${ARCHIVE}
+SHA256=71b8d6e8f5fe81f6c6d0d110e3892251f6ce76ed095abd315e26e6e1193af3af
 
 SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
 rm -rf ./_install
+rm -rf ./jq-${VERSION}
 
 if [ ! -f $ARCHIVE ]; then
-    wget https://github.com/stedolan/jq/releases/download/jq-1.6/$ARCHIVE
+    wget -O $ARCHIVE $URL || wget --no-check-certificate -O $ARCHIVE $URL || exit 1
 fi
-tar zxvf $ARCHIVE
 
-cd jq-1.6 || exit 1
+# Integrity is guaranteed by the pinned sha256 (so --no-check-certificate above is safe).
+echo "${SHA256}  ${ARCHIVE}" | sha256sum -c - || { echo "jq: sha256 mismatch on $ARCHIVE"; exit 1; }
 
-autoreconf -fi
-./configure CC=arm-hisiv300-linux-uclibcgnueabi-gcc USER_CFLAGS="-march=armv5te -mcpu=arm926ej-s -I/opt/arm-hisiv300-linux/target/usr/include -L/opt/arm-hisiv300-linux/target/usr/lib" --host=arm --disable-docs AR=arm-hisiv300-linux-uclibcgnueabi-ar RANLIB=arm-hisiv300-linux-uclibcgnueabi-ranlib --prefix=$SCRIPT_DIR/_install --disable-maintainer-mode
-#    USER_CFLAGS="-march=armv5te -mcpu=arm926ej-s -I/opt/arm-hisiv300-linux/target/usr/include -L/opt/arm-hisiv300-linux/target/usr/lib" \
-#    AR=arm-hisiv300-linux-uclibcgnueabi-ar \
-#   RANLIB=arm-hisiv300-linux-uclibcgnueabi-ranlib \
-   
+tar zxf $ARCHIVE || exit 1
+
+cd jq-${VERSION} || exit 1
+
+# Release tarball is already ./configure-ready (no autoreconf needed).
+#   --with-oniguruma=builtin : build the bundled regex lib in-tree (match/test/sub)
+#   --disable-shared --enable-static : fold libjq into a single standalone binary
+#      (jq links it statically; libc/libpthread stay dynamic, resolved from /home/lib
+#      via the firmware's LD_LIBRARY_PATH, exactly like every other yi-hack binary.
+#      1.8.x needs libpthread for decNumber/dtoa thread-local state; 1.6 did not.)
+#   --disable-docs : no python/mkdocs in the build image
+./configure \
+    CC=arm-hisiv300-linux-uclibcgnueabi-gcc \
+    AR=arm-hisiv300-linux-uclibcgnueabi-ar \
+    RANLIB=arm-hisiv300-linux-uclibcgnueabi-ranlib \
+    CFLAGS="-march=armv5te -mcpu=arm926ej-s -O2" \
+    --host=arm-hisiv300-linux-uclibcgnueabi \
+    --with-oniguruma=builtin \
+    --disable-shared --enable-static \
+    --disable-docs \
+    --disable-maintainer-mode \
+    --prefix=$SCRIPT_DIR/_install || exit 1

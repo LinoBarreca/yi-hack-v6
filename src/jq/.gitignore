@@ -1,4 +1,4 @@
-# Ignore the install dir
+# Ignore the install dir and the downloaded/extracted sources (fetched at build time)
 _install/
-jq-1.6/
+jq-*/
 jq-*.tar.gz

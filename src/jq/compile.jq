@@ -2,28 +2,19 @@
 
 export PATH=${PATH}:/opt/arm-hisiv300-linux/bin
 
-export TARGET=arm-hisiv300-linux-uclibcgnueabi
 export CROSS=arm-hisiv300-linux-uclibcgnueabi
-export BUILD=x86_64-pc-linux-gnu
-
 export CROSSPREFIX=${CROSS}-
-
 export STRIP=${CROSSPREFIX}strip
-export CXX=${CROSSPREFIX}g++
-export CC=${CROSSPREFIX}gcc
-export LD=${CROSSPREFIX}ld
-export AS=${CROSSPREFIX}as
-export AR=${CROSSPREFIX}ar
+
+VERSION=1.8.2
 
 SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
-cd jq-1.6/modules/oniguruma
-autoreconf -fi || exit 1
+# init.jq already ran ./configure (which recursed into vendor/oniguruma and
+# vendor/decNumber via AC_CONFIG_SUBDIRS). Just build.
+cd jq-${VERSION} || exit 1
 
-cd ../../../jq-1.6 || exit 1
-
-make clean
 make || exit 1
 
 mkdir -p ../_install/bin || exit 1
