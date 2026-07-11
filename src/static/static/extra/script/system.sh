@@ -252,6 +252,13 @@ if [[ $(get_config services.snapshot.ENABLED) == "no" ]] ; then
     touch /tmp/snapshot.disabled
 fi
 
+# ONVIF snapshot watermark follows the snapshot service setting (single source,
+# services/snapshot.conf WATERMARK): appended to the snapurl advertised below.
+WATERMARK=""
+if [[ $(get_config services.snapshot.WATERMARK) == "yes" ]] ; then
+    WATERMARK="&watermark=yes"
+fi
+
 RRTSP_MODEL=$MODEL_SUFFIX
 RRTSP_RES=$(get_config services.rtsp.STREAM)
 RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)

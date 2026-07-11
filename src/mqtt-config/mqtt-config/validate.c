@@ -37,7 +37,6 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
     { "services/onvif", "ENABLED", "bool", "", "", "" , "", "", "" },
     { "services/onvif", "WSDD", "bool", "", "", "" , "", "", "" },
     { "services/onvif", "PROFILE", "enum", "high", "low", "both" , "", "", "" },
-    { "services/onvif", "WM_SNAPSHOT", "bool", "", "", "" , "", "", "" },
     { "services/onvif", "NETIF", "string", "", "", "" , "", "", "" },
 
     /* telnetd (section = config/services/telnetd.conf) */
