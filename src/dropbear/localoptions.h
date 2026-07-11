@@ -20,8 +20,8 @@
  * starts working automatically once extra is mounted and the binary is present - no
  * dropbear restart needed. In minimal boot (no payload) the path is absent -> sftp
  * unavailable -> use `scp -O` (legacy SCP protocol), always served by the scp applet
- * compiled into dropbearmulti in base/bin. TODO (see CAMERA_FIRMWARE_DESIGN §9): build
- * an sftp-server for this platform and ship it at extra/bin/sftp-server. */
+ * compiled into dropbearmulti in base/bin. TODO: build an sftp-server for this
+ * platform and ship it at extra/bin/sftp-server. */
 #define SFTPSERVER_PATH "/home/yi-hack/extra/bin/sftp-server"
 
 #endif /* DROPBEAR_LOCALOPTIONS_H */

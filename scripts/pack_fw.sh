@@ -374,7 +374,7 @@ pack_model() {
 
     # --- Step 13: build jffs2 then wrap as uImage (U-Boot do_auto_sd_update format) ---
     # The bootloader's SD-flash routine reads files named rootfs_<model>/home_<model>
-    # (NO .jffs2 extension) in uImage format. A raw jffs2 is ignored. See design §2.11-bis.
+    # (NO .jffs2 extension) in uImage format. A raw jffs2 is ignored by the bootloader.
     make_partition_image rootfs "$IMG_DIR/rootfs"
     make_partition_image home   "$IMG_DIR/home"
 
@@ -405,7 +405,7 @@ pack_model() {
 ###############################################################################
 
 # uImage wrapper: prefer real mkimage, but only if it actually runs. Under qemu-user on a
-# 16K-page aarch64 host mkimage can't load libcrypto.so.3 (design §6.8) -> fall back to the
+# 16K-page aarch64 host mkimage can't load libcrypto.so.3 under qemu-user -> fall back to the
 # dependency-free scripts/mkuimage.py. `mkimage -V` triggers the same load, so it's a clean probe.
 if command -v mkimage >/dev/null 2>&1 && mkimage -V >/dev/null 2>&1; then
     UIMAGE_TOOL="mkimage"

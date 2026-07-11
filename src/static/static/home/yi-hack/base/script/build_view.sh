@@ -144,7 +144,7 @@ setup_log() {
 # record: the view is /home/yi-hack/output/record, seen by ftppush/clean_records/mqttv4.
 # SD is special-cased to the stock mp4record path (/tmp/sd/record, SD-fixed), so the stock
 # recorder and the consumers share one location. RAM/CIFS keep the matrix open for a future
-# native ffmpeg recorder (§9), which writes to the view directly (mp4record can only do SD).
+# native ffmpeg recorder, which writes to the view directly (mp4record can only do SD).
 setup_record() {
     _dest="$1"; _dir="$LOGICAL/output/record"
     rm -f "$_dir"

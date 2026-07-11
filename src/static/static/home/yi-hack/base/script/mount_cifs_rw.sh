@@ -62,7 +62,7 @@ fi
 # CIFS modules (idempotent).
 for m in md4 hmac cifs; do
     if ! lsmod | grep -q "^$m "; then
-        insmod "$KO_DIR/$m.ko" 2>/dev/null || log "warn: insmod $m.ko failed (maybe already loaded)"
+        _err=$(insmod "$KO_DIR/$m.ko" 2>&1) || log "warn: insmod $m.ko: ${_err:-failed} (maybe already loaded)"
     fi
 done
 
@@ -73,8 +73,9 @@ i=0
 while [ "$i" -lt "$RETRY" ]; do
     i=$((i + 1))
     # RW mount (no ,ro). Same SMB1/NTLMSSP options as the firmware share.
-    if mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
-            -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS" 2>/dev/null; then
+    # Capture stderr: the mount error must reach the boot log, not /dev/null.
+    if _err=$(mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
+            -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS" 2>&1); then
         # Verify it is actually writable (server-side perms / force user).
         if ( : > "$MOUNTPOINT/.wtest.$$" ) 2>/dev/null; then
             rm -f "$MOUNTPOINT/.wtest.$$"
@@ -86,7 +87,7 @@ while [ "$i" -lt "$RETRY" ]; do
         umount "$MOUNTPOINT" 2>/dev/null
         exit 1
     fi
-    log "mount failed (attempt $i/$RETRY), retrying in ${RETRY_DELAY}s"
+    log "mount failed (attempt $i/$RETRY): ${_err:-unknown error} - retrying in ${RETRY_DELAY}s"
     sleep "$RETRY_DELAY"
 done
 

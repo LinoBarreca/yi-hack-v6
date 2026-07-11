@@ -54,7 +54,7 @@ fi
 # Load the CIFS modules (idempotent: skip if already loaded)
 for m in md4 hmac cifs; do
     if ! lsmod | grep -q "^$m "; then
-        insmod "$KO_DIR/$m.ko" 2>/dev/null || log "warn: insmod $m.ko failed (maybe already loaded)"
+        _err=$(insmod "$KO_DIR/$m.ko" 2>&1) || log "warn: insmod $m.ko: ${_err:-failed} (maybe already loaded)"
     fi
 done
 
@@ -68,9 +68,10 @@ MODEL=$(cat /home/app/.camver 2>/dev/null)
 i=0
 while [ "$i" -lt "$RETRY" ]; do
     i=$((i + 1))
-    # End-to-end verified options: SMB1/NT1 + NTLMv2, pass= (not password=), ro
-    if mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
-            -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS",ro 2>/dev/null; then
+    # End-to-end verified options: SMB1/NT1 + NTLMv2, pass= (not password=), ro.
+    # Capture stderr: the mount error is THE diagnostic and must reach the boot log.
+    if _err=$(mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
+            -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS",ro 2>&1); then
         log "mounted //$HOST/$SHARE on $MOUNTPOINT (attempt $i)"
         # Payload validation: look for the model tree, with a non-per-model fallback
         if [ -d "$MOUNTPOINT/$MODEL/yi-hack" ] || [ -d "$MOUNTPOINT/yi-hack" ]; then
@@ -81,7 +82,7 @@ while [ "$i" -lt "$RETRY" ]; do
         umount "$MOUNTPOINT" 2>/dev/null
         exit 2
     fi
-    log "mount failed (attempt $i/$RETRY), retrying in ${RETRY_DELAY}s"
+    log "mount failed (attempt $i/$RETRY): ${_err:-unknown error} - retrying in ${RETRY_DELAY}s"
     sleep "$RETRY_DELAY"
 done
 

@@ -1,0 +1,18 @@
+# /etc/inittab - yi-hack-v6 (BusyBox init)
+#
+# Replaces the stock inittab, whose only difference was an AUTO-LOGIN ROOT
+# getty on the serial console (ttyS000). Reaching the UART pads requires
+# disassembling the camera, recovery goes through SSH / telnet / the rescue
+# web UI (and ultimately the SD reflash), and boot diagnostics are captured
+# to /dev/yi-boot.log and dmesg - so the serial console added no value and
+# skipped the root password. No getty is started.
+
+::sysinit:/etc/init.d/rcS
+
+# Stuff to do when restarting the init process
+::restart:/sbin/init
+
+# Stuff to do before rebooting
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+::shutdown:/sbin/swapoff -a

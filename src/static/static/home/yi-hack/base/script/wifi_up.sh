@@ -52,12 +52,14 @@ if [ -n "$OVR_SSID" ] && { [ "$OVR_SSID" != "$CUR_SSID" ] || [ "$OVR_PSK" != "$C
     if [ "${#OVR_SSID}" -le 63 ] && [ "${#OVR_PSK}" -le 63 ]; then
         log "wifi.conf override differs -> writing mtdblock2[28/92] (offset-precise, blob preserved)"
         # clear (NUL) then write, conv=notrunc so only these fields change.
-        dd if=/dev/zero of="$MTD" bs=1 seek="$SSID_OFF" count="$FIELD_LEN" conv=notrunc 2>/dev/null
-        dd if=/dev/zero of="$MTD" bs=1 seek="$PSK_OFF"  count="$FIELD_LEN" conv=notrunc 2>/dev/null
-        printf '%s' "$OVR_SSID" | dd of="$MTD" bs=1 seek="$SSID_OFF" conv=notrunc 2>/dev/null
-        printf '%s' "$OVR_PSK"  | dd of="$MTD" bs=1 seek="$PSK_OFF"  conv=notrunc 2>/dev/null
+        # 2>/dev/null silences dd's transfer stats, so CHECK the rc explicitly:
+        # a failed mtd write must reach the boot log, not vanish.
+        dd if=/dev/zero of="$MTD" bs=1 seek="$SSID_OFF" count="$FIELD_LEN" conv=notrunc 2>/dev/null || log "ERROR: mtd SSID clear failed"
+        dd if=/dev/zero of="$MTD" bs=1 seek="$PSK_OFF"  count="$FIELD_LEN" conv=notrunc 2>/dev/null || log "ERROR: mtd PSK clear failed"
+        printf '%s' "$OVR_SSID" | dd of="$MTD" bs=1 seek="$SSID_OFF" conv=notrunc 2>/dev/null || log "ERROR: mtd SSID write failed"
+        printf '%s' "$OVR_PSK"  | dd of="$MTD" bs=1 seek="$PSK_OFF"  conv=notrunc 2>/dev/null || log "ERROR: mtd PSK write failed"
         # clear the 'connected' flag (mark provisioned, like configure_wifi.sh)
-        printf '\000\000\000\000' | dd of="$MTD" bs=1 seek="$FLAG_OFF" count=4 conv=notrunc 2>/dev/null
+        printf '\000\000\000\000' | dd of="$MTD" bs=1 seek="$FLAG_OFF" count=4 conv=notrunc 2>/dev/null || log "ERROR: mtd flag clear failed"
         sync
         CUR_SSID=$OVR_SSID
         CUR_PSK=$OVR_PSK
@@ -99,7 +101,9 @@ else
     # Don't stack instances.
     if ! pidof wpa_supplicant >/dev/null 2>&1; then
         log "launching wpa_supplicant on $IFACE (SSID set, ${#PSK}-char key)"
-        wpa_supplicant -c"$WPACONF" -g"$GLOBAL" -i"$IFACE" -B 2>/dev/null
+        # stderr goes to the boot log on purpose: WiFi is the single point of
+        # failure and a startup error here must never be silent.
+        wpa_supplicant -c"$WPACONF" -g"$GLOBAL" -i"$IFACE" -B || log "ERROR: wpa_supplicant failed to start (rc=$?)"
     fi
 fi
 

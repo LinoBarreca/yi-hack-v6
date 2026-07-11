@@ -135,8 +135,8 @@ esac
 
 # The ntpd daemon runs only with the cloud DISABLED: with the cloud on, the stock
 # 'cloud' daemon already syncs the clock (cloudAPI -c 136) and two writers would
-# fight (§4.3-bis). With the cloud off, cloudAPI_fake also does a one-shot NTP sync
-# per stock syntime call; this daemon adds continuous discipline on top.
+# fight. With the cloud off, cloudAPI_fake also does a one-shot NTP sync per
+# stock syntime call; this daemon adds continuous discipline on top.
 if [[ $(get_config services.ntpd.ENABLED) == "yes" ]] && [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     # Wait until all the other processes have been initialized
     sleep 5 && ntpd -p $(get_config services.ntpd.SERVER) &
@@ -200,7 +200,7 @@ if [[ $(get_config services.httpd.ENABLED) == "yes" ]] ; then
     # NOTE: recordings live at /home/yi-hack/output/record; the events CGIs read from there
     # (no www/record bind-mount - extra/www may be read-only CIFS).
     # bare 'httpd' resolves via the base/bin farm to the full PATCHED busybox (onvif CGI
-    # routing + auth) - base/bin/extra/bin are first on PATH (set above, §2.13 farm-first).
+    # routing + auth) - base/bin/extra/bin are first on PATH (set above, farm-first).
     httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
 fi
 

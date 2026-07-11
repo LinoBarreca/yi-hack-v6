@@ -15,7 +15,7 @@ export PATH=/home/yi-hack/extra/bin:$PATH
 
 . /home/yi-hack/base/script/get_config.sh
 
-# Mirror the cloud timezone into system.TIMEZONE (design doc §4.3-ter).
+# Mirror the cloud timezone into system.TIMEZONE.
 # The -c 142 (deviceinfo) response carries the timezone the user set in the Yi
 # app as tz_offset (ms east of UTC). We convert it to a POSIX offset TZ (sign
 # INVERTED per POSIX: GMT+01:00 -> "GMT-1") and persist it, so yi-hack services
