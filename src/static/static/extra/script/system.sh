@@ -10,13 +10,12 @@
 YI_HACK_VER=$(cat /home/yi-hack/extra/../version 2>/dev/null)
 MODEL_SUFFIX=$(cat /home/app/.camver)
 
-. /home/yi-hack/base/script/get_config.sh
-
-export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib:/home/yi-hack/extra/lib:/home/yi-hack/base/lib
-# PATH order mirrors env.sh (§2.13 farm-first): base/bin + extra/bin FIRST so bare applet
-# names resolve through the flash farm to the full PATCHED busybox (extra/bin/busybox),
-# not the mini rootfs one. base/script kept last so helper scripts resolve by name.
-export PATH=/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/base/script
+# yi-hack environment: single source (farm-first busybox PATH flip, LD_LIBRARY_PATH,
+# TZ, get_config) shared with the login shells (/etc/profile sources it too).
+. /home/yi-hack/base/script/env.sh
+# base/script appended so helper scripts resolve by name (services only: login
+# shells don't need it, so it stays out of env.sh).
+export PATH=$PATH:/home/yi-hack/base/script
 
 ulimit -s 1024
 mkdir /dev/shm 2>/dev/null
@@ -73,8 +72,6 @@ fi
 /home/yi-hack/base/script/set_defaults.sh
 
 hostname -F /home/yi-hack/config/hostname
-
-export TZ=$(get_config system.TIMEZONE)
 
 # Swap: destination is decided by the output matrix; build_view.sh created
 # /home/yi-hack/output/swap (a symlink) only if output.SWAP_FILE != NO and the target is writable.
@@ -136,7 +133,11 @@ case $(get_config services.httpd.PORT) in
     *) HTTPD_PORT=$(get_config services.httpd.PORT) ;;
 esac
 
-if [[ $(get_config services.ntpd.ENABLED) == "yes" ]] ; then
+# The ntpd daemon runs only with the cloud DISABLED: with the cloud on, the stock
+# 'cloud' daemon already syncs the clock (cloudAPI -c 136) and two writers would
+# fight (§4.3-bis). With the cloud off, cloudAPI_fake also does a one-shot NTP sync
+# per stock syntime call; this daemon adds continuous discipline on top.
+if [[ $(get_config services.ntpd.ENABLED) == "yes" ]] && [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     # Wait until all the other processes have been initialized
     sleep 5 && ntpd -p $(get_config services.ntpd.SERVER) &
 fi

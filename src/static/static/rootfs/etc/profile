@@ -7,21 +7,19 @@ set_path_before()
 	[ -d $1 ] && PATH="$1:$PATH"
 }
 
-# Mirror env.sh: when the payload is mounted (full busybox present) the flash farm in
-# base/bin wins so every applet/httpd is the full patched busybox; otherwise the rootfs
-# mini busybox wins and base/bin stays last only for dropbear. No flash writes.
-if [ -x /home/yi-hack/extra/bin/busybox ]; then
-	PATH="/home/yi-hack/base/bin:/home/yi-hack/extra/bin:/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base"
+# yi-hack environment (farm-first busybox PATH flip, LD_LIBRARY_PATH, TZ): single
+# source in env.sh, shared with the services (system.sh sources it too). /home is
+# mounted by S01udev, so it is up before any login shell can exist. The fallback
+# covers the catastrophic /home-mount-failure case only: recovery shells must still
+# have a usable PATH (same as env.sh's pre-payload branch).
+if [ -r /home/yi-hack/base/script/env.sh ]; then
+	. /home/yi-hack/base/script/env.sh
 else
-	PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/base/bin"
+	export PATH="/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/base/bin"
 fi
 set_path_before /usr/local/sbin
 set_path_before /usr/local/bin
-
-LD_LIBRARY_PATH="/usr/local/lib:/home/hisiko/hisilib:/lib:/usr/lib:/home/lib:/home/app/locallib:/home/yi-hack/extra/lib:/home/yi-hack/base/lib"
-
 export PATH
-export LD_LIBRARY_PATH
 
 alias ll="ls -al"
 

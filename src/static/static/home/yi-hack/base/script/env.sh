@@ -1,8 +1,12 @@
 #!/bin/sh
 
-# 6.0.1
-
-
+# 6.0.1 - yi-hack-v6
+#
+# env.sh - SINGLE SOURCE of the yi-hack process environment: PATH (incl. the
+# farm-first busybox flip, §2.13), LD_LIBRARY_PATH, get_config, TZ.
+# Sourced by /etc/profile (login shells: SSH/telnet) and by extra/script/system.sh
+# (service tree - every daemon/CGI/cron job inherits from it). Do NOT duplicate
+# this block elsewhere: it drifted three ways before being wired as the source.
 
 export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib:/home/yi-hack/extra/lib:/home/yi-hack/base/lib
 

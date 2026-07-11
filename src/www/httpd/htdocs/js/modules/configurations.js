@@ -36,9 +36,25 @@ APP.configurations = (function ($) {
         fetchConfigs();
     }
 
+    // Time settings follow the Xiaomi cloud while the cloud is enabled (see
+    // docs/easier-timezone-management.md): TIMEZONE mirrors the timezone set in
+    // the Yi app and the NTP daemon must not fight the cloud clock sync, so both
+    // are locked. Disabling the cloud unlocks them (TIMEZONE keeps the last
+    // mirrored value as a starting point).
+    function applyCloudTimeLock(disableCloud) {
+        var locked = (disableCloud === 'no');
+        var $fields = $('#TIMEZONE, [data-conf="ntpd"][data-key="ENABLED"], #NTP_SERVER');
+        $fields.prop('disabled', locked);
+        $fields.attr('title', locked ? 'Managed by the cloud (Yi app) while the cloud is enabled' : '');
+    }
+
     function registerEventHandler() {
         $(document).on("click", '#button-save', function (e) {
             saveConfigs();
+        });
+        // Live hint of the dependency; the real unlock takes effect after save + reboot.
+        $(document).on("change", '[data-conf="system"][data-key="DISABLE_CLOUD"]', function () {
+            applyCloudTimeLock(readField($(this)));
         });
     }
 
@@ -63,6 +79,9 @@ APP.configurations = (function ($) {
                         if (key === 'NULL' || key === 'HOMEVER') return;
                         setField($('[data-conf="' + conf + '"][data-key="' + key + '"]'), state);
                     });
+                    if (conf === 'system') {
+                        applyCloudTimeLock(response.DISABLE_CLOUD);
+                    }
                 },
                 error: function (response) {
                     console.log('error', response);

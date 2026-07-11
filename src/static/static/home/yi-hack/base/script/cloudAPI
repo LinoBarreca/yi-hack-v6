@@ -15,17 +15,58 @@ export PATH=/home/yi-hack/extra/bin:$PATH
 
 . /home/yi-hack/base/script/get_config.sh
 
+# Mirror the cloud timezone into system.TIMEZONE (design doc §4.3-ter).
+# The -c 142 (deviceinfo) response carries the timezone the user set in the Yi
+# app as tz_offset (ms east of UTC). We convert it to a POSIX offset TZ (sign
+# INVERTED per POSIX: GMT+01:00 -> "GMT-1") and persist it, so yi-hack services
+# use the same timezone as the stock pipeline. Written only on change (flash wear).
+mirror_cloud_tz() {
+    _tzoff=$(printf '%s' "$1" | sed -n 's/.*"tz_offset":\(-\{0,1\}[0-9][0-9]*\).*/\1/p')
+    [ -n "$_tzoff" ] || return 0
+    _off=$((_tzoff / 1000))
+    if [ "$_off" -lt 0 ]; then _sign="+"; _abs=$((-_off)); else _sign="-"; _abs=$_off; fi
+    _hh=$((_abs / 3600)); _mm=$(( (_abs % 3600) / 60 ))
+    if [ "$_abs" -eq 0 ]; then
+        _newtz="GMT0"
+    elif [ "$_mm" -eq 0 ]; then
+        _newtz="GMT${_sign}${_hh}"
+    else
+        _newtz=$(printf 'GMT%s%d:%02d' "$_sign" "$_hh" "$_mm")
+    fi
+    if [ "$_newtz" != "$(get_config system.TIMEZONE)" ]; then
+        sed -i "s|^TIMEZONE=.*|TIMEZONE=${_newtz}|" /home/yi-hack/config/system.conf
+        echo "$_newtz" > /etc/TZ
+    fi
+}
+
+# The command code follows -c on the command line (cloud calls: cloudAPI -c NNN -url ...).
+CODE=""
+_prev=""
+for _a in "$@"; do
+    [ "$_prev" = "-c" ] && { CODE=$_a; break; }
+    _prev=$_a
+done
+
 if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
         cd /home/app
         ./cloudAPI_fake "$@"
 else
     if [ "$4" == "https://api.xiaoyi.com/v4/ipc/check_did" ]; then
         echo '{"allow":true,"code":"20000"}'
-    elif [[ $(get_config services.proxychains.ENABLED) == "yes" ]] ; then
-        cd /home/app
-        /home/yi-hack/extra/bin/proxychains4 ./cloudAPI_real "$@"
     else
         cd /home/app
-        ./cloudAPI_real "$@"
+        if [[ $(get_config services.proxychains.ENABLED) == "yes" ]] ; then
+            CLOUDAPI_REAL="/home/yi-hack/extra/bin/proxychains4 ./cloudAPI_real"
+        else
+            CLOUDAPI_REAL="./cloudAPI_real"
+        fi
+        if [ "$CODE" = "142" ]; then
+            # deviceinfo: pass the response through untouched, then mirror its timezone.
+            OUT=$($CLOUDAPI_REAL "$@")
+            echo "$OUT"
+            mirror_cloud_tz "$OUT"
+        else
+            $CLOUDAPI_REAL "$@"
+        fi
     fi
 fi

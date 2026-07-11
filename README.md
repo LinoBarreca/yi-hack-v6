@@ -34,6 +34,7 @@ This firmware will add the following features:
   - [Ability to share configurations](docs/shared-configuration.md) (user chooses which ones) from the network share to have the same configurations applied to all the cameras.
   - [Native NVR](docs/native-nvr-recording.md) (just make sure your network is fast enough, if you have lots of cameras)
   - [Control the camera from Home Assistant / MQTT](docs/home-assistant-control.md) (LED, IR, microphone and more — no cloud)
+  - [Easier Timezone management](docs/easier-timezone-management.md) (the camera aligns itself to the timezone set in the Yi app; no more mismatched timestamps)
 
 - **v5 FEATURES**
   - **RTSP server** - which will allow an RTSP stream of the video while keeping the cloud features enabled (available to all and it is free).
