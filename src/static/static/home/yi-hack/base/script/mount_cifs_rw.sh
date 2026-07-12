@@ -61,20 +61,23 @@ fi
 
 # CIFS modules (idempotent).
 for m in md4 hmac cifs; do
-    if ! lsmod | grep -q "^$m "; then
+    if ! grep -q "^$m " /proc/modules; then
         _err=$(insmod "$KO_DIR/$m.ko" 2>&1) || log "warn: insmod $m.ko: ${_err:-failed} (maybe already loaded)"
     fi
 done
 
 mkdir -p "$MOUNTPOINT"
-mount | grep -q " $MOUNTPOINT " && umount "$MOUNTPOINT" 2>/dev/null
+grep -q " $MOUNTPOINT " /proc/mounts && umount "$MOUNTPOINT" 2>/dev/null
+
+# Bound each attempt (see mount_cifs.sh). Guarded: older rootfs may lack timeout.
+T=""; command -v timeout >/dev/null && T="timeout 20"
 
 i=0
 while [ "$i" -lt "$RETRY" ]; do
     i=$((i + 1))
     # RW mount (no ,ro). Same SMB1/NTLMSSP options as the firmware share.
     # Capture stderr: the mount error must reach the boot log, not /dev/null.
-    if _err=$(mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
+    if _err=$($T mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
             -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS" 2>&1); then
         # Verify it is actually writable (server-side perms / force user).
         if ( : > "$MOUNTPOINT/.wtest.$$" ) 2>/dev/null; then
@@ -87,7 +90,7 @@ while [ "$i" -lt "$RETRY" ]; do
         umount "$MOUNTPOINT" 2>/dev/null
         exit 1
     fi
-    log "mount failed (attempt $i/$RETRY): ${_err:-unknown error} - retrying in ${RETRY_DELAY}s"
+    log "mount failed (attempt $i/$RETRY): ${_err:-timed out or unknown error} - retrying in ${RETRY_DELAY}s"
     sleep "$RETRY_DELAY"
 done
 

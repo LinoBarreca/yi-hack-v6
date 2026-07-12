@@ -22,7 +22,7 @@ USED_SPACE_LIMIT=$((100-$1))
 echo "$USED_SPACE_LIMIT"
 
 cd /home/yi-hack/output/record
-USED_SPACE=`df /home/yi-hack/output/record | tail -1 | awk '{print $5}' | tr -d '%'`
+USED_SPACE=`df /home/yi-hack/output/record | awk 'END{sub(/%/,"",$5); print $5}'`
 
 if [ -z "$USED_SPACE" ]; then
     exit
@@ -30,14 +30,14 @@ fi
 
 while [ "$USED_SPACE" -gt "$USED_SPACE_LIMIT" ]
 do
-    OLD_DIR=`ls -lt | grep -v tmp | awk 'END{print}' | awk '{print $9}'`
+    OLD_DIR=`ls -t | grep -v tmp | tail -n 1`
     if [ ! -z "$OLD_DIR" ]; then
         echo "Deleting dir $OLD_DIR"
         rm -rf $OLD_DIR
     else
         exit
     fi
-    USED_SPACE=`df /home/yi-hack/output/record | tail -1 | awk '{print $5}' | tr -d '%'`
+    USED_SPACE=`df /home/yi-hack/output/record | awk 'END{sub(/%/,"",$5); print $5}'`
 done
 
 echo "Done!"

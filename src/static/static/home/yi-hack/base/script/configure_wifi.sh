@@ -21,9 +21,9 @@ if [ ! -f "$CFG_FILE" ]; then
     exit 1
 fi
 
-TMP=$(cat $CFG_FILE | grep wifi_ssid=)
+TMP=$(grep wifi_ssid= "$CFG_FILE")
 SSID=$(echo "${TMP:10}")
-TMP=$(cat $CFG_FILE | grep wifi_psk=)
+TMP=$(grep wifi_psk= "$CFG_FILE")
 KEY=$(echo "${TMP:9}")
 
 if [ -z "$SSID" ]; then
@@ -64,8 +64,8 @@ DATE=$(date '+%Y%m%d%H%M%S')
 dd if=/dev/mtdblock2 of=/tmp/sd/mtdblock2_$DATE.bin 2>/dev/null
 
 # clear the existing passwords (to ensure we are null terminated)
-cat /dev/zero | dd of=/dev/mtdblock2 bs=1 seek=28 count=64 conv=notrunc
-cat /dev/zero | dd of=/dev/mtdblock2 bs=1 seek=92 count=64 conv=notrunc
+dd if=/dev/zero of=/dev/mtdblock2 bs=1 seek=28 count=64 conv=notrunc
+dd if=/dev/zero of=/dev/mtdblock2 bs=1 seek=92 count=64 conv=notrunc
 # write SSID
 echo -n "$SSID" | dd of=/dev/mtdblock2 bs=1 seek=28 count=64 conv=notrunc
 # write key

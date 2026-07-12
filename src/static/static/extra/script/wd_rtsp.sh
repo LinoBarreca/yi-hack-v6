@@ -81,8 +81,8 @@ restart_mqttv4()
 
 check_rtsp()
 {
-    SOCKET=`/bin/netstat -an 2>&1 | grep ":$RTSP_PORT " | grep LISTEN | grep -c ^`
-    CPU=`top -b -n 1 | grep rRTSPServer | grep -v grep | tail -n 1 | awk '{print $8}'`
+    SOCKET=`netstat -ltn 2>/dev/null | grep -c ":$RTSP_PORT "`
+    CPU=`top -b -n 1 | awk '/rRTSPServer/ && !/awk/ {v=$8} END {print v}'`
 
     if [ "$CPU" == "" ]; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - No running processes, restarting rRTSPServer ..." >> $LOG_FILE
@@ -110,7 +110,7 @@ check_rtsp()
 
 check_cloud()
 {
-    CPU=`top -b -n 1 | grep cloud | grep -v grep | tail -n 1 | awk '{print $8}'`
+    CPU=`top -b -n 1 | awk '/cloud/ && !/awk/ {v=$8} END {print v}'`
     if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     (
     if [ "$CPU" == "" ]; then
@@ -124,9 +124,7 @@ check_cloud()
 
 check_rmm()
 {
-    PS=`ps | grep rmm | grep -v grep | grep -c ^`
-
-    if [ $PS -eq 0 ]; then
+    if ! pidof rmm > /dev/null; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - ./rmm is not running, restarting the camera  ..." >> $LOG_FILE
         reboot
     fi
@@ -134,9 +132,7 @@ check_rmm()
 
 check_grabber()
 {
-    PS=`ps | grep h264grabber | grep -v grep | grep -c ^`
-
-    if [ $PS -eq 0 ]; then
+    if ! pidof h264grabber > /dev/null; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - No running processes, restarting h264grabber ..." >> $LOG_FILE
         killall -q h264grabber
         sleep 1
@@ -146,9 +142,7 @@ check_grabber()
 
 check_mqttv4()
 {
-    PS=`ps | grep mqttv4 | grep -v grep | grep -c ^`
-
-    if [ $PS -eq 0 ]; then
+    if ! pidof mqttv4 > /dev/null; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - No running processes, restarting mqttv4 ..." >> $LOG_FILE
         killall -q mqttv4
         sleep 1

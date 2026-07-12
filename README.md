@@ -26,15 +26,19 @@ Just kidding..I have 6 Yi cameras..I wanted an easy way to update them all and c
 This firmware will add the following features:
 
 - **NEW FEATURES**
-  - [New, simplified file layout](docs/simplified-file-layout.md)
-  - [Minimized flash wear](docs/reduced-flash-wear.md) (reduced unnecessary writes introduced by all the previous yi-hack)
-  - [Updated busybox & wpa_supplicant](docs/updated-busybox-wpa.md) (more secure)
   - [Ability to load the firmware from a network share](docs/load-firmware-from-network-share.md) (configurable through the recovery http)
   - [Recovery mode](docs/recovery-mode.md) (recovery http when SD is corrupt or network share has issues)
   - [Ability to share configurations](docs/shared-configuration.md) (user chooses which ones) from the network share to have the same configurations applied to all the cameras.
   - [Native NVR](docs/native-nvr-recording.md) (just make sure your network is fast enough, if you have lots of cameras)
   - [Control the camera from Home Assistant / MQTT](docs/home-assistant-control.md) (LED, IR, microphone and more — no cloud)
+
+- **v6 Improvements**
+  - [Simplified file layout](docs/simplified-file-layout.md)
+  - [Minimized flash wear](docs/reduced-flash-wear.md) (reduced unnecessary writes introduced by all the previous yi-hack)
+  - [Updated busybox & wpa_supplicant](docs/updated-busybox-wpa.md) (more secure)
   - [Easier Timezone management](docs/easier-timezone-management.md) (the camera aligns itself to the timezone set in the Yi app; no more mismatched timestamps)
+  - Faster configuration saving from web UI
+
 
 - **v5 FEATURES**
   - **RTSP server** - which will allow an RTSP stream of the video while keeping the cloud features enabled (available to all and it is free).

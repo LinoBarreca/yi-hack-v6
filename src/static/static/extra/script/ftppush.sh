@@ -118,13 +118,13 @@ checkFiles ()
 
 lbasename ()
 {
-	echo "${1}" | sed "s/.*\///"
+	basename "${1}"
 }
 
 
 lparentdir ()
 {
-	echo "${1}" | xargs -I{} dirname {}| grep -o '[^/]*$'
+	basename "$(dirname "${1}")"
 }
 
 
@@ -141,15 +141,7 @@ logAdd ()
 
 lstat ()
 {
-	if [ -d "${1}" ]; then
-		ls -a -l -td "${1}" | awk '{k=0;for(i=0;i<=8;i++)k+=((substr($1,i+2,1)~/[rwx]/) \
-				 *2^(8-i));if(k)printf("%0o ",k);print}' | \
-				 cut -d " " -f 1
-	else
-		ls -a -l "${1}" | awk '{k=0;for(i=0;i<=8;i++)k+=((substr($1,i+2,1)~/[rwx]/) \
-				 *2^(8-i));if(k)printf("%0o ",k);print}' | \
-				 cut -d " " -f 1
-	fi
+	stat -c '%a' "${1}"
 }
 
 
@@ -261,19 +253,28 @@ if [ "${1}" = "cron" ]; then
 	logAdd "[INFO] === SERVICE STOPPED ==="
 	exit 0
 elif [ "${1}" = "start" ]; then
+	# Single-instance guard: the lock fd is inherited by serviceMain and
+	# released automatically when the last process dies (kill included).
+	exec 9> /tmp/ftppush.lock
+	if ! flock -n 9; then
+		logAdd "[WARN] Service already running - not starting a second instance."
+		exit 1
+	fi
 	serviceMain &
 	#
 	# Wait for kill -INT.
 	wait
 	exit 0
 elif [ "${1}" = "stop" ]; then
-	ps w | grep -v grep | grep "ash ${0}" | sed 's/ \+/|/g' | sed 's/^|//' | cut -d '|' -f 1 | grep -v "^$$" | while read pidhandle; do
+	# pgrep -f matches the full command line ("ash /path/ftppush.sh ...");
+	# it never lists itself, but our own shell is in the list -> filter $$.
+	pgrep -f "ash ${0}" | grep -vx "$$" | while read pidhandle; do
 		echo "[INFO] Terminating old service instance [${pidhandle}] ..."
 		kill -9 "${pidhandle}"
 	done
 	#
-	# Check if parts of the service are still running.
-	if [ "$(ps w | grep -v grep | grep "ash ${0}" | sed 's/ \+/|/g' | sed 's/^|//' | cut -d '|' -f 1 | grep -v "^$$" | grep -c "^")" -gt 1 ]; then
+	# Check if parts of the service are still running (same tolerance as before).
+	if [ "$(pgrep -f "ash ${0}" | grep -vxc "$$")" -gt 1 ]; then
 		logAdd "[ERROR] === SERVICE FAILED TO STOP ==="
 		exit 99
 	fi

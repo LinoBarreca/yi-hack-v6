@@ -35,7 +35,7 @@ ensure_dirs()
 
 check_record()
 {
-    if [ "$(ps | grep -w ffmpeg | grep -v grep | grep -c ^)" -eq 0 ]; then
+    if ! pidof ffmpeg > /dev/null; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - recorder not running, starting record.sh ..." >> "$LOG_FILE"
         /home/yi-hack/extra/script/record.sh &
     fi

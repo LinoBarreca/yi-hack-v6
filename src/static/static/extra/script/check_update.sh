@@ -35,17 +35,16 @@ if [[ $(get_config system.CHECK_UPDATES) == "yes" ]] ; then
     if [ -f $REMOTE_RELEASE_FILE ] ; then
         jq -r .tag_name < $REMOTE_RELEASE_FILE > $REMOTE_VERSION_FILE
         rm $REMOTE_RELEASE_FILE
-        V_LOCAL=$(cat $LOCAL_VERSION_FILE | cut -d'_' -f1)
-        V_REMOTE=$(cat $REMOTE_VERSION_FILE | cut -d'_' -f1)
-        
-        LOCAL_MAJOR=$(echo $V_LOCAL | cut -d'.' -f1)
-        LOCAL_MINOR=$(echo $V_LOCAL | cut -d'.' -f2)
-        LOCAL_PATCH=$(echo $V_LOCAL | cut -d'.' -f3)
+        V_LOCAL=$(cut -d'_' -f1 $LOCAL_VERSION_FILE)
+        V_REMOTE=$(cut -d'_' -f1 $REMOTE_VERSION_FILE)
 
-        REMOTE_MAJOR=$(echo $V_REMOTE | cut -d'.' -f1)
-        REMOTE_MINOR=$(echo $V_REMOTE | cut -d'.' -f2)
-        REMOTE_PATCH=$(echo $V_REMOTE | cut -d'.' -f3)
-        
+        # Split MAJOR.MINOR.PATCH with the shell itself (no cut per component)
+        OIFS=$IFS; IFS='.'
+        set -- $V_LOCAL;  LOCAL_MAJOR=$1;  LOCAL_MINOR=$2;  LOCAL_PATCH=$3
+        set -- $V_REMOTE; REMOTE_MAJOR=$1; REMOTE_MINOR=$2; REMOTE_PATCH=$3
+        IFS=$OIFS
+
+
         V_LOCAL_NUM=$(printf "%03d%03d%03d" $LOCAL_MAJOR $LOCAL_MINOR $LOCAL_PATCH)
         V_REMOTE_NUM=$(printf "%03d%03d%03d" $REMOTE_MAJOR $REMOTE_MINOR $REMOTE_PATCH)
         

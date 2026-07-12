@@ -48,7 +48,7 @@ restore_locked_configs() {
         _file="$CONFIG_DIR/${_sec//./\/}.conf"
         [ -f "$_file" ] || { echo "locked_conf[ERROR]: $_file not found (locked key $_path)" >&2; continue; }
         if grep -q "^${_key}=" "$_file"; then
-            _cur=$(grep "^${_key}=" "$_file" | cut -d= -f2- | head -n1)
+            _cur=$(sed -n "/^${_key}=/{s/^[^=]*=//;p;q}" "$_file")
             if [ "$_cur" != "$_val" ]; then
                 _ev=$(printf '%s' "$_val" | sed 's/[|&\\]/\\&/g')
                 sed -i "s|^${_key}=.*|${_key}=${_ev}|" "$_file"

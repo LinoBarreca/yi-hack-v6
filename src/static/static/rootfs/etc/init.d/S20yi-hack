@@ -33,7 +33,7 @@ case "$(get_config system.DEBUG_LOG)" in
         exec >> /tmp/sd/yi-boot.log 2>&1
         echo "===== [bootlog] S20 REACHED (DEBUG_LOG=early, live on SD /tmp/sd) @ $(date '+%T') =====" ;;
     yes)
-        if mount | grep -q " /tmp/sd "; then
+        if grep -q " /tmp/sd " /proc/mounts; then
             BOOTLOG=1; _sdlog=/tmp/sd
             umount /tmp/sd 2>/dev/null
             mount -o sync /dev/mmcblk0p1 /tmp/sd      # -o sync at mount (remount,sync unreliable on FAT)

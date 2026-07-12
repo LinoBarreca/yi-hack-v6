@@ -6,7 +6,7 @@ MOSQUITTO_PUB="/home/yi-hack/extra/bin/mosquitto_pub"
 
 . /home/yi-hack/base/script/get_config.sh
 
-CONTENT=$(/home/yi-hack/www/cgi-bin/links.sh | sed 1d | sed ':a;N;$!ba;s/\n//g')
+CONTENT=$(/home/yi-hack/www/cgi-bin/links.sh | sed 1d | tr -d '\n')
 
 HOSTNAME=$(hostname)
 MQTT_IP=$(get_config services.mqtt.BROKER_IP)

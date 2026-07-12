@@ -38,5 +38,6 @@ get_config() {
         return 1
     fi
 
-    grep -E "^${_gc_key}=" "$_gc_file" | cut -d= -f2- | head -n1
+    # First match only (q); strip up to the first '=' so '=' in values (passwords) survives.
+    sed -n "/^${_gc_key}=/{s/^[^=]*=//;p;q}" "$_gc_file"
 }

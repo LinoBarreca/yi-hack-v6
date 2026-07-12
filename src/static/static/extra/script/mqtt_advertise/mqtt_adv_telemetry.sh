@@ -7,12 +7,13 @@ MOSQUITTO_PUB="/home/yi-hack/extra/bin/mosquitto_pub"
 . /home/yi-hack/base/script/get_config.sh
 
 HOSTNAME=$(hostname)
-UPTIME=$(cat /proc/uptime | cut -d ' ' -f1)
-LOAD_AVG=$(cat /proc/loadavg | cut -d ' ' -f1-3)
+UPTIME=$(cut -d ' ' -f1 /proc/uptime)
+LOAD_AVG=$(cut -d ' ' -f1-3 /proc/loadavg)
 TOTAL_MEMORY=$(free -k | awk 'NR==2{print $2}')
 FREE_MEMORY=$(free -k | awk 'NR==2{print $4+$6+$7}')
-FREE_SD=$(df /tmp/sd/ | grep mmc | awk '{print $5}' | tr -d '%')
-WLAN_STRENGTH=$(cat /proc/net/wireless | awk 'END { print $3 }' | sed 's/\.$//')
+# sub(), NOT gsub(): busybox awk gsub() spins forever on this build (verified on camera)
+FREE_SD=$(df /tmp/sd/ | awk '/mmc/{sub(/%/,"",$5); print $5}')
+WLAN_STRENGTH=$(awk 'END { sub(/\.$/,"",$3); print $3 }' /proc/net/wireless)
 
 # MQTT configuration
 

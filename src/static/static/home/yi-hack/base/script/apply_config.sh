@@ -36,7 +36,7 @@ CONFIG_DIR="${CONFIG_DIR:-$LOGICAL/config}"
 
 MODEL=$(cat /home/app/.camver 2>/dev/null)
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') apply_config: $*"; }
-is_mounted() { mount 2>/dev/null | grep -q " $1 "; }
+is_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
 
 # Never overridden from the share:
 #  - camera.conf / ptz_presets.conf : runtime state written by the device

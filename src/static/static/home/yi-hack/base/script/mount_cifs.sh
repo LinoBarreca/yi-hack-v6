@@ -53,7 +53,7 @@ fi
 
 # Load the CIFS modules (idempotent: skip if already loaded)
 for m in md4 hmac cifs; do
-    if ! lsmod | grep -q "^$m "; then
+    if ! grep -q "^$m " /proc/modules; then
         _err=$(insmod "$KO_DIR/$m.ko" 2>&1) || log "warn: insmod $m.ko: ${_err:-failed} (maybe already loaded)"
     fi
 done
@@ -61,16 +61,20 @@ done
 mkdir -p "$MOUNTPOINT"
 
 # If already mounted for some reason, unmount to start clean
-mount | grep -q " $MOUNTPOINT " && umount "$MOUNTPOINT" 2>/dev/null
+grep -q " $MOUNTPOINT " /proc/mounts && umount "$MOUNTPOINT" 2>/dev/null
 
 MODEL=$(cat /home/app/.camver 2>/dev/null)
+
+# Bound each attempt: a dead/unreachable server can hang mount(2) far longer than
+# the whole retry budget. Guarded: older rootfs builds have no timeout applet.
+T=""; command -v timeout >/dev/null && T="timeout 20"
 
 i=0
 while [ "$i" -lt "$RETRY" ]; do
     i=$((i + 1))
     # End-to-end verified options: SMB1/NT1 + NTLMv2, pass= (not password=), ro.
     # Capture stderr: the mount error is THE diagnostic and must reach the boot log.
-    if _err=$(mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
+    if _err=$($T mount -t cifs "//$HOST/$SHARE" "$MOUNTPOINT" \
             -o user="$USER",pass="$PASS",sec="$SEC",vers="$VERS",ro 2>&1); then
         log "mounted //$HOST/$SHARE on $MOUNTPOINT (attempt $i)"
         # Payload validation: look for the model tree, with a non-per-model fallback
@@ -82,7 +86,7 @@ while [ "$i" -lt "$RETRY" ]; do
         umount "$MOUNTPOINT" 2>/dev/null
         exit 2
     fi
-    log "mount failed (attempt $i/$RETRY): ${_err:-unknown error} - retrying in ${RETRY_DELAY}s"
+    log "mount failed (attempt $i/$RETRY): ${_err:-timed out or unknown error} - retrying in ${RETRY_DELAY}s"
     sleep "$RETRY_DELAY"
 done
 

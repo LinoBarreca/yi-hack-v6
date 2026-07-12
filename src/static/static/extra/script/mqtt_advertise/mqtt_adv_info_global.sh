@@ -21,7 +21,7 @@ LOCAL_IP=$(ifconfig wlan0 | awk '/inet addr/{print substr($2,6)}')
 NETMASK=$(ifconfig wlan0 | awk '/inet addr/{print substr($4,6)}')
 GATEWAY=$(route -n | awk 'NR==3{print $2}')
 MAC_ADDR=$(ifconfig wlan0 | awk '/HWaddr/{print substr($5,1)}')
-WLAN_ESSID=$(iwconfig wlan0 | grep ESSID | cut -d\" -f2)
+WLAN_ESSID=$(iwconfig wlan0 | awk -F\" '/ESSID/{print $2}')
 
 # MQTT configuration
 

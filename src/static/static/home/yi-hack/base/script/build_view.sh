@@ -33,7 +33,7 @@ CIFS_RW_MNT="${CIFS_RW_MNT:-}"   # dedicated RW mount for output->CIFS (empty = 
 MODEL=$(cat /home/app/.camver 2>/dev/null)
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') build_view: $*"; }
 
-is_mounted() { mount 2>/dev/null | grep -q " $1 "; }
+is_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
 writable() {
     is_mounted "$1" || return 1
     _t="$1/.wtest.$$"; (: > "$_t") 2>/dev/null && { rm -f "$_t"; return 0; }

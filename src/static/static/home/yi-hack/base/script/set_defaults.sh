@@ -45,7 +45,7 @@ resolve_serial() {
 fill_if_empty() {
     _f="$1"; _k="$2"; _v="$3"
     [ -f "$_f" ] || { log "WARNING: $_f missing, cannot set $_k"; return 0; }
-    _cur=$(grep -E "^${_k}=" "$_f" | cut -d= -f2- | head -n1)
+    _cur=$(sed -n "/^${_k}=/{s/^[^=]*=//;p;q}" "$_f")
     [ -n "$_cur" ] && return 0                       # already set -> keep, quietly
     if grep -qE "^${_k}=" "$_f"; then
         sed -i "s|^${_k}=.*|${_k}=${_v}|" "$_f"      # replace empty value
