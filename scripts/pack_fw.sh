@@ -80,21 +80,6 @@ fi
 # Helpers
 ###############################################################################
 
-# Compress real files (not symlinks) in $dir into per-file .7z, removing the original.
-# cd into the dir so the archive stores the bare basename -> system_init.sh extracts it
-# back with `7za x <dir>/*.7z -o<dir>` to the same place.
-compress_in_dir() {
-    local dir=$1; shift
-    [ -d "$dir" ] || return 0
-    local f
-    for f in "$@"; do
-        if [ -f "$dir/$f" ] && [ ! -L "$dir/$f" ]; then
-            ( cd "$dir" && 7za a "$f.7z" "$f" >/dev/null 2>&1 && rm -f "$f" ) \
-                || die "7za failed on $dir/$f"
-        fi
-    done
-}
-
 # Stock OTA updates ship as a sibling folder of home_extracted/ named after the release
 # (e.g. 2.1.0.0E_201809191630/) carrying a partial home/ tree with per-subdir version files
 # (.basever/.appver/.libver/.hisikover) and a top-level homever. The stock updater
@@ -246,7 +231,32 @@ make_partition_image() {
             -n "0001-hi3518-${type}" -d "$jffs2" "$uimg" || die "mkuimage.py $type failed"
     fi
     rm -f "$jffs2"
-    log "$MODEL: ${type}_${MODEL} = $(stat -c '%s' "$uimg") bytes (uImage, jffs2 inside)"
+    local sz; sz=$(stat -c '%s' "$uimg")
+    # Assert the image fits its MTD partition (the bootloader flashes it verbatim -
+    # an over-size image would be truncated = brick). Partition sizes are PER MODEL:
+    # the family spans different flash chips/layouts, so they are not hardcoded here
+    # (see partition_limit). Unknown model -> warn and skip rather than assert a wrong
+    # number in either direction.
+    local limit; limit=$(partition_limit "$MODEL" "$type")
+    if [ -n "$limit" ]; then
+        [ "$sz" -gt "$limit" ] && die "$MODEL: ${type}_${MODEL} = $sz bytes EXCEEDS the $limit-byte ${type} partition"
+        log "$MODEL: ${type}_${MODEL} = $sz bytes (uImage, jffs2 inside; ${type} partition $limit, $((100*sz/limit))% used)"
+    else
+        log "$MODEL: ${type}_${MODEL} = $sz bytes (uImage, jffs2 inside; WARNING: no known ${type} partition size for '$MODEL' - size check SKIPPED, add it to partition_limit from 'cat /proc/mtd')"
+    fi
+}
+
+# Per-model MTD partition sizes in bytes, read from `cat /proc/mtd` on each REAL camera.
+# They are NOT uniform across the yi-hack family (different SPI flash and partition tables),
+# so each supported model needs its own line.
+# A model absent here builds with the size check skipped (a warning, not a wrong assertion).
+#   y20 (Yi 1080p Home, Hi3518Ev200, 16MB): mtd4 rootfs 0x140000, mtd5 home 0xcb0000
+partition_limit() {   # partition_limit <model> <rootfs|home> -> bytes (empty if unknown)
+    case "$1:$2" in
+        y20:rootfs) echo $((0x140000)) ;;
+        y20:home)   echo $((0xcb0000)) ;;
+        *)          : ;;
+    esac
 }
 
 ###############################################################################
@@ -359,14 +369,10 @@ pack_model() {
         done
     fi
 
-    # --- Step 11: compress big files (system_init.sh extracts them on first boot) ---
-    # The home partition is tight (~13 MB). Big binaries/libs ship compressed and are
-    # expanded once into the live /home on first boot by system_init.sh, which globs *.7z
-    # in /home/app, /home/base/tools, /home/lib (and /home/yi-hack/yi-hack.7z).
-    log "$MODEL: compressing big files (7za, extracted on first boot)..."
-    compress_in_dir "$IMG_DIR/home/lib"        libcrypto.so.1.1 libstdc++.so.6.0.19
-    compress_in_dir "$IMG_DIR/home/base/tools" wpa_supplicant wpa_passphrase wpa_cli
-    compress_in_dir "$IMG_DIR/home/app"        cloudAPI oss p2p_tnp rmm
+    # (Files ship UNCOMPRESSED: the jffs2 image compresses its own contents, so a
+    # separate first-boot .7z expansion only meant a slower, flash-writing first boot
+    # for no space saving that matters. The home partition still has room - the packed
+    # image size is asserted below.)
 
     # --- Step 12: fix ownership ---
     log "$MODEL: fixing ownership (root:root)..."

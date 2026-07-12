@@ -71,23 +71,32 @@ if ! payload_compatible "${SRC%/*}"; then
     exit 0
 fi
 
-# Copy each file over flash, preserving the relative path (recursive), skipping the
-# runtime-state/identity exclusions. Parameter expansion only (no basename/dirname applet).
-( cd "$SRC" 2>/dev/null && find . -type f ) | while IFS= read -r f; do
+# Copy each managed .conf over flash, preserving the relative path (recursive),
+# skipping the runtime-state/identity exclusions. Only *.conf are provisioned: a
+# stray file on the share/SD (e.g. a renamed system.disabled) must not land in
+# config/. Parameter expansion only (no basename/dirname applet).
+#
+# CRLF: configs edited on Windows arrive with CRLF and the line-based parsers would
+# take the trailing \r as part of the value. Normalize on the way in. The compare is
+# done against the NORMALIZED content via a tmpfs temp (no flash write), so unchanged
+# files still cost zero flash writes (only a real change touches the flash).
+NORM=/tmp/.apply_config.$$
+( cd "$SRC" 2>/dev/null && find . -name '*.conf' -type f ) | while IFS= read -r f; do
     rel=${f#./}
     base=${rel##*/}
     case " $EXCLUDE " in *" $base "*) log "skip $rel (runtime state, never overridden)"; continue ;; esac
     dest="$CONFIG_DIR/$rel"
     mkdir -p "${dest%/*}"
-    # Flash-wear: skip the copy (and the flash write) when content is already identical.
-    if cmp -s "$SRC/$rel" "$dest"; then
+    tr -d '\r' < "$SRC/$rel" > "$NORM"
+    if cmp -s "$NORM" "$dest"; then
         log "unchanged $rel"
-    elif cp "$SRC/$rel" "$dest"; then
+    elif cp "$NORM" "$dest"; then
         log "override $rel"
     else
         log "FAILED $rel"
     fi
 done
+rm -f "$NORM"
 
 # Locked settings win over the share: re-stamp them after any override (the copy
 # above is per-file, so a managed file may have brought a locked key along).

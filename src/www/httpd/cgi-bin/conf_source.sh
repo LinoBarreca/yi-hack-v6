@@ -75,10 +75,10 @@ if [ -n "$REL" ]; then
 fi
 
 # ---- default: per-source managed file lists ----
-list_files() {   # list_files <dir> -> comma-separated JSON strings
+list_files() {   # list_files <dir> -> comma-separated JSON strings (only *.conf are provisioned)
     [ -n "$1" ] || return 0
     _first=1
-    ( cd "$1" 2>/dev/null && find . -type f ) | while IFS= read -r f; do
+    ( cd "$1" 2>/dev/null && find . -name '*.conf' -type f ) | while IFS= read -r f; do
         rel=${f#./}
         base=${rel##*/}
         case " $EXCLUDE " in *" $base "*) continue ;; esac
