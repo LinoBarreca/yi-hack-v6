@@ -1,0 +1,210 @@
+/* yi-hack-v6 UI — design tokens + shell layout on top of Bootstrap 5.3.
+   Both themes are first-class: Bootstrap's data-bs-theme drives its components,
+   these tokens drive ours. */
+
+:root, [data-bs-theme="light"] {
+  --yh-bg: #eef1f4;
+  --yh-surface: #ffffff;
+  --yh-surface2: #f3f5f8;
+  --yh-line: #d5dbe2;
+  --yh-text: #1d242b;
+  --yh-muted: #5c6873;
+  --yh-accent: #00baad;   /* Yi brand teal (sampled from the stock app artwork) */
+  --yh-accent-ink: #ffffff;
+  --yh-ok: #2e8540;
+  --yh-warn: #a37a17;
+  --yh-crit: #bb3a2c;
+  --yh-info: #2f6fa7;
+  --yh-lock: #7455b5;
+  --yh-mono: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+}
+[data-bs-theme="dark"] {
+  --yh-bg: #12161b;
+  --yh-surface: #1a2027;
+  --yh-surface2: #212932;
+  --yh-line: #2c3641;
+  --yh-text: #e7ebef;
+  --yh-muted: #8c98a4;
+  --yh-accent: #00baad;   /* Yi brand teal */
+  --yh-accent-ink: #04211e;
+  --yh-ok: #5fb56a;
+  --yh-warn: #d9a83c;
+  --yh-crit: #d95c4e;
+  --yh-info: #5a9bd0;
+  --yh-lock: #a48ad4;
+}
+
+body {
+  background: var(--yh-bg);
+  color: var(--yh-text);
+  font-size: 14px;
+}
+
+/* ---------- application frame ---------- */
+.yh-app { display: grid; grid-template-columns: 216px 1fr; min-height: 100vh; }
+.yh-side {
+  background: var(--yh-surface); border-right: 1px solid var(--yh-line);
+  display: flex; flex-direction: column; padding: 14px 10px; gap: 2px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.yh-brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 14px; text-decoration: none; color: inherit; }
+.yh-brand .cam {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--yh-accent);
+  color: var(--yh-accent-ink); display: grid; place-items: center; flex: none;
+}
+.yh-brand b { font-size: 15px; letter-spacing: .2px; }
+.yh-brand small { display: block; color: var(--yh-muted); font-family: var(--yh-mono); font-size: 11px; }
+
+.yh-navlabel {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--yh-muted); padding: 12px 12px 4px;
+}
+.yh-nav a {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: 8px; color: var(--yh-muted); text-decoration: none;
+  border: 1px solid transparent; font-size: 13.5px;
+}
+.yh-nav a svg { flex: none; }
+.yh-nav a:hover { color: var(--yh-text); background: var(--yh-surface2); }
+.yh-nav a.on { color: var(--yh-text); background: var(--yh-surface2); border-color: var(--yh-line); }
+.yh-nav a.on svg { color: var(--yh-accent); }
+.yh-side .foot { margin-top: auto; padding: 10px 12px; color: var(--yh-muted); font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.yh-main { display: flex; flex-direction: column; min-width: 0; }
+.yh-top {
+  display: flex; align-items: center; gap: 12px; padding: 12px 26px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--yh-line); background: var(--yh-surface);
+  position: sticky; top: 0; z-index: 10;
+}
+.yh-top .host { font-weight: 650; font-size: 15px; }
+.yh-top .host small { color: var(--yh-muted); font-weight: 400; margin-left: 8px; font-family: var(--yh-mono); font-size: 11px; }
+.yh-content { padding: 22px 26px 40px; max-width: 1100px; width: 100%; }
+.yh-content h1 { font-size: 19px; margin: 0 0 4px; font-weight: 650; }
+.yh-content .sub { color: var(--yh-muted); margin: 0 0 20px; max-width: 70ch; }
+
+/* ---------- pills & chips (ownership / state language) ---------- */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  border: 1px solid var(--yh-line); background: var(--yh-surface2);
+  border-radius: 99px; padding: 3px 10px; font-size: 12px; color: var(--yh-muted);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yh-muted); flex: none; }
+.dot.ok { background: var(--yh-ok); } .dot.warn { background: var(--yh-warn); } .dot.crit { background: var(--yh-crit); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+  border-radius: 6px; padding: 2px 8px; font-weight: 600; letter-spacing: .02em;
+}
+.chip.cloud    { background: color-mix(in srgb, var(--yh-info) 18%, transparent);  color: var(--yh-info); }
+.chip.model    { background: color-mix(in srgb, var(--yh-lock) 18%, transparent);  color: var(--yh-lock); }
+.chip.share    { background: color-mix(in srgb, var(--yh-warn) 16%, transparent);  color: var(--yh-warn); }
+.chip.sd       { background: color-mix(in srgb, var(--yh-accent) 16%, transparent); color: var(--yh-accent); }
+.chip.state-ok   { background: color-mix(in srgb, var(--yh-ok) 16%, transparent);   color: var(--yh-ok); }
+.chip.state-off  { background: var(--yh-surface2); color: var(--yh-muted); }
+.chip.state-crit { background: color-mix(in srgb, var(--yh-crit) 16%, transparent); color: var(--yh-crit); }
+
+/* ---------- cards ---------- */
+.yh-card {
+  background: var(--yh-surface); border: 1px solid var(--yh-line);
+  border-radius: 10px; padding: 16px 18px; margin-bottom: 14px;
+}
+.yh-card h2 {
+  font-size: 12px; margin: 0 0 12px; color: var(--yh-muted);
+  text-transform: uppercase; letter-spacing: .1em; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.yh-grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.yh-grid2 .yh-card { margin-bottom: 0; }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--yh-muted); font-weight: 400; }
+.kv dd { margin: 0; font-family: var(--yh-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+table.svc { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.svc td { padding: 7px 4px; border-top: 1px solid var(--yh-line); }
+table.svc tr:first-child td { border-top: none; }
+table.svc td:last-child { text-align: right; color: var(--yh-muted); font-family: var(--yh-mono); font-size: 12px; }
+
+/* ---------- loading indicator (CGIs on the camera take a few seconds) ---------- */
+.yh-loading {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--yh-muted); padding: 26px 0; font-size: 13px;
+}
+.yh-loading .spin {
+  width: 18px; height: 18px; flex: none; border-radius: 50%;
+  border: 2px solid var(--yh-line); border-top-color: var(--yh-accent);
+  animation: yh-spin .8s linear infinite;
+}
+@keyframes yh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .yh-loading .spin { animation-duration: 2.5s; } }
+
+/* ---------- choice cards (single-decision radios) ---------- */
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.choice {
+  border: 1px solid var(--yh-line); border-radius: 10px; padding: 14px;
+  background: var(--yh-surface2); cursor: pointer; position: relative; margin: 0;
+}
+.choice input { position: absolute; opacity: 0; }
+.choice b { display: block; margin-bottom: 4px; }
+.choice p { margin: 0; color: var(--yh-muted); font-size: 12px; }
+.choice.sel { border-color: var(--yh-accent); box-shadow: 0 0 0 1px var(--yh-accent) inset; }
+.choice.blocked { opacity: .55; cursor: not-allowed; }
+.choice .req { display: block; margin-top: 8px; font-size: 11.5px; color: var(--yh-warn); }
+.choice input:focus-visible ~ b { outline: 2px solid var(--yh-accent); outline-offset: 2px; }
+
+/* ---------- forms ---------- */
+.frm { display: grid; gap: 14px; }
+.frm .row2 { display: grid; grid-template-columns: 220px 1fr; gap: 14px; align-items: start; }
+.frm .row2 > label { padding-top: 7px; font-weight: 550; font-size: 13px; }
+.frm .help { color: var(--yh-muted); font-size: 12px; margin-top: 4px; max-width: 62ch; }
+.frm input[type="text"], .frm input[type="password"], .frm select, .frm textarea {
+  max-width: 420px;
+}
+.savebar { display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+.savebar .msg { color: var(--yh-muted); font-size: 12.5px; }
+
+.logpane {
+  background: var(--yh-surface2); border: 1px solid var(--yh-line); border-radius: 8px;
+  padding: 10px 12px; font-family: var(--yh-mono); font-size: 11.5px; line-height: 1.45;
+  max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* Save buttons in the brand accent (Bootstrap's yellow .btn-warning is retired) */
+.btn-warning {
+  --bs-btn-bg: var(--yh-accent);            --bs-btn-border-color: var(--yh-accent);
+  --bs-btn-color: var(--yh-accent-ink);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--yh-accent) 85%, black);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--yh-accent) 85%, black);
+  --bs-btn-hover-color: var(--yh-accent-ink);
+  --bs-btn-active-bg: color-mix(in srgb, var(--yh-accent) 75%, black);
+  --bs-btn-active-border-color: color-mix(in srgb, var(--yh-accent) 75%, black);
+  --bs-btn-active-color: var(--yh-accent-ink);
+  --bs-btn-disabled-bg: var(--yh-accent);   --bs-btn-disabled-border-color: var(--yh-accent);
+  --bs-btn-disabled-color: var(--yh-accent-ink);
+}
+
+/* ---------- persistent toasts (SD provisioning warnings) ---------- */
+.yh-toasts {
+  position: fixed; right: 18px; bottom: 18px; z-index: 1080;
+  display: flex; flex-direction: column; gap: 10px; max-width: 420px;
+}
+.yh-toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--yh-surface); border: 1px solid var(--yh-line);
+  border-left: 4px solid var(--yh-warn); border-radius: 8px;
+  padding: 12px 14px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+}
+.yh-toast .btn-close { flex: none; margin-left: auto; }
+.loglist { display: flex; gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 760px) {
+  .frm .row2 { grid-template-columns: 1fr; }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 760px) {
+  .yh-app { grid-template-columns: 1fr; }
+  .yh-side { position: static; height: auto; flex-direction: row; overflow-x: auto; align-items: center; }
+  .yh-side .foot, .yh-navlabel { display: none; }
+  .yh-content { padding: 16px 14px 40px; }
+}

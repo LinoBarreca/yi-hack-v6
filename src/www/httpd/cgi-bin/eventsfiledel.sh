@@ -31,8 +31,8 @@ esac
 
 FILE="none"
 
-CONF="$(echo $QUERY_STRING | cut -d'=' -f1)"
-VAL="$(echo $QUERY_STRING | cut -d'=' -f2)"
+CONF="${QUERY_STRING%%=*}"
+VAL="${QUERY_STRING#*=}"
 
 if [ "$CONF" == "file" ] ; then
     FILE="$VAL"

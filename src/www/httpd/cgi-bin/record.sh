@@ -14,10 +14,11 @@ validateNumber()
 
 TIME=60
 
-for I in 1
+OIFS=$IFS; IFS='&'; set -- $QUERY_STRING; IFS=$OIFS
+for KV in "$@"
 do
-    CONF="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f1)"
-    VAL="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f2)"
+    CONF="${KV%%=*}"
+    VAL="${KV#*=}"
 
     if [ "$CONF" == "time" ] ; then
         TIME="$VAL"

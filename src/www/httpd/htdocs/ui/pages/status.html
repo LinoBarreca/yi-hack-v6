@@ -1,0 +1,99 @@
+<div x-data="statusPage">
+    <h1>Status</h1>
+    <p class="sub">Everything important at a glance — what's running, where the firmware and the
+        recordings live, and who owns each setting.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+    <div class="alert alert-warning" x-show="err" x-text="err"></div>
+
+    <div class="yh-grid2 mb-3" x-show="ready">
+        <div class="yh-card">
+            <h2>Camera</h2>
+            <dl class="kv">
+                <dt>Model</dt><dd x-text="s.model_suffix || '—'"></dd>
+                <dt>Serial</dt><dd x-text="s.serial_number || '—'"></dd>
+                <dt>Hardware id</dt><dd x-text="s.hardware_id || '—'"></dd>
+                <dt>Yi-Hack version</dt><dd x-text="(s.fw_version || '—') + (s.basefw_version && s.basefw_version !== s.fw_version ? ' (flash base ' + s.basefw_version + ')' : '')"></dd>
+                <dt>Stock firmware</dt><dd x-text="s.home_version || '—'"></dd>
+                <dt>Uptime</dt><dd x-text="fmtUptime()"></dd>
+                <dt>Load / memory</dt><dd x-text="(s.load_avg || '—') + ' · ' + fmtMem()"></dd>
+                <dt>Local time</dt>
+                <dd>
+                    <span x-text="s.local_time || '—'"></span>
+                    <span class="chip cloud" x-show="s.tz_source === 'cloud'" title="Time and timezone follow the Yi app while the cloud is enabled">☁ from Yi app</span>
+                </dd>
+            </dl>
+        </div>
+
+        <div class="yh-card">
+            <h2>Network</h2>
+            <dl class="kv">
+                <dt>WiFi network</dt><dd x-text="s.wlan_essid || '—'"></dd>
+                <dt>Signal</dt><dd x-text="s.wlan_strength ? s.wlan_strength + '%' : '—'"></dd>
+                <dt>IP address</dt><dd x-text="s.local_ip || '—'"></dd>
+                <dt>Netmask</dt><dd x-text="s.netmask || '—'"></dd>
+                <dt>Gateway</dt><dd x-text="s.gateway || '—'"></dd>
+                <dt>MAC</dt><dd x-text="s.mac_addr || '—'"></dd>
+            </dl>
+        </div>
+
+        <div class="yh-card">
+            <h2>Storage &amp; firmware</h2>
+            <dl class="kv">
+                <dt>Yi-Hack firmware in</dt><dd x-text="firmwareIn()"></dd>
+                <dt>SD card</dt><dd x-text="s.sd_mounted === 'yes' ? ('inserted' + (s.free_sd && s.free_sd !== 'N/A' ? ' · ' + s.free_sd + ' free' : '')) : 'not inserted'"></dd>
+                <dt>Firmware share</dt><dd x-text="s.cifs_ro_mounted === 'yes' ? 'mounted · read-only' : 'not mounted'"></dd>
+                <dt>Output share</dt><dd x-text="s.cifs_rw_mounted === 'yes' ? ('mounted · read-write' + (s.cifs_rw_free ? ' · ' + s.cifs_rw_free + ' free' : '')) : 'not mounted'"></dd>
+                <dt>Internal flash</dt><dd x-text="s.flash_free ? s.flash_free + ' free' : '—'"></dd>
+                <dt>Recordings go to</dt><dd x-text="s.record_dest === 'NO' ? 'off' : (s.record_dest || '—')"></dd>
+                <dt>Service logs go to</dt><dd x-text="s.log_dest || '—'"></dd>
+            </dl>
+        </div>
+
+        <div class="yh-card">
+            <h2>Services</h2>
+            <table class="svc">
+                <tr><td>RTSP stream</td><td><span :class="svcChip(s.rtsp_running)" x-text="svcText(s.rtsp_running)"></span></td><td></td></tr>
+                <tr><td>Native recorder</td><td><span :class="svcChip(s.recorder_running)" x-text="s.recorder_running === 'yes' ? 'recording' : 'off'"></span></td><td></td></tr>
+                <tr><td>ONVIF</td><td><span :class="svcChip(s.onvif_running)" x-text="svcText(s.onvif_running)"></span></td><td></td></tr>
+                <tr><td>MQTT</td><td><span :class="svcChip(s.mqtt_running)" x-text="svcText(s.mqtt_running)"></span></td>
+                    <td x-text="s.mqtt_config_running === 'yes' ? 'remote control on' : ''"></td></tr>
+                <tr><td>Time sync</td>
+                    <td>
+                        <span class="chip cloud" x-show="s.tz_source === 'cloud'">☁ cloud-managed</span>
+                        <span :class="svcChip(s.ntpd_running)" x-show="s.tz_source !== 'cloud'"
+                              x-text="s.ntpd_running === 'yes' ? 'NTP daemon' : 'NTP at boot'"></span>
+                    </td><td></td></tr>
+                <tr><td>Yi cloud / app</td>
+                    <td><span :class="s.p2p_running === 'yes' ? 'chip state-ok' : 'chip state-off'"
+                              x-text="s.p2p_running === 'yes' ? 'running' : 'off'"></span></td>
+                    <td x-text="(s.p2p_running === 'yes') !== (s.disable_cloud === 'no')
+                                ? 'set to ' + (s.disable_cloud === 'no' ? 'on' : 'off') + ' — applies at reboot' : ''"></td></tr>
+            </table>
+            <div class="d-flex gap-2 flex-wrap mt-3">
+                <span class="chip cloud" title="Value follows the Yi app / cloud">☁ managed by cloud</span>
+                <span class="chip model" title="Locked at build time for this camera model">🔒 fixed for this model</span>
+                <span class="chip share" title="File is managed centrally from the network share">⇩ managed centrally</span>
+                <span class="chip sd" title="Provisioned by the SD card: editable, but a reboot with the SD inserted restores the provisioned value">💾 SD provisioned</span>
+            </div>
+        </div>
+
+        <div class="yh-card" x-show="linkRows().length">
+            <h2>Quick links</h2>
+            <dl class="kv">
+                <template x-for="l in linkRows()" :key="l.label">
+                    <div style="display:contents">
+                        <dt x-text="l.label"></dt>
+                        <dd>
+                            <a x-show="l.http" :href="l.url" target="_blank" rel="noopener"
+                               x-text="l.url" style="font-family:var(--yh-mono); font-size:12px"></a>
+                            <span x-show="!l.http" x-text="l.url"
+                                  style="font-family:var(--yh-mono); font-size:12px"></span>
+                        </dd>
+                    </div>
+                </template>
+            </dl>
+            <div class="help">RTSP links open in a player (VLC, ffplay), not in the browser.</div>
+        </div>
+    </div>
+</div>

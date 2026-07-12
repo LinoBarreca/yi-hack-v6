@@ -8,8 +8,8 @@ removedoublequotes(){
   echo "$(sed 's/^"//g;s/"$//g')"
 }
 
-PARAM="$(echo $QUERY_STRING | cut -d'=' -f1)"
-VAL="$(echo $QUERY_STRING | cut -d'=' -f2)"
+PARAM="${QUERY_STRING%%=*}"
+VAL="${QUERY_STRING#*=}"
 PWD=""
 PWD2=""
 
@@ -26,7 +26,7 @@ printf "Content-type: application/json\r\n\r\n"
 printf "{\"wifi\":["
 
 # Scan for WiFi networks and extract ESSIDs
-iwlist wlan0 scan | grep "ESSID:" | cut -d '"' -f 2 | while read -r ESSID; do
+iwlist wlan0 scan | awk -F'"' '/ESSID:/{print $2}' | while read -r ESSID; do
     # Check if ESSID is not empty
     if [ -n "$ESSID" ]; then
         # Print ESSID in JSON format
@@ -39,21 +39,21 @@ printf "\"\"]}\n"
 
 elif [ $ACTION == "save" ]; then
 
-    read -r POST_DATA
     rm -f /tmp/configure_wifi.cfg
 
-    KEYS=$(echo "$POST_DATA" | jq keys_unsorted[])
-    for KEY in $KEYS; do
-        KEY=$(echo $KEY | removedoublequotes)
-        VALUE=$(echo "$POST_DATA" | jq -r .$KEY)
-        if [ $KEY == "WIFI_ESSID" ]; then
-            KEY="wifi_ssid"
-            echo "$KEY=$VALUE" >> /tmp/configure_wifi.cfg
-        elif [ $KEY == "WIFI_PASSWORD" ]; then
+    # Body: one "KEY=url-encoded-value" per line (see set_configs.sh - jq took
+    # ~12s per invocation on this CPU, so it is gone from the save path).
+    urldecode() { printf '%b' "${1//%/\\x}"; }
+    while IFS= read -r ROW || [ -n "$ROW" ]; do
+        case "$ROW" in *=*) ;; *) continue ;; esac
+        KEY=${ROW%%=*}
+        VALUE=$(urldecode "${ROW#*=}")
+        if [ "$KEY" == "WIFI_ESSID" ]; then
+            echo "wifi_ssid=$VALUE" >> /tmp/configure_wifi.cfg
+        elif [ "$KEY" == "WIFI_PASSWORD" ]; then
             PWD=$VALUE
-            KEY="wifi_psk"
-            echo "$KEY=$VALUE" >> /tmp/configure_wifi.cfg
-        elif [ $KEY == "WIFI_PASSWORD2" ]; then
+            echo "wifi_psk=$VALUE" >> /tmp/configure_wifi.cfg
+        elif [ "$KEY" == "WIFI_PASSWORD2" ]; then
             PWD2=$VALUE
         fi
     done

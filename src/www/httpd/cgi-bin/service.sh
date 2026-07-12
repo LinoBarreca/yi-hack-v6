@@ -248,8 +248,8 @@ stop_ftpd()
 
 ps_program()
 {
-    PS_PROGRAM=$(ps | grep $1 | grep -v grep | grep -c ^)
-    if [ $PS_PROGRAM -gt 0 ]; then
+    # pidof matches the exact process name (any of the args), not a substring
+    if pidof "$@" > /dev/null; then
         echo "started"
     else
         echo "stopped"
@@ -272,10 +272,11 @@ PARAM1="none"
 PARAM2="none"
 RES=""
 
-for I in 1 2 3 4
+OIFS=$IFS; IFS='&'; set -- $QUERY_STRING; IFS=$OIFS
+for KV in "$@"
 do
-    CONF="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f1)"
-    VAL="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f2)"
+    CONF="${KV%%=*}"
+    VAL="${KV#*=}"
 
     if [ "$CONF" == "name" ] ; then
         NAME="$VAL"
@@ -346,7 +347,8 @@ elif [ "$ACTION" == "status" ] ; then
     elif [ "$NAME" == "wsdd" ]; then
         RES=$(ps_program wsd_simple_server)
     elif [ "$NAME" == "ftpd" ]; then
-        RES=$(ps_program ftpd)
+        # busybox mode: the idle listener is tcpsvd (ftpd only exists per-connection)
+        RES=$(ps_program pure-ftpd tcpsvd ftpd)
     elif [ "$NAME" == "mqtt" ]; then
         RES=$(ps_program mqttv4)
     elif [ "$NAME" == "mp4record" ]; then

@@ -79,6 +79,22 @@ do
         else
             ipc_cmd -r on
         fi
+    # Settings below were only settable via MQTT cmnd/ before; flags match
+    # the validate.c table (mqtt-config), one source of truth for the mapping.
+    elif [ "$CONF" == "motion_detection" ] ; then
+        ipc_cmd -O $VAL
+    elif [ "$CONF" == "ai_human_detection" ] ; then
+        ipc_cmd -a $VAL
+    elif [ "$CONF" == "ai_vehicle_detection" ] ; then
+        ipc_cmd -E $VAL
+    elif [ "$CONF" == "ai_animal_detection" ] ; then
+        ipc_cmd -N $VAL
+    elif [ "$CONF" == "face_detection" ] ; then
+        ipc_cmd -c $VAL
+    elif [ "$CONF" == "motion_tracking" ] ; then
+        ipc_cmd -o $VAL
+    elif [ "$CONF" == "cruise" ] ; then
+        ipc_cmd -C $VAL
     fi
     sleep 1
 done

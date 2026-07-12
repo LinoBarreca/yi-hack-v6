@@ -1,0 +1,165 @@
+<div x-data="nvrPage">
+    <h1>Recording (NVR)</h1>
+    <p class="sub">One decision: which recorder runs, and where the clips go. Only combinations
+        that actually work are offered.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <template x-if="ready">
+        <div>
+            <div class="yh-card">
+                <h2>Recorder</h2>
+                <div class="choices">
+                    <label class="choice" :class="{ sel: mode === 'off', blocked: offBlocked }">
+                        <input type="radio" name="recmode" value="off" x-model="mode" :disabled="offBlocked" />
+                        <b>Off</b>
+                        <p>No local recording. Keep streaming via RTSP/ONVIF to an external NVR
+                           (Frigate, go2rtc, …).</p>
+                        <span class="req" x-show="offBlocked">With the cloud enabled the Yi app
+                            recorder always runs — disable the cloud (System) to turn recording
+                            fully off.</span>
+                    </label>
+                    <label class="choice" :class="{ sel: mode === 'stock', blocked: stockBlocked }">
+                        <input type="radio" name="recmode" value="stock" x-model="mode" :disabled="stockBlocked" />
+                        <b>Stock recorder</b>
+                        <p>The built-in Xiaomi recorder. Writes the Yi app formats, SD card only.</p>
+                        <span class="req" x-show="stockBlocked">Needs an SD card — none inserted.</span>
+                    </label>
+                    <label class="choice" :class="{ sel: mode === 'native' }">
+                        <input type="radio" name="recmode" value="native" x-model="mode" />
+                        <b>Native NVR</b>
+                        <p>The yi-hack recorder: private, no cloud, no re-encoding. Records the
+                           RTSP stream in MP4 segments.</p>
+                        <span class="req" x-show="mode === 'native' && rtsp.ENABLED !== 'yes'" style="color:var(--yh-warn)">
+                            Requires the RTSP stream — it will be enabled on save.</span>
+                        <span class="req" x-show="mode === 'native' && rtsp.ENABLED === 'yes'" style="color:var(--yh-ok)">
+                            ✓ RTSP stream is on.</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="yh-card" x-show="mode === 'stock'">
+                <h2>Stock recorder options</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label>Record</label>
+                        <div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="stockmode" id="st-motion" value="yes" x-model="cam.SAVE_VIDEO_ON_MOTION" />
+                                <label class="form-check-label" for="st-motion">Only when motion is detected</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="stockmode" id="st-cont" value="no" x-model="cam.SAVE_VIDEO_ON_MOTION" />
+                                <label class="form-check-label" for="st-cont">Continuously</label>
+                            </div>
+                            <div class="help">This is the same setting as in the Yi app. It only
+                                affects the stock recorder.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yh-card" x-show="mode === 'native'">
+                <h2>Native NVR options</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="in-dest">Store clips on</label>
+                        <div>
+                            <select class="form-select" id="in-dest" x-model="dest">
+                                <option value="SD" :disabled="status.sd_mounted !== 'yes'">SD card</option>
+                                <option value="CIFS" :disabled="!rwConfigured">Network share (output share)</option>
+                                <option value="RAM">RAM (temporary)</option>
+                            </select>
+                            <div class="help" x-show="status.sd_mounted !== 'yes'">SD card: none inserted.</div>
+                            <div class="help" x-show="!rwConfigured">Network share: configure the
+                                <a href="?page=network" @click.prevent="$store.ui.open('network')">output share</a> first.</div>
+                            <div class="help" x-show="dest === 'RAM'" style="color:var(--yh-warn)">RAM holds only a few
+                                minutes of video (16 MB) and is lost at reboot — useful together with FTP push + delete.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-seg">Segment length</label>
+                        <div>
+                            <select class="form-select" id="in-seg" x-model="rec.SEGMENT_TIME">
+                                <option value="60">60 seconds</option>
+                                <option value="120">2 minutes</option>
+                                <option value="300">5 minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-free">Keep free space</label>
+                        <div>
+                            <input type="text" class="form-control" id="in-free" x-model="rec.FREE_SPACE" style="max-width:110px" />
+                            <div class="help">% of the storage kept free — the oldest clips are deleted first.</div>
+                        </div>
+                    </div>
+                    <div class="row2" x-show="rtsp.AUDIO !== 'yes' && rtsp.AUDIO !== 'aac'">
+                        <label>Audio</label>
+                        <div class="help" style="margin-top:7px">The RTSP stream has audio off, so clips will be
+                            <b>video-only</b>. Enable audio in Services → Streaming to record sound.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yh-card" :class="{ 'opacity-50': mode === 'off' }">
+                <h2>FTP push
+                    <span class="chip state-off" x-show="mode === 'off'">needs an active recorder</span>
+                </h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="sw-ftp">Upload clips</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-ftp"
+                                       :checked="ftp.ENABLED === 'yes'" :disabled="mode === 'off'"
+                                       @change="ftp.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-ftp">Upload finished clips to an FTP server</label>
+                            </div>
+                        </div>
+                    </div>
+                    <template x-if="ftp.ENABLED === 'yes' && mode !== 'off'">
+                        <div class="frm">
+                            <div class="row2">
+                                <label for="in-ftph">Server / folder</label>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-ftph" x-model="ftp.HOST" placeholder="ftp.example.lan" />
+                                    <input type="text" class="form-control" x-model="ftp.DIR" placeholder="/cam1" aria-label="FTP folder" />
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="in-ftpu">User / password</label>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-ftpu" x-model="ftp.USERNAME" />
+                                    <input type="password" class="form-control" x-model="ftp.PASSWORD" aria-label="FTP password" />
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label>Options</label>
+                                <div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="ck-tree"
+                                               :checked="ftp.DIR_TREE === 'yes'"
+                                               @change="ftp.DIR_TREE = $event.target.checked ? 'yes' : 'no'" />
+                                        <label class="form-check-label" for="ck-tree">Create one folder per hour (like the local layout)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="ck-del"
+                                               :checked="ftp.FILE_DELETE_AFTER_UPLOAD === 'yes'"
+                                               @change="ftp.FILE_DELETE_AFTER_UPLOAD = $event.target.checked ? 'yes' : 'no'" />
+                                        <label class="form-check-label" for="ck-del">Delete the local clip after a successful upload</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="savebar">
+                <button class="btn btn-warning" @click="save()">Save changes</button>
+                <span class="msg" x-text="savemsg"></span>
+            </div>
+        </div>
+    </template>
+</div>

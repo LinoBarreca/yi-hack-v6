@@ -17,8 +17,10 @@ rm -f services/snapshot.conf services/httpd.conf services/rtsp.conf \
       services/proxychains.conf services/mqtt.conf services/mqtt_advertise.conf
 
 # Re-seed the removed files with defaults (check_conf.sh leaves preserved files
-# untouched; it also runs again at boot from system.sh).
+# untouched; it also runs again at boot from system.sh), then re-stamp the
+# build-time locked values (generic defaults may differ from them).
 /home/yi-hack/base/script/check_conf.sh
+/home/yi-hack/base/script/restore_locked_configs.sh
 
 printf "Content-type: application/json\r\n\r\n"
 printf "{\n"

@@ -1,0 +1,166 @@
+<div x-data="networkPage">
+    <h1>Network &amp; shares</h1>
+    <p class="sub">WiFi, the camera's name on the network, and the two network shares: where the
+        Yi-Hack firmware is loaded from (read-only) and where the camera writes its outputs
+        (read-write).</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <template x-if="ready">
+        <div>
+            <div class="yh-card">
+                <h2>Camera name</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="in-host">Hostname</label>
+                        <div>
+                            <input type="text" class="form-control" id="in-host" x-model="sys.HOSTNAME" />
+                            <div class="help">Empty = automatic (serial number, or the name your
+                                DHCP server assigns). MQTT / Home Assistant identity is configured
+                                with the MQTT service.</div>
+                        </div>
+                    </div>
+                    <div class="savebar">
+                        <button class="btn btn-warning" @click="saveHost()">Save name</button>
+                        <span class="msg" x-text="hostmsg"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>WiFi</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label>Current network</label>
+                        <div><span x-text="$store.ui.status.wlan_essid || '—'"></span>
+                             <span class="help" x-show="$store.ui.status.wlan_strength"> · signal <span x-text="$store.ui.status.wlan_strength"></span>%</span>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-ssid">Network (SSID)</label>
+                        <div>
+                            <div class="d-flex gap-2">
+                                <input type="text" class="form-control" id="in-ssid" x-model="wifi.ssid" list="ssid-list" />
+                                <button class="btn btn-outline-secondary" @click="scan()" x-text="scanning ? 'Scanning…' : 'Scan'"></button>
+                            </div>
+                            <datalist id="ssid-list">
+                                <template x-for="s in ssids" :key="s"><option :value="s"></option></template>
+                            </datalist>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-psk">Password</label>
+                        <div>
+                            <input type="password" class="form-control mb-2" id="in-psk" x-model="wifi.psk" autocomplete="new-password" />
+                            <input type="password" class="form-control" placeholder="Repeat password" x-model="wifi.psk2" autocomplete="new-password" aria-label="Repeat WiFi password" />
+                            <div class="help">Saving writes the credentials to the camera and
+                                reconnects. If they are wrong the camera may drop off the network —
+                                recovery is always possible via SD card.</div>
+                        </div>
+                    </div>
+                    <div class="savebar">
+                        <button class="btn btn-warning" @click="saveWifi()">Save WiFi</button>
+                        <span class="msg" x-text="wifimsg"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>Yi-Hack firmware in: network share (read-only)
+                    <span class="chip share" x-show="managed" title="This file is managed centrally from the share">⇩ managed centrally</span>
+                </h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="sw-cifs">Load from network</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-cifs"
+                                       :checked="cifs.ENABLED === 'yes'" :disabled="managed"
+                                       @change="cifs.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-cifs"
+                                       x-text="cifs.ENABLED === 'yes'
+                                            ? 'Enabled — the camera loads the Yi-Hack firmware from the share below (no SD card needed)'
+                                            : 'Disabled — the Yi-Hack firmware is loaded from the SD card'"></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-chost">Server</label>
+                        <div><input type="text" class="form-control" id="in-chost" x-model="cifs.HOST" :disabled="managed" placeholder="192.168.1.10 or nas" /></div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-cshare">Share name</label>
+                        <div><input type="text" class="form-control" id="in-cshare" x-model="cifs.SHARE" :disabled="managed" placeholder="firmware" /></div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-cuser">User / password</label>
+                        <div>
+                            <input type="text" class="form-control mb-2" id="in-cuser" x-model="cifs.USER" :disabled="managed" placeholder="guest" />
+                            <input type="password" class="form-control" x-model="cifs.PASS" :disabled="managed" aria-label="Share password" />
+                        </div>
+                    </div>
+                    <details>
+                        <summary class="help" style="cursor:pointer">Advanced (SMB options, retries)</summary>
+                        <div class="frm mt-2">
+                            <div class="row2">
+                                <label for="in-csec">Security / version</label>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-csec" x-model="cifs.SEC" :disabled="managed" placeholder="ntlmssp" />
+                                    <input type="text" class="form-control" x-model="cifs.VERS" :disabled="managed" placeholder="1.0" aria-label="SMB version" />
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="in-cretry">Mount retries / delay</label>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-cretry" x-model="cifs.RETRY" :disabled="managed" />
+                                    <input type="text" class="form-control" x-model="cifs.RETRY_DELAY" :disabled="managed" aria-label="Retry delay seconds" />
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                    <div class="savebar">
+                        <button class="btn btn-warning" @click="saveCifs()" :disabled="managed">Save shares</button>
+                        <button class="btn btn-outline-secondary" @click="test('ro')">Test firmware share</button>
+                        <span class="msg" x-text="testmsg.ro || cifsmsg"></span>
+                    </div>
+                    <div class="help">The camera checks the share at boot and falls back to the SD
+                        card (or to the built-in rescue interface) when it is unreachable. To go
+                        SD-less: save, test, then remove the SD and reboot.</div>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>Output share (read-write)
+                    <span class="chip share" x-show="managed">⇩ managed centrally</span>
+                </h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="in-rwshare">Share name</label>
+                        <div>
+                            <input type="text" class="form-control" id="in-rwshare" x-model="cifs.RW_SHARE" :disabled="managed" placeholder="recordings" />
+                            <div class="help">Where recordings and (optionally) service logs go.
+                                Set this (and/or a server) to enable the read-write mount — every
+                                field left empty is inherited from the firmware share above.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-rwhost">Server</label>
+                        <div><input type="text" class="form-control" id="in-rwhost" x-model="cifs.RW_HOST" :disabled="managed" placeholder="empty = same server" /></div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-rwuser">User / password</label>
+                        <div>
+                            <input type="text" class="form-control mb-2" id="in-rwuser" x-model="cifs.RW_USER" :disabled="managed" placeholder="empty = same user" />
+                            <input type="password" class="form-control" x-model="cifs.RW_PASS" :disabled="managed" placeholder="empty = same password" aria-label="Output share password" />
+                        </div>
+                    </div>
+                    <div class="savebar">
+                        <button class="btn btn-warning" @click="saveCifs()" :disabled="managed">Save shares</button>
+                        <button class="btn btn-outline-secondary" @click="test('rw')">Test output share</button>
+                        <span class="msg" x-text="testmsg.rw"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>

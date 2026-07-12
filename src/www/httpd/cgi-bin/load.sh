@@ -21,7 +21,8 @@ rm -rf $TMPDIR
 
 mkdir -p $TMPDIR
 
-if [ $CONTENT_LENGTH -gt 10000 ]; then
+# backups now include services/*.conf too - allow up to 64 KB
+if [ $CONTENT_LENGTH -gt 65536 ]; then
     exit
 fi
 
@@ -38,17 +39,17 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # Process post data removing head and tail
     while true; do
         if [ $l -eq 1 ]; then
-            ROW=`cat $TMPOUT | awk "FNR == $l {print}"`
+            ROW=`sed -n "${l}p" $TMPOUT`
             BOUNDARY=${#ROW}
             BOUNDARY=$((BOUNDARY+1))
             LENSKIPSTART=$BOUNDARY
             LENSKIPEND=$BOUNDARY
         elif [ $l -le 4 ]; then
-            ROW=`cat $TMPOUT | awk "FNR == $l {print}"`
+            ROW=`sed -n "${l}p" $TMPOUT`
             ROWLEN=${#ROW}
             LENSKIPSTART=$((LENSKIPSTART+ROWLEN+1))
         elif [ \( $l -gt 4 \) -a \( $l -lt $LINES \) ]; then
-            ROW=`cat $TMPOUT | awk "FNR == $l {print}"`
+            ROW=`sed -n "${l}p" $TMPOUT`
         else
             break
         fi
@@ -64,11 +65,29 @@ bzip2 -d $TMPOUTbz2
 tar xvf $TMPOUTtar >/dev/null 2>&1
 RES=$?
 
+# Version gate: refuse a backup from a different MAJOR.MINOR firmware (a config
+# written for another baseline can carry renamed/removed keys). Backups without
+# the marker (pre-6.0.x) are accepted as-is.
+GATE_MSG=""
+if [ $RES -eq 0 ] && [ -f backup_version ]; then
+    CUR_MM=$(cut -d'_' -f1 /home/yi-hack/version | cut -d. -f1,2)
+    BAK_MM=$(cut -d'_' -f1 backup_version | cut -d. -f1,2)
+    if [ -n "$BAK_MM" ] && [ "$BAK_MM" != "$CUR_MM" ]; then
+        RES=1
+        GATE_MSG="Backup is from firmware $BAK_MM, this camera runs $CUR_MM - not restored."
+    fi
+fi
+
 # Verify result of tar.bz2 command and copy files to destination
 if [ $RES -eq 0 ]; then
     if [ \( -f "system.conf" \) -a \( -f "camera.conf" \) ]; then
         mv -f *.conf /home/yi-hack/config/
         chmod 0644 /home/yi-hack/config/*.conf
+        # per-service configs (present in backups taken from 6.0.x onward)
+        if [ -d services ]; then
+            mv -f services/*.conf /home/yi-hack/config/services/ 2>/dev/null
+            chmod 0644 /home/yi-hack/config/services/*.conf
+        fi
         if [ -f hostname ]; then
             mv -f hostname /home/yi-hack/config/
             chmod 0644 /home/yi-hack/config/hostname
@@ -89,6 +108,8 @@ rm -f $TMPOUTbz2
 printf "Content-type: text/html\r\n\r\n"
 if [ $RES -eq 0 ]; then
     printf "Upload completed successfully, restart your camera\r\n"
+elif [ -n "$GATE_MSG" ]; then
+    printf "%s\r\n" "$GATE_MSG"
 else
     printf "Upload failed\r\n"
 fi

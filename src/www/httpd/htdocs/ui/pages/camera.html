@@ -1,0 +1,174 @@
+<div x-data="cameraPage">
+    <h1>Camera settings</h1>
+    <p class="sub">Live camera behavior — the same settings as in the Yi app. Changes apply
+        immediately when you save; dependent options follow their parent.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <template x-if="ready">
+        <div>
+            <div class="yh-card">
+                <h2>Camera</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="sw-on">Camera on</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sw-on"
+                                   :checked="c.SWITCH_ON === 'yes'" :disabled="lk('SWITCH_ON')"
+                                   @change="set('SWITCH_ON', $event.target.checked)" />
+                            <label class="form-check-label" for="sw-on"
+                                   x-text="c.SWITCH_ON === 'yes' ? 'On' : 'Off — video, detection and recording are all stopped'"></label>
+                        </div>
+                    </div>
+                    <fieldset :disabled="c.SWITCH_ON !== 'yes'" style="border:0;padding:0;margin:0" class="frm">
+                        <div class="row2">
+                            <label>Hardware</label>
+                            <div class="d-flex gap-4 flex-wrap">
+                                <template x-for="t in hwToggles" :key="t.key">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" :id="'sw-' + t.key"
+                                               :checked="c[t.key] === 'yes'" :disabled="lk(t.key)"
+                                               @change="set(t.key, $event.target.checked)" />
+                                        <label class="form-check-label" :for="'sw-' + t.key">
+                                            <span x-text="t.label"></span>
+                                            <span class="chip model" x-show="lk(t.key)">🔒</span>
+                                        </label>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>Motion detection</h2>
+                <fieldset :disabled="c.SWITCH_ON !== 'yes'" style="border:0;padding:0;margin:0" class="frm">
+                    <div class="row2">
+                        <label for="sw-motion">Detect motion</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sw-motion"
+                                   :checked="c.MOTION_DETECTION === 'yes'" :disabled="lk('MOTION_DETECTION')"
+                                   @change="set('MOTION_DETECTION', $event.target.checked)" />
+                        </div>
+                    </div>
+                    <fieldset :disabled="c.MOTION_DETECTION !== 'yes'" style="border:0;padding:0;margin:0" class="frm">
+                        <div class="row2">
+                            <label for="in-sens">Sensitivity</label>
+                            <div>
+                                <select class="form-select" id="in-sens" x-model="c.SENSITIVITY" style="max-width:180px"
+                                        :disabled="lk('SENSITIVITY')" @change="mark('SENSITIVITY')">
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row2">
+                            <label>Smart detection</label>
+                            <div class="d-flex gap-4 flex-wrap">
+                                <template x-for="t in aiToggles" :key="t.key">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" :id="'sw-' + t.key"
+                                               :checked="c[t.key] === 'yes'" :disabled="lk(t.key)"
+                                               @change="set(t.key, $event.target.checked)" />
+                                        <label class="form-check-label" :for="'sw-' + t.key">
+                                            <span x-text="t.label"></span>
+                                            <span class="chip model" x-show="lk(t.key)">🔒</span>
+                                        </label>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="row2" x-show="isPtz">
+                            <label for="sw-track">Motion tracking</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-track"
+                                       :checked="c.MOTION_TRACKING === 'yes'" :disabled="lk('MOTION_TRACKING')"
+                                       @change="set('MOTION_TRACKING', $event.target.checked)" />
+                                <label class="form-check-label" for="sw-track">Follow the motion with the lens (pan/tilt models)</label>
+                            </div>
+                        </div>
+                    </fieldset>
+                </fieldset>
+            </div>
+
+            <div class="yh-card">
+                <h2>Sound detection</h2>
+                <fieldset :disabled="c.SWITCH_ON !== 'yes'" style="border:0;padding:0;margin:0" class="frm">
+                    <div class="row2">
+                        <label for="sw-sound">Detect sound</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sw-sound"
+                                   :checked="c.SOUND_DETECTION === 'yes'" :disabled="lk('SOUND_DETECTION')"
+                                   @change="set('SOUND_DETECTION', $event.target.checked)" />
+                        </div>
+                    </div>
+                    <div class="row2" x-show="c.SOUND_DETECTION === 'yes'">
+                        <label for="in-ssens">Sound threshold</label>
+                        <div>
+                            <select class="form-select" id="in-ssens" x-model="c.SOUND_SENSITIVITY" style="max-width:180px"
+                                    :disabled="lk('SOUND_SENSITIVITY')" @change="mark('SOUND_SENSITIVITY')">
+                                <option value="50">50 (most sensitive)</option>
+                                <option value="60">60</option>
+                                <option value="70">70</option>
+                                <option value="80">80</option>
+                                <option value="90">90 (least sensitive)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="sw-baby">Baby crying</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sw-baby"
+                                   :checked="c.BABY_CRYING_DETECT === 'yes'" :disabled="lk('BABY_CRYING_DETECT')"
+                                   @change="set('BABY_CRYING_DETECT', $event.target.checked)" />
+                            <label class="form-check-label" for="sw-baby">Detect a crying baby</label>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div class="yh-card" x-show="isPtz">
+                <h2>Pan / tilt</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="in-cruise">Cruise</label>
+                        <div>
+                            <select class="form-select" id="in-cruise" x-model="c.CRUISE" style="max-width:220px"
+                                    :disabled="lk('CRUISE')" @change="mark('CRUISE')">
+                                <option value="no">Off</option>
+                                <option value="presets">Between saved presets</option>
+                                <option value="360">Full 360° sweep</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label>Presets</label>
+                        <div>
+                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <template x-for="p in presets" :key="p.num">
+                                    <span class="pill">
+                                        <a href="#" @click.prevent="goPreset(p.num)" x-text="p.name" style="text-decoration:none"></a>
+                                        <a href="#" @click.prevent="delPreset(p.num)" title="Delete preset" style="text-decoration:none;color:var(--yh-crit)">✕</a>
+                                    </span>
+                                </template>
+                                <input type="text" class="form-control form-control-sm" style="max-width:160px"
+                                       placeholder="new preset name" x-model="newPreset" aria-label="New preset name" />
+                                <button class="btn btn-sm btn-outline-secondary" @click="addPreset()">Save current position</button>
+                            </div>
+                            <div class="help">Point the camera with Live view, then save the position.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="savebar">
+                <button class="btn btn-warning" @click="save()" :disabled="!dirty.length">
+                    Apply changes<span x-show="dirty.length" x-text="' (' + dirty.length + ')'"></span>
+                </button>
+                <span class="msg" x-text="savemsg"></span>
+            </div>
+        </div>
+    </template>
+</div>

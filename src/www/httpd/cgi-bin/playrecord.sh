@@ -18,7 +18,8 @@ esac
 
 DIR=""
 FILE=""
-for kv in $(echo "$QUERY_STRING" | tr '&' ' '); do
+OIFS=$IFS; IFS='&'; set -- $QUERY_STRING; IFS=$OIFS
+for kv in "$@"; do
     k=${kv%%=*}
     v=${kv#*=}
     [ "$k" = "dir" ] && DIR="$v"

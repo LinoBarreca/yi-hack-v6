@@ -6,7 +6,7 @@ Produces the same 64-byte legacy uImage header that
 HiSilicon U-Boot `do_auto_sd_update` routine accepts the rootfs_<model>/home_<model>
 files (it validates magic + header CRC + data CRC). We use this instead of mkimage
 because mkimage links libcrypto.so.3, which fails to load under qemu-user on a
-16K-page aarch64 host (same limit that breaks rsync — see design §6.8).
+16K-page aarch64 host (same qemu-user limit that breaks rsync).
 
 The legacy header is fully specified (no crypto): magic, two CRC32s (IEEE, zlib),
 and big-endian fields. See U-Boot include/image.h.

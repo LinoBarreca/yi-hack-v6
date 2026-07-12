@@ -1,63 +1,39 @@
 #!/bin/sh
 
 # 6.0.1
-
-
-sedencode(){
-#  echo -e "$(sed 's/\\/\\\\\\/g;s/\&/\\\&/g;s/\//\\\//g;')"
-  echo "$(sed 's/\\/\\\\/g;s/\&/\\\&/g;s/\//\\\//g;')"
-}
-removedoublequotes(){
-  echo "$(sed 's/^"//g;s/"$//g')"
-}
-
-validateDT()
-{
-    for x in 1 2 3 4 5 6 10 15 20 30 60 120 180 240 360 1440; do
-        if [ "$x" == "$1" ]; then
-            return 0
-        fi
-    done
-    if [ "${1:0:5}" == "1440+" ]; then
-        OFF="${1:5:10}"
-        if [ ! -z $OFF ]; then
-            case $OFF in
-                ''|*[!0-9]* )
-                    OFF_OK=0;;
-                * )
-                    OFF_OK=1;;
-            esac
-            if [ "$OFF_OK" == "1" ] && [ $OFF -le 1440 ]; then
-                return 0
-            fi
-        fi
-    fi
-
-    return 1
-}
+#
+# set_configs.sh - write config keys posted by the web UI.
+#
+# Body format: one "KEY=url-encoded-value" per line (built by api.setConf in
+# ui/app.js - we control both ends). The previous JSON body needed jq, which
+# takes ~12 SECONDS per invocation on this CPU: two jq runs made every save
+# take half a minute. Plain line parsing is instant and handles any character
+# via the url-encoding.
+#
+# Flash wear: a key whose value is unchanged is skipped entirely (no sed, no
+# jffs2 rewrite) - most saves change one or two keys out of many posted.
 
 get_conf_type()
 {
-    CONF="$(echo $QUERY_STRING | cut -d'=' -f1)"
-    VAL="$(echo $QUERY_STRING | cut -d'=' -f2)"
-    if [ $CONF == "conf" ] ; then
-        echo $VAL
+    if [ "${QUERY_STRING%%=*}" == "conf" ] ; then
+        echo "${QUERY_STRING#*=}"
     fi
 }
 
-. /home/yi-hack/www/cgi-bin/validate.sh
+# %XX -> byte (encodeURIComponent never emits '+', so no '+' handling needed).
+urldecode() { printf '%b' "${1//%/\\x}"; }
 
-if ! $(validateQueryString $QUERY_STRING); then
+fail() {
     printf "Content-type: application/json\r\n\r\n"
-    printf "{\n"
-    printf "\"%s\":\"%s\"\\n" "error" "true"
-    printf "}"
-    exit
-fi
+    printf "{\n\"error\":\"true\"\n}"
+    exit 0
+}
+
+. /home/yi-hack/www/cgi-bin/validate.sh
+$(validateQueryString $QUERY_STRING) || fail
 
 CONF_TYPE="$(get_conf_type)"
-CONF_FILE=""
-CONF_SECTION=""
+[ -n "$CONF_TYPE" ] || fail
 
 # Per-service config files live under config/services/; the rest (system,
 # recording, camera, identity, output) at config/ top level.
@@ -73,32 +49,26 @@ esac
 # Build-time locked settings (config/locked.conf) cannot be changed from the UI.
 . /home/yi-hack/base/script/locked_conf.sh
 
-read -r POST_DATA
-# Validate json
-VALID=$(echo "$POST_DATA" | jq -e . >/dev/null 2>&1; echo $?)
-if [ "$VALID" != "0" ]; then
-    printf "Content-type: application/json\r\n\r\n"
-    printf "{\n"
-    printf "\"%s\":\"%s\"\\n" "error" "true"
-    printf "}"
-    exit
-fi
-# Change temporarily \n with \t (2 bytes)
-POST_DATA="${POST_DATA//\\n/\\t}"
-IFS=$(echo -en "\n\b")
-ROWS=$(echo "$POST_DATA" | jq -r '. | keys[] as $k | "\($k)=\(.[$k])"')
-for ROW in $ROWS; do
-    ROW=$(echo "$ROW" | removedoublequotes)
-    KEY=$(echo $ROW | cut -d'=' -f1)
-    # Change back tab with \n
-    VALUE=$(echo $ROW | cut -d'=' -f2)
+# "|| [ -n "$ROW" ]": keep the last line even when the body has no trailing
+# newline (read returns non-zero at EOF but still fills the variable).
+while IFS= read -r ROW || [ -n "$ROW" ]; do
+    [ -n "$ROW" ] || continue
+    case "$ROW" in *=*) ;; *) continue ;; esac
+    KEY=${ROW%%=*}
+    # keys are plain identifiers; refuse anything else (defense in depth)
+    case "$KEY" in *[!A-Z0-9_]*|"") continue ;; esac
+    VALUE=$(urldecode "${ROW#*=}")
+    # the config files are line-based: a value can never contain a newline
+    VALUE=$(printf '%s' "$VALUE" | tr -d '\n\r')
+
     if is_locked "$CONF_SECTION.$KEY" ; then
         continue
     fi
+
     if [ "$KEY" == "HOSTNAME" ] ; then
-        if [ -z $VALUE ] ; then
+        if [ -z "$VALUE" ] ; then
             # Use 2 last MAC address numbers to set a different hostname
-            MAC=$(cat /sys/class/net/wlan0/address|cut -d ':' -f 5,6|sed 's/://g')
+            MAC=$(awk -F: '{print $5 $6}' /sys/class/net/wlan0/address)
             if [ "$MAC" != "" ]; then
                 hostname yi-$MAC
             else
@@ -106,37 +76,35 @@ for ROW in $ROWS; do
             fi
             hostname > /home/yi-hack/config/hostname
         else
-            hostname $VALUE
+            hostname "$VALUE"
             echo "$VALUE" > /home/yi-hack/config/hostname
         fi
-    elif [ "$KEY" == "MOTION_IMAGE_DELAY" ] ; then
-        if $(validateNumber $VALUE); then
-            VALUE=$(echo $VALUE | sed 's/,/./g')
-            VAR=$(awk 'BEGIN{ print "'$VALUE'"<="'5.0'" }')
-            if [ "$VAR" == "1" ]; then
-                sed -i "s/^\(${KEY}\s*=\s*\).*$/\1${VALUE}/" $CONF_FILE
-            fi
-        fi
-    elif [ "$KEY" == "PROXYCHAINS_SERVERS" ] ; then
-        VALUE=$(echo $VALUE | sed 's/^\"//g')
-        VALUE=$(echo $VALUE | sed 's/\"$//g')
-        VALUE=$(echo $VALUE | sed 's/;/\\n/g')
-        cat $CONF_FILE.template > $CONF_FILE
-        echo -e $VALUE >> $CONF_FILE
-	else
-        if [ "$KEY" == "TIMEZONE" ] ; then
-            echo $VALUE > /etc/TZ
-        fi
-        VALUE=$(echo "$VALUE" | sedencode)
-        sed -i "s/^\(${KEY}[[:blank:]]*=[[:blank:]]*\).*$/\1${VALUE}/" $CONF_FILE
+        continue
     fi
 
+    if [ "$KEY" == "PROXYCHAINS_SERVERS" ] ; then
+        # value = ';'-separated proxy lines appended to the template
+        cat $CONF_FILE.template > $CONF_FILE
+        printf '%s\n' "$VALUE" | tr ';' '\n' >> $CONF_FILE
+        continue
+    fi
+
+    if [ "$KEY" == "MOTION_IMAGE_DELAY" ] ; then
+        $(validateNumber $VALUE) || continue
+        VALUE=${VALUE//,/.}
+        [ "$(awk 'BEGIN{ print "'$VALUE'"<="'5.0'" }')" == "1" ] || continue
+    fi
+
+    # Skip untouched keys: no flash write, no /etc/TZ write.
+    CUR=$(sed -n "/^${KEY}[[:blank:]]*=/{s/^[^=]*=//;p;q}" "$CONF_FILE" 2>/dev/null)
+    [ "$CUR" == "$VALUE" ] && continue
+
+    if [ "$KEY" == "TIMEZONE" ] ; then
+        echo "$VALUE" > /etc/TZ
+    fi
+    EV=$(printf '%s' "$VALUE" | sed 's/[|&\\]/\\&/g')
+    sed -i "s|^\(${KEY}[[:blank:]]*=[[:blank:]]*\).*$|\1${EV}|" $CONF_FILE
 done
 
-# Yeah, it's pretty ugly.
-
 printf "Content-type: application/json\r\n\r\n"
-
-printf "{\n"
-printf "\"%s\":\"%s\"\\n" "error" "false"
-printf "}"
+printf "{\n\"error\":\"false\"\n}"

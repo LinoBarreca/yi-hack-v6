@@ -3,3 +3,9 @@ _install/
 
 # Ignore test script
 test.www
+
+# Vendored web libraries: downloaded at build time (compile.www ->
+# scripts/fetch_www_vendor.sh, sha256-pinned) and cached here, like every
+# other module source. Only VENDOR.md is tracked.
+httpd/htdocs/vendor/*
+!httpd/htdocs/vendor/VENDOR.md

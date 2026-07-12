@@ -1,0 +1,361 @@
+<div x-data="servicesPage">
+    <h1>Services</h1>
+    <p class="sub">Streaming, MQTT / Home Assistant, and how you reach the camera. Dependent
+        options follow their parent; anything you can't edit says why.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <template x-if="ready">
+        <div>
+            <!-- ================== STREAMING ================== -->
+            <div class="yh-card">
+                <h2>Streaming — RTSP
+                    <span class="chip share" x-show="mg('services/rtsp.conf')">⇩ managed centrally</span>
+                </h2>
+                <fieldset :disabled="mg('services/rtsp.conf')" class="frm" style="border:0;padding:0;margin:0">
+                    <div class="row2">
+                        <label for="sw-rtsp">RTSP stream</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-rtsp"
+                                       :checked="rtsp.ENABLED === 'yes'" :disabled="dis('services.rtsp.ENABLED')"
+                                       @change="rtsp.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-rtsp">Serve the camera video as an RTSP stream</label>
+                            </div>
+                            <div class="help">The stream URL appears on the Status page once running.
+                                The native recorder and ONVIF both build on this stream.</div>
+                        </div>
+                    </div>
+                    <template x-if="rtsp.ENABLED === 'yes'">
+                        <div class="frm">
+                            <div class="row2">
+                                <label for="in-stream">Published stream
+                                    <span class="chip model" x-show="lk('services.rtsp.STREAM')">🔒 fixed</span>
+                                </label>
+                                <div>
+                                    <select class="form-select" id="in-stream" x-model="rtsp.STREAM" :disabled="dis('services.rtsp.STREAM')">
+                                        <option value="high">High resolution</option>
+                                        <option value="low">Low resolution</option>
+                                        <option value="both">Both</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="sw-audio">Audio</label>
+                                <div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="sw-audio"
+                                               :checked="rtsp.AUDIO === 'yes'" :disabled="dis('services.rtsp.AUDIO')"
+                                               @change="rtsp.AUDIO = $event.target.checked ? 'yes' : 'no'" />
+                                        <label class="form-check-label" for="sw-audio">Include the microphone audio (AAC)</label>
+                                    </div>
+                                    <div class="help">Needed to have sound in recorded clips too. The
+                                        microphone itself is muted/unmuted in Camera settings.</div>
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="in-rtspport">Port / time overlay</label>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <input type="text" class="form-control" id="in-rtspport" x-model="rtsp.PORT" style="max-width:110px" />
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="sw-osd"
+                                               :checked="rtsp.TIME_OSD === 'yes'"
+                                               @change="rtsp.TIME_OSD = $event.target.checked ? 'yes' : 'no'" />
+                                        <label class="form-check-label" for="sw-osd">Show the time on the stream</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="in-rtspuser">Stream user / password</label>
+                                <div>
+                                    <div class="d-flex gap-2">
+                                        <input type="text" class="form-control" id="in-rtspuser" x-model="rtsp.USER" placeholder="empty = no login" />
+                                        <input type="password" class="form-control" x-model="rtsp.PASSWORD" aria-label="RTSP password" />
+                                    </div>
+                                    <div class="help">Also used by ONVIF (the ONVIF stream is this stream).</div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </fieldset>
+            </div>
+
+            <div class="yh-card">
+                <h2>Streaming — ONVIF
+                    <span class="chip share" x-show="mg('services/onvif.conf')">⇩ managed centrally</span>
+                    <span class="chip state-off" x-show="rtsp.ENABLED !== 'yes'">needs the RTSP stream</span>
+                </h2>
+                <fieldset :disabled="mg('services/onvif.conf')" class="frm" style="border:0;padding:0;margin:0">
+                    <div class="row2">
+                        <label for="sw-onvif">ONVIF</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-onvif"
+                                       :checked="onvif.ENABLED === 'yes'" :disabled="dis('services.onvif.ENABLED')"
+                                       @change="onvif.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-onvif">Announce the camera via ONVIF (NVRs, Home Assistant discovery)</label>
+                            </div>
+                        </div>
+                    </div>
+                    <template x-if="onvif.ENABLED === 'yes'">
+                        <div class="frm">
+                            <div class="row2">
+                                <label for="in-profile">Profile resolution</label>
+                                <div>
+                                    <select class="form-select" id="in-profile" x-model="onvif.PROFILE" :disabled="dis('services.onvif.PROFILE')">
+                                        <option value="high">High</option>
+                                        <option value="low">Low</option>
+                                        <option value="both">Both</option>
+                                    </select>
+                                    <div class="help" x-show="profileMismatch()" style="color:var(--yh-warn)">
+                                        The RTSP stream publishes "<span x-text="rtsp.STREAM"></span>" — saving will
+                                        also switch the RTSP stream (you'll be asked to confirm).</div>
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="sw-wsdd">Auto-discovery</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="sw-wsdd"
+                                           :checked="onvif.WSDD === 'yes'"
+                                           @change="onvif.WSDD = $event.target.checked ? 'yes' : 'no'" />
+                                    <label class="form-check-label" for="sw-wsdd">Answer WS-Discovery so NVR software finds the camera by itself</label>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </fieldset>
+            </div>
+
+            <div class="yh-card">
+                <h2>Streaming — Snapshots
+                    <span class="chip share" x-show="mg('services/snapshot.conf')">⇩ managed centrally</span>
+                </h2>
+                <fieldset :disabled="mg('services/snapshot.conf')" class="frm" style="border:0;padding:0;margin:0">
+                    <div class="row2">
+                        <label for="sw-snap">Snapshots</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-snap"
+                                       :checked="snap.ENABLED === 'yes'" :disabled="dis('services.snapshot.ENABLED')"
+                                       @change="snap.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-snap">Allow taking JPEG snapshots</label>
+                            </div>
+                            <div class="help">Used by Live view, the ONVIF snapshot and the MQTT
+                                motion picture — turning this off disables all three.</div>
+                        </div>
+                    </div>
+                    <template x-if="snap.ENABLED === 'yes'">
+                        <div class="row2">
+                            <label for="in-snapres">Default resolution / watermark</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                <select class="form-select" id="in-snapres" x-model="snap.RESOLUTION" style="max-width:160px">
+                                    <option value="high">High</option>
+                                    <option value="low">Low</option>
+                                </select>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="sw-wm"
+                                           :checked="snap.WATERMARK === 'yes'"
+                                           @change="snap.WATERMARK = $event.target.checked ? 'yes' : 'no'" />
+                                    <label class="form-check-label" for="sw-wm">Timestamp watermark</label>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </fieldset>
+            </div>
+
+            <div class="savebar mb-4">
+                <button class="btn btn-warning" @click="saveStreaming()">Save streaming</button>
+                <span class="msg" x-text="msg.stream"></span>
+            </div>
+
+            <!-- ================== MQTT / HOME ASSISTANT ================== -->
+            <div class="yh-card">
+                <h2>MQTT broker
+                    <span class="chip share" x-show="mg('services/mqtt.conf')">⇩ managed centrally</span>
+                </h2>
+                <fieldset :disabled="mg('services/mqtt.conf')" class="frm" style="border:0;padding:0;margin:0">
+                    <div class="row2">
+                        <label for="sw-mqtt">MQTT</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sw-mqtt"
+                                   :checked="mq.ENABLED === 'yes'" :disabled="dis('services.mqtt.ENABLED')"
+                                   @change="mq.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                            <label class="form-check-label" for="sw-mqtt">Publish camera events and state to an MQTT broker</label>
+                        </div>
+                    </div>
+                    <template x-if="mq.ENABLED === 'yes'">
+                        <div class="frm">
+                            <div class="row2">
+                                <label for="in-broker">Broker address / port</label>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-broker" x-model="mq.BROKER_IP" placeholder="192.168.1.10" />
+                                    <input type="text" class="form-control" x-model="mq.BROKER_PORT" style="max-width:110px" aria-label="Broker port" />
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="in-buser">Broker user / password</label>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-buser" x-model="mq.BROKER_USER" />
+                                    <input type="password" class="form-control" x-model="mq.BROKER_PASSWORD" aria-label="Broker password" />
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="sw-mqcfg">Remote control</label>
+                                <div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="sw-mqcfg"
+                                               :checked="mq.CONFIG_ENABLED === 'yes'"
+                                               @change="mq.CONFIG_ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                        <label class="form-check-label" for="sw-mqcfg">Accept commands over MQTT (<code>cmnd/…</code>)</label>
+                                    </div>
+                                    <div class="help">Required for the Home Assistant switches below to
+                                        actually control the camera. Off = publish-only.</div>
+                                </div>
+                            </div>
+                            <div class="row2">
+                                <label for="in-clientid">Identity</label>
+                                <div>
+                                    <div class="d-flex gap-2">
+                                        <input type="text" class="form-control" id="in-clientid" x-model="ident.MQTT_CLIENT_ID" placeholder="client id" />
+                                        <input type="text" class="form-control" x-model="ident.MQTT_PREFIX" placeholder="topic prefix" aria-label="Topic prefix" />
+                                    </div>
+                                    <div class="help">Client id and topic prefix. Filled automatically
+                                        from the camera serial at first boot — must be unique per camera.</div>
+                                </div>
+                            </div>
+                            <details>
+                                <summary class="help" style="cursor:pointer">Advanced — topics, messages, QoS, retain</summary>
+                                <div class="row g-2 mt-1">
+                                    <template x-for="k in mqttAdvKeys" :key="k">
+                                        <div class="col-12 col-md-6 d-flex align-items-center gap-2">
+                                            <label class="form-label mb-0" style="min-width:190px;font-size:11.5px" :for="'mqa-'+k" x-text="k"></label>
+                                            <input type="text" class="form-control form-control-sm" :id="'mqa-'+k"
+                                                   :value="mq[k]" @input="mq[k] = $event.target.value" />
+                                        </div>
+                                    </template>
+                                </div>
+                            </details>
+                        </div>
+                    </template>
+                </fieldset>
+            </div>
+
+            <div class="yh-card" x-show="mq.ENABLED === 'yes'">
+                <h2>Home Assistant &amp; periodic publishing
+                    <span class="chip share" x-show="mg('services/mqtt_advertise.conf')">⇩ managed centrally</span>
+                </h2>
+                <fieldset :disabled="mg('services/mqtt_advertise.conf')" style="border:0;padding:0;margin:0">
+                    <table class="svc">
+                        <template x-for="g in advGroups" :key="g.key">
+                            <tr>
+                                <td>
+                                    <span x-text="g.label"></span>
+                                    <span class="chip state-off" x-show="g.key === 'CAMERA_SETTING' && mq.CONFIG_ENABLED !== 'yes'"
+                                          title="These Home Assistant entities send commands — enable Remote control above">needs remote control</span>
+                                </td>
+                                <td>
+                                    <div class="form-check form-switch d-inline-block">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               :checked="adv[g.key + '_ENABLE'] === 'yes'"
+                                               @change="adv[g.key + '_ENABLE'] = $event.target.checked ? 'yes' : 'no'" />
+                                    </div>
+                                </td>
+                                <td>
+                                    <label class="me-1"><input type="checkbox"
+                                        :checked="adv[g.key + '_BOOT'] === 'yes'"
+                                        @change="adv[g.key + '_BOOT'] = $event.target.checked ? 'yes' : 'no'" /> at boot</label>
+                                    <label><input type="checkbox"
+                                        :checked="adv[g.key + '_CRON'] === 'yes'"
+                                        @change="adv[g.key + '_CRON'] = $event.target.checked ? 'yes' : 'no'" /> on schedule</label>
+                                    <input type="text" class="form-control form-control-sm d-inline-block ms-1" style="max-width:120px"
+                                           :value="adv[g.key + '_CRONTAB']" @input="adv[g.key + '_CRONTAB'] = $event.target.value"
+                                           aria-label="Schedule (crontab)" />
+                                </td>
+                            </tr>
+                        </template>
+                    </table>
+                    <div class="frm mt-3">
+                        <div class="row2">
+                            <label for="in-haname">Home Assistant device</label>
+                            <div>
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control" id="in-haname" x-model="ident.HOMEASSISTANT_NAME" placeholder="device name" />
+                                    <input type="text" class="form-control" x-model="ident.HOMEASSISTANT_IDENTIFIERS" placeholder="identifiers" aria-label="HA identifiers" />
+                                </div>
+                                <div class="help">Auto-filled from the serial; must be unique per camera.</div>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div class="savebar mb-4">
+                <button class="btn btn-warning" @click="saveMqtt()">Save MQTT</button>
+                <span class="msg" x-text="msg.mqtt"></span>
+            </div>
+
+            <!-- ================== ACCESS ================== -->
+            <div class="yh-card">
+                <h2>Access to the camera</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="sw-web">Web interface</label>
+                        <div>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="sw-web"
+                                           :checked="httpd.ENABLED === 'yes'"
+                                           @change="httpd.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                    <label class="form-check-label" for="sw-web">This interface</label>
+                                </div>
+                                <input type="text" class="form-control" x-model="httpd.PORT" style="max-width:90px" aria-label="Web port" />
+                                <input type="text" class="form-control" x-model="httpd.USER" placeholder="user (empty = no login)" style="max-width:180px" aria-label="Web user" />
+                                <input type="password" class="form-control" x-model="httpd.PASSWORD" style="max-width:180px" aria-label="Web password" />
+                            </div>
+                            <div class="help" x-show="httpd.ENABLED === 'no'" style="color:var(--yh-crit)">
+                                Turning this off removes the interface you are using right now.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="sw-ssh">SSH</label>
+                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-ssh"
+                                       :checked="sshd.ENABLED === 'yes'"
+                                       @change="sshd.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-ssh">SSH server</label>
+                            </div>
+                            <input type="password" class="form-control" x-model="sshd.PASSWORD" placeholder="root password (empty = unchanged)" style="max-width:240px" aria-label="SSH root password" />
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="sw-telnet">Telnet</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-telnet"
+                                       :checked="telnetd.ENABLED === 'yes'"
+                                       @change="telnetd.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-telnet">Telnet (unencrypted — use only on a trusted network)</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-ftpd">FTP server</label>
+                        <div>
+                            <select class="form-select" id="in-ftpd" x-model="ftpd.ENABLED" style="max-width:260px">
+                                <option value="no">Off</option>
+                                <option value="busybox">Basic (busybox)</option>
+                                <option value="pureftpd">Full (Pure-FTPd)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="savebar">
+                        <button class="btn btn-warning" @click="saveAccess()">Save access</button>
+                        <span class="msg" x-text="msg.access"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>

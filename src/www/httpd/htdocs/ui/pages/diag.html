@@ -1,0 +1,97 @@
+<div x-data="diagPage">
+    <h1>Diagnostics</h1>
+    <p class="sub">Everything you need to see what the camera is doing — state, logs, and a
+        one-click bundle to attach to a bug report.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <div class="yh-card" x-show="ready">
+        <h2>Diagnostics bundle</h2>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <a class="btn btn-warning" href="cgi-bin/diag_bundle.sh">Download diagnostics bundle</a>
+            <span class="help">tar.gz with boot log, service logs, kernel/process/network state and
+                the configuration. Passwords and WiFi keys are <b>redacted</b> automatically.</span>
+        </div>
+    </div>
+
+    <div class="yh-card">
+        <h2>Logs &amp; state</h2>
+        <div class="loglist mb-2">
+            <template x-for="id in logs" :key="id">
+                <button class="btn btn-sm"
+                        :class="sel === id ? 'btn-warning' : 'btn-outline-secondary'"
+                        @click="view(id)" x-text="label(id)"></button>
+            </template>
+        </div>
+        <template x-if="sel">
+            <div>
+                <div class="d-flex gap-2 align-items-center mb-2">
+                    <b x-text="label(sel)"></b>
+                    <button class="btn btn-sm btn-outline-secondary" @click="view(sel)">Refresh</button>
+                    <a class="btn btn-sm btn-outline-secondary" :href="dl(sel)">Download</a>
+                </div>
+                <div class="logpane" x-text="content"></div>
+            </div>
+        </template>
+        <div class="help" x-show="!sel">Pick an entry above to view it. The boot log is always
+            captured in RAM; service log files appear only when their service has run.</div>
+    </div>
+
+    <div class="yh-card">
+        <h2>Log settings</h2>
+        <div class="frm">
+            <div class="row2">
+                <label for="in-logdest">Service logs go to</label>
+                <div>
+                    <select class="form-select" id="in-logdest" x-model="out.LOG">
+                        <option value="NO">Nowhere (discard)</option>
+                        <option value="RAM">RAM (lost at reboot)</option>
+                        <option value="SD">SD card</option>
+                        <option value="CIFS">Network share (output share)</option>
+                    </select>
+                    <div class="help">Where services write their log files. The network share
+                        needs the output share configured in Network &amp; shares.</div>
+                </div>
+            </div>
+            <div class="row2">
+                <label for="in-bootlog">Boot debug log</label>
+                <div>
+                    <select class="form-select" id="in-bootlog" x-model="sys.DEBUG_LOG">
+                        <option value="no">Off — RAM only (default)</option>
+                        <option value="yes">To SD card</option>
+                        <option value="early">To SD card, early capture</option>
+                    </select>
+                    <div class="help">Troubleshooting only: both SD modes need an SD card inserted
+                        and make every boot slower (each line is written synchronously so nothing
+                        is lost on a crash). "Early" captures the very first boot phase too.</div>
+                </div>
+            </div>
+            <div class="savebar">
+                <button class="btn btn-warning" @click="saveLogCfg()">Save log settings</button>
+                <span class="msg" x-text="savemsg"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="yh-card">
+        <h2>Connectivity tests</h2>
+        <div class="frm">
+            <div class="row2">
+                <label>Firmware share</label>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <button class="btn btn-outline-secondary" @click="cifstest('ro')">Test firmware share</button>
+                    <span class="msg" x-text="testmsg.ro"></span>
+                </div>
+            </div>
+            <div class="row2">
+                <label>Output share</label>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <button class="btn btn-outline-secondary" @click="cifstest('rw')">Test output share</button>
+                    <span class="msg" x-text="testmsg.rw"></span>
+                </div>
+            </div>
+            <div class="help">Tests mount the share on a temporary mountpoint using the saved
+                settings — the running mounts are not touched. Save changes first, then test.</div>
+        </div>
+    </div>
+</div>

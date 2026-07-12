@@ -10,8 +10,8 @@ export PATH=/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/h
 export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/qigan/lib:/home/app/locallib:/tmp/sd:/tmp/sd/gdb:/home/yi-hack/extra/lib
 
 
-NAME="$(echo $QUERY_STRING | cut -d'=' -f1)"
-VAL="$(echo $QUERY_STRING | cut -d'=' -f2)"
+NAME="${QUERY_STRING%%=*}"
+VAL="${QUERY_STRING#*=}"
 
 if [ "$NAME" != "get" ] ; then
     exit
@@ -21,8 +21,8 @@ if [ "$VAL" == "info" ] ; then
     printf "Content-type: application/json\r\n\r\n"
 
     FW_VERSION=`cat /home/yi-hack/extra/../version`
-    LATEST_FW=`wget -O - https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases/latest 2>&1 | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'`
-    PRERELEASE_FW=`wget -O - https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases 2>&1 | grep -B 4 '"prerelease": true' | awk -F '"' '{print $4; exit}'`
+    LATEST_FW=`wget -O - https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases/latest 2>/dev/null | jq -r '.tag_name // ""'`
+    PRERELEASE_FW=`wget -O - https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases 2>/dev/null | jq -r '[.[] | select(.prerelease)][0].tag_name // ""'`
 	
     printf "{\n"
     printf "\"%s\":\"%s\",\n" "fw_version"       "$FW_VERSION"
@@ -31,7 +31,7 @@ if [ "$VAL" == "info" ] ; then
     printf "}"
 
 elif [ "$VAL" == "upgrade" ] ; then
-    FREE_SD=$(df /tmp/sd/ | grep mmc | awk '{print $4}')
+    FREE_SD=$(df /tmp/sd/ | awk '/mmc/{print $4}')
     if [ -z "$FREE_SD" ]; then
         printf "Content-type: text/html\r\n\r\n"
         printf "No SD detected."
@@ -61,7 +61,7 @@ elif [ "$VAL" == "upgrade" ] ; then
 #        mv /tmp/sd/${MODEL_SUFFIX}_x.x.x.tgz /tmp/sd/${MODEL_SUFFIX}/${MODEL_SUFFIX}_x.x.x.tgz
         LATEST_FW="x.x.x"
     else
-        LATEST_FW=`wget -O -  https://api.github.com/repos/alienatedsec/yi-hack-v6/releases/latest 2>&1 | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'`
+        LATEST_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases/latest 2>/dev/null | jq -r '.tag_name // ""'`
         if [ "$FW_VERSION" == "$LATEST_FW" ]; then
             printf "Content-type: text/html\r\n\r\n"
             printf "No new firmware available."
@@ -103,7 +103,7 @@ elif [ "$VAL" == "upgrade" ] ; then
     reboot
 
 elif [ "$VAL" == "preupgrade" ] ; then
-    FREE_SD=$(df /tmp/sd/ | grep mmc | awk '{print $4}')
+    FREE_SD=$(df /tmp/sd/ | awk '/mmc/{print $4}')
     if [ -z "$FREE_SD" ]; then
         printf "Content-type: text/html\r\n\r\n"
         printf "No SD detected."
@@ -133,7 +133,7 @@ elif [ "$VAL" == "preupgrade" ] ; then
 #        mv /tmp/sd/${MODEL_SUFFIX}_x.x.x.tgz /tmp/sd/${MODEL_SUFFIX}/${MODEL_SUFFIX}_x.x.x.tgz
         PRERELEASE_FW="x.x.x"
     else
-        PRERELEASE_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases 2>&1 | grep -B 4 '"prerelease": true' | awk -F '"' '{print $4; exit}'`
+        PRERELEASE_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases 2>/dev/null | jq -r '[.[] | select(.prerelease)][0].tag_name // ""'`
         if [ "$FW_VERSION" == "$PRERELEASE_FW" ]; then
             printf "Content-type: text/html\r\n\r\n"
             printf "No new firmware available."

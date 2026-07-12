@@ -4,8 +4,6 @@
 
 /stock_firmware/*
 !/stock_firmware/README.md
-
-/stock_firmware/common/*
 !/stock_firmware/common/README.md
 
 /sysroot/*
@@ -24,16 +22,13 @@ INIT_SUBMODULES.md
 # Per-module build artifacts are handled by each src/<mod>/.gitignore.
 scripts/packfiles.sh
 .file.swp
+src/**/busybox-1.*
+src/curl/sysroot/**
+src/ipc_cmd/ipc_cmd/*.o
 src/ipc_cmd/ipc_cmd/ipc_multiplexer
 src/ipc_cmd/ipc_cmd/ipc_read
 src/ipc_cmd/ipc_cmd/ipc2file
 
-
-
+TODO.md
 CAMERA_FIRMWARE_DESIGN.md
 simulated_boot.log
-
-src/**/busybox-1.*
-src/ipc_cmd/ipc_cmd/*.o
-src/curl/sysroot/**
-

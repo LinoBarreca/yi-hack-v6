@@ -1,0 +1,53 @@
+<div x-data="recordsPage">
+    <h1>Recordings</h1>
+    <p class="sub">Browse and play the clips recorded by the camera, hour by hour.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <div class="yh-card" x-show="player">
+        <h2>Playing <span style="text-transform:none" x-text="playerName"></span></h2>
+        <video controls autoplay style="width:100%;max-height:60vh;background:#000;border-radius:8px"
+               :src="player" @error="playerError = true"></video>
+        <div class="help mt-2" x-show="playerError">Playback failed — the browser may not support
+            this clip; use Download instead.</div>
+        <div class="d-flex gap-2 mt-2">
+            <a class="btn btn-sm btn-outline-secondary" :href="player" download>Download</a>
+            <button class="btn btn-sm btn-outline-secondary" @click="player=''; playerError=false">Close player</button>
+        </div>
+    </div>
+
+    <div class="yh-card" x-show="ready">
+        <h2>Hours with recordings</h2>
+        <div class="loglist mb-3">
+            <template x-for="d in dirs" :key="d.dirname">
+                <button class="btn btn-sm"
+                        :class="sel === d.dirname ? 'btn-warning' : 'btn-outline-secondary'"
+                        @click="openDir(d.dirname)" x-text="fmtDir(d.dirname)"></button>
+            </template>
+        </div>
+        <div class="help" x-show="!dirs.length">No recordings found. Recording is configured in
+            <a href="?page=nvr" @click.prevent="$store.ui.open('nvr')">Recording (NVR)</a>.</div>
+
+        <template x-if="sel">
+            <div>
+                <div class="d-flex gap-2 align-items-center mb-2">
+                    <b x-text="fmtDir(sel)"></b>
+                    <button class="btn btn-sm btn-outline-danger" @click="delDir(sel)">Delete this hour</button>
+                </div>
+                <table class="svc">
+                    <template x-for="f in files" :key="f.filename">
+                        <tr>
+                            <td x-text="fmtFile(f.filename)"></td>
+                            <td>
+                                <button class="btn btn-sm btn-warning" @click="play(sel, f.filename)">Play</button>
+                                <button class="btn btn-sm btn-outline-danger ms-1" @click="delFile(sel, f.filename)">Delete</button>
+                            </td>
+                            <td></td>
+                        </tr>
+                    </template>
+                </table>
+                <div class="help" x-show="!files.length">No clips in this hour.</div>
+            </div>
+        </template>
+    </div>
+</div>

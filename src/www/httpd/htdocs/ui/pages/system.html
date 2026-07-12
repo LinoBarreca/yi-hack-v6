@@ -1,0 +1,212 @@
+<div x-data="systemPage">
+    <h1>System</h1>
+    <p class="sub">Cloud, time and housekeeping. Fields owned by something else say so —
+        nothing silently fails to save.</p>
+
+    <div class="yh-loading" x-show="!ready"><span class="spin"></span><span>Loading from the camera…</span></div>
+
+    <template x-if="ready">
+        <div>
+            <div class="yh-card">
+                <h2>Yi cloud &amp; app</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="sw-cloud">Cloud
+                            <span class="chip share" x-show="f('system.DISABLE_CLOUD','system.conf').chip === 'share'"
+                                  title="Managed centrally from the network share">⇩ managed</span>
+                            <span class="chip sd" x-show="f('system.DISABLE_CLOUD','system.conf').chip === 'sd'"
+                                  title="Provisioned by the SD card: editable, but a reboot with the SD inserted restores the provisioned value">💾 SD provisioned</span>
+                        </label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-cloud"
+                                       :checked="cloudEnabled" :disabled="f('system.DISABLE_CLOUD','system.conf').dis"
+                                       @change="cloudEnabled = $event.target.checked" />
+                                <label class="form-check-label" for="sw-cloud"
+                                       x-text="cloudEnabled
+                                           ? 'Enabled — remote view in the Yi app; time & timezone managed by the cloud'
+                                           : 'Disabled — camera is local-only (RTSP/ONVIF/MQTT keep working); time & timezone are yours to set'"></label>
+                            </div>
+                            <div class="help">Disabling the cloud stops the Yi app remote view and
+                                the cloud uploads. Some internal services keep running either way —
+                                they feed the local video pipeline.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="sw-proxy">Cloud traffic proxy</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-proxy"
+                                       :checked="proxy.ENABLED === 'yes'" :disabled="!cloudEnabled || f('services.proxychains.ENABLED','services/proxychains.conf').dis"
+                                       @change="proxy.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-proxy">Route cloud traffic through a proxy (proxychains)</label>
+                            </div>
+                            <template x-if="cloudEnabled && proxy.ENABLED === 'yes'">
+                                <div class="mt-2">
+                                    <textarea class="form-control" rows="3" x-model="proxyServers"
+                                              placeholder="socks5 192.168.1.10 1080" aria-label="Proxy servers"
+                                              style="font-family:var(--yh-mono); font-size:12px"></textarea>
+                                    <div class="help">One proxy per line, proxychains syntax:
+                                        <code>type host port [user pass]</code>. Applied on top of the
+                                        built-in template; the cloud picks it up at the next reboot.</div>
+                                </div>
+                            </template>
+                            <div class="help" x-show="!cloudEnabled">Only proxies the cloud traffic — with the cloud disabled there is nothing to route.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>Time &amp; timezone</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="in-tz">Timezone
+                            <span class="chip cloud" x-show="timeField('system.TIMEZONE','system.conf').chip === 'cloud'"
+                                  title="Mirrored from the timezone set in the Yi app while the cloud is enabled">☁ from Yi app</span>
+                            <span class="chip model" x-show="timeField('system.TIMEZONE','system.conf').chip === 'model'">🔒 fixed</span>
+                        </label>
+                        <div>
+                            <input type="text" class="form-control" id="in-tz" list="tz-locations"
+                                   x-model="tzLoc" @change="tzPick()"
+                                   :disabled="timeField('system.TIMEZONE','system.conf').dis"
+                                   placeholder="Type a location, e.g. Europe/Rome" autocomplete="off" />
+                            <datalist id="tz-locations">
+                                <template x-for="z in tzZones" :key="z[0]">
+                                    <option :value="z[0]"></option>
+                                </template>
+                            </datalist>
+                            <input type="text" class="form-control mt-2" x-model="sys.TIMEZONE"
+                                   :disabled="timeField('system.TIMEZONE','system.conf').dis"
+                                   aria-label="POSIX TZ string" style="font-family:var(--yh-mono); font-size:12px" />
+                            <div class="help" x-text="cloudEnabled
+                                ? 'Mirrored automatically from the timezone set in the Yi app (fixed offset, no DST — that is all the app provides). Disable the cloud to pick a real zone.'
+                                : 'Pick a location: the POSIX TZ string below is filled for you, daylight-saving rules included (e.g. CET-1CEST,M3.5.0,M10.5.0/3). Editing the string directly is fine too.'"></div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="sw-ntp">NTP</label>
+                        <div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sw-ntp"
+                                       :checked="ntpd.ENABLED === 'yes'"
+                                       :disabled="timeField('services.ntpd.ENABLED','services/ntpd.conf').dis"
+                                       @change="ntpd.ENABLED = $event.target.checked ? 'yes' : 'no'" />
+                                <label class="form-check-label" for="sw-ntp">Continuous clock sync (ntpd daemon)</label>
+                            </div>
+                            <input type="text" class="form-control mt-2" x-model="ntpd.SERVER"
+                                   :disabled="timeField('services.ntpd.SERVER','services/ntpd.conf').dis"
+                                   placeholder="pool.ntp.org" aria-label="NTP server" />
+                            <div class="help" x-text="cloudEnabled
+                                ? 'The cloud already sets the clock — NTP stays off to avoid two clocks fighting.'
+                                : 'The clock is synced once at boot automatically (using this server). The switch adds a continuously-running sync service on top.'"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>Housekeeping</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label for="in-swap">Swap file</label>
+                        <div>
+                            <select class="form-select" id="in-swap" x-model="out.SWAP_FILE"
+                                    :disabled="f('output.SWAP_FILE','output.conf').dis">
+                                <option value="NO">Off</option>
+                                <option value="SD">SD card</option>
+                            </select>
+                            <div class="help">Extra virtual memory on the SD card. Only the SD is
+                                offered — other destinations would be useless or would wear the
+                                internal flash out.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="in-cron">Scheduled jobs</label>
+                        <div>
+                            <input type="text" class="form-control" id="in-cron" x-model="sys.CRONTAB"
+                                   :disabled="f('system.CRONTAB','system.conf').dis"
+                                   placeholder="0 3 * * * /home/yi-hack/extra/script/…" />
+                            <div class="help">Your own job in crontab syntax. Leave empty for none.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label for="sw-upd">Update checks</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sw-upd"
+                                   :checked="sys.CHECK_UPDATES === 'yes'"
+                                   :disabled="f('system.CHECK_UPDATES','system.conf').dis"
+                                   @change="sys.CHECK_UPDATES = $event.target.checked ? 'yes' : 'no'" />
+                            <label class="form-check-label" for="sw-upd">Check GitHub for new yi-hack-v6 releases</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="savebar">
+                <button class="btn btn-warning" @click="save()">Save changes</button>
+                <span class="msg" x-text="savemsg"></span>
+            </div>
+
+            <div class="yh-card mt-4">
+                <h2>Maintenance</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label>Camera</label>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-outline-secondary" @click="reboot()">Reboot camera</button>
+                            <button class="btn btn-outline-danger" @click="reset()">Reset settings to defaults</button>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label>Settings backup</label>
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <a class="btn btn-outline-secondary" href="cgi-bin/save.sh" download="config.tar.bz2">Download backup</a>
+                            <input type="file" class="form-control" style="max-width:280px" x-ref="restorefile" accept=".bz2,.tar.bz2" aria-label="Backup file to restore" />
+                            <button class="btn btn-outline-secondary" @click="restore()">Restore</button>
+                            <span class="msg" x-text="restoremsg"></span>
+                        </div>
+                    </div>
+                    <div class="help">Reset keeps the network setup, the camera identity, PTZ
+                        presets and the model-locked settings, so the camera stays reachable.</div>
+                </div>
+            </div>
+
+            <div class="yh-card">
+                <h2>Firmware update</h2>
+                <div class="frm">
+                    <div class="row2">
+                        <label>Version</label>
+                        <div>
+                            <span x-text="'Installed: ' + (upd.LOCAL_VERSION || '—')"></span>
+                            <span> · latest release: <span class="text-body-secondary"
+                                  x-text="upd.REMOTE_VERSION || 'not checked yet'"></span></span>
+                            <span class="chip state-ok ms-1" x-show="upd.NEEDS_UPDATE === 'yes'">update available</span>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <label>Flash new firmware</label>
+                        <div>
+                            <template x-if="upd.IS_SD_PRESENT === 'YES'">
+                                <div class="frm">
+                                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                                        <input type="file" class="form-control" style="max-width:260px" x-ref="fwhome" aria-label="home image file" />
+                                        <input type="file" class="form-control" style="max-width:260px" x-ref="fwrootfs" aria-label="rootfs image file" />
+                                        <button class="btn btn-outline-danger" @click="flash()" x-text="flashing ? 'Uploading…' : 'Upload to SD'"></button>
+                                    </div>
+                                    <div class="help">Select the <code>home_*</code> and
+                                        <code>rootfs_*</code> images for this camera model. They are
+                                        written to the SD card; the bootloader flashes them at the
+                                        next reboot. <span class="msg" x-text="flashmsg"></span></div>
+                                </div>
+                            </template>
+                            <div class="help" x-show="upd.IS_SD_PRESENT !== 'YES'">An SD card must be
+                                inserted to flash a new firmware (the bootloader reads the images
+                                from the SD at boot).</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>

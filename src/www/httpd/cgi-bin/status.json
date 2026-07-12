@@ -4,6 +4,27 @@
 
 printf "Content-type: application/json\r\n\r\n"
 
+# Concurrency guard: this CGI forks dozens of processes and is polled by the
+# UI. On this CPU a run takes seconds; concurrent requests used to pile up one
+# hung instance per poll until the camera ran out of RAM (seen on hardware).
+# Only ONE instance generates (into a cache); every other concurrent request
+# serves the cached snapshot instantly. A stale lock (owner died) is taken over.
+CACHE=/tmp/.status.cache
+LOCK=/tmp/.status.lock
+if ! mkdir "$LOCK" 2>/dev/null; then
+    _owner=$(cat "$LOCK/pid" 2>/dev/null)
+    if [ -n "$_owner" ] && kill -0 "$_owner" 2>/dev/null; then
+        if [ -f "$CACHE" ]; then cat "$CACHE"; else printf '{"busy":"yes"}'; fi
+        exit 0
+    fi
+fi
+echo $$ > "$LOCK/pid"
+trap 'rm -rf "$LOCK"' EXIT
+
+# Generate into the cache, then serve it (fd3 keeps the client stream).
+exec 3>&1
+exec > "$CACHE.new"
+
 NAME="yi-hack-v6"
 HOSTNAME=$(hostname)
 FW_VERSION=$(cat /home/yi-hack/extra/../version)
@@ -24,11 +45,12 @@ else
 fi
 
 LOCAL_TIME=$(date)
-UPTIME=$(cat /proc/uptime | cut -d ' ' -f1)
-LOAD_AVG=$(cat /proc/loadavg | cut -d ' ' -f1-3)
+UPTIME=$(cut -d ' ' -f1 /proc/uptime)
+LOAD_AVG=$(cut -d ' ' -f1-3 /proc/loadavg)
 TOTAL_MEMORY=$(free -k | awk 'NR==2{print $2}')
 FREE_MEMORY=$(free -k | awk 'NR==2{print $4+$6+$7}')
-FREE_SD=$(df /tmp/sd/ | grep mmc | awk '{print $5}' | tr -d '%')
+# sub(), NOT gsub(): busybox awk gsub() spins forever on this build (verified on camera)
+FREE_SD=$(df /tmp/sd/ | awk '/mmc/{sub(/%/,"",$5); print $5}')
 if [ -z "$FREE_SD" ]; then
     FREE_SD="N/A"
 else
@@ -39,8 +61,67 @@ LOCAL_IP=$(ifconfig wlan0 | awk '/inet addr/{print substr($2,6)}')
 NETMASK=$(ifconfig wlan0 | awk '/inet addr/{print substr($4,6)}')
 GATEWAY=$(route -n | awk 'NR==3{print $2}')
 MAC_ADDR=$(ifconfig wlan0 | awk '/HWaddr/{print substr($5,1)}')
-WLAN_ESSID=$(iwconfig wlan0 | grep ESSID | cut -d\" -f2)
-WLAN_STRENGTH=$(cat /proc/net/wireless | awk 'END { if ($4 <= -100) { print 0 } else if ( $4 <= -50) { print (($4 + 100)*2) } else {print 100} }')
+WLAN_ESSID=$(iwconfig wlan0 | awk -F\" '/ESSID/{print $2}')
+WLAN_STRENGTH=$(awk 'END { if ($4 <= -100) { print 0 } else if ( $4 <= -50) { print (($4 + 100)*2) } else {print 100} }' /proc/net/wireless)
+
+. /home/yi-hack/base/script/get_config.sh
+
+# --- v6 UI extensions (the legacy keys above are kept untouched) ---
+
+# Where the Yi-Hack firmware (extra) is loaded from: network share / SD / flash rescue.
+EXTRA_TARGET=$(readlink /home/yi-hack/extra 2>/dev/null)
+case "$EXTRA_TARGET" in
+    /tmp/cifs-ro/*) FIRMWARE_SOURCE="network" ;;
+    /tmp/sd/*)      FIRMWARE_SOURCE="sd" ;;
+    "")             FIRMWARE_SOURCE="rescue" ;;
+    *)              FIRMWARE_SOURCE="unknown" ;;
+esac
+
+# NOTE: never use `mountpoint -q` here - it stat()s the target and a wedged SMB1
+# mount would hang this polled CGI forever. /proc/mounts never touches the fs.
+SD_MOUNTED=no;      grep -q ' /tmp/sd '      /proc/mounts && SD_MOUNTED=yes
+CIFS_RO_MOUNTED=no; grep -q ' /tmp/cifs-ro ' /proc/mounts && CIFS_RO_MOUNTED=yes
+CIFS_RW_MOUNTED=no; grep -q ' /tmp/cifs-rw ' /proc/mounts && CIFS_RW_MOUNTED=yes
+
+# Free space on the RW share. statfs on a wedged SMB1 mount can hang FOREVER,
+# and this CGI is polled: a synchronous df here would pile up one hung request
+# per poll until the 34MB camera dies (seen on hardware). So: probe in the
+# background with a 1s cap, never stack a new probe while one is still stuck,
+# and serve the last known value from /tmp.
+CIFS_RW_FREE=""
+if [ "$CIFS_RW_MOUNTED" = "yes" ]; then
+    _pidf=/tmp/.rwfree.pid
+    _valf=/tmp/.rwfree.val
+    _old=$(cat $_pidf 2>/dev/null)
+    if [ -z "$_old" ] || ! kill -0 "$_old" 2>/dev/null; then
+        ( df -h /tmp/cifs-rw 2>/dev/null | awk 'NR==2{print $4}' > $_valf.new && mv $_valf.new $_valf ) &
+        echo $! > $_pidf
+        _i=0
+        while [ $_i -lt 10 ] && kill -0 "$(cat $_pidf 2>/dev/null)" 2>/dev/null; do
+            usleep 100000
+            _i=$((_i+1))
+        done
+    fi
+    CIFS_RW_FREE=$(cat $_valf 2>/dev/null)
+fi
+FLASH_FREE=$(df -h /home 2>/dev/null | awk 'NR==2{print $4}')
+
+# Per-service state (pidof over the farm PATH; absent binary -> "no").
+svc() { pidof "$1" >/dev/null 2>&1 && echo yes || echo no; }
+RTSP_RUNNING=$(svc rRTSPServer)
+RECORDER_RUNNING=$(svc ffmpeg)
+ONVIF_RUNNING=$(svc onvif_simple_server)
+MQTT_RUNNING=$(svc mqttv4)
+MQTT_CONFIG_RUNNING=$(svc mqtt-config)
+NTPD_RUNNING=$(svc ntpd)
+CLOUD_RUNNING=$(svc dispatch)
+P2P_RUNNING=$(svc p2p_tnp)
+
+DISABLE_CLOUD=$(get_config system.DISABLE_CLOUD)
+TIMEZONE=$(get_config system.TIMEZONE)
+if [ "$DISABLE_CLOUD" = "no" ]; then TZ_SOURCE="cloud"; else TZ_SOURCE="manual"; fi
+RECORD_DEST=$(get_config output.RECORD)
+LOG_DEST=$(get_config output.LOG)
 
 # Yeah, it's pretty ugly.. but hey, it works.
 
@@ -66,6 +147,31 @@ printf "\"%s\":\"%s\",\n" "netmask"         "$NETMASK"
 printf "\"%s\":\"%s\",\n" "gateway"         "$GATEWAY"
 printf "\"%s\":\"%s\",\n" "mac_addr"        "$MAC_ADDR"
 printf "\"%s\":\"%s\",\n" "wlan_essid"      "$WLAN_ESSID"
-printf "\"%s\":\"%s\"\n" "wlan_strength"   "$WLAN_STRENGTH"
+printf "\"%s\":\"%s\",\n" "wlan_strength"   "$WLAN_STRENGTH"
+
+printf "\"%s\":\"%s\",\n" "firmware_source"     "$FIRMWARE_SOURCE"
+printf "\"%s\":\"%s\",\n" "sd_mounted"          "$SD_MOUNTED"
+printf "\"%s\":\"%s\",\n" "cifs_ro_mounted"     "$CIFS_RO_MOUNTED"
+printf "\"%s\":\"%s\",\n" "cifs_rw_mounted"     "$CIFS_RW_MOUNTED"
+printf "\"%s\":\"%s\",\n" "cifs_rw_free"        "$CIFS_RW_FREE"
+printf "\"%s\":\"%s\",\n" "flash_free"          "$FLASH_FREE"
+printf "\"%s\":\"%s\",\n" "rtsp_running"        "$RTSP_RUNNING"
+printf "\"%s\":\"%s\",\n" "recorder_running"    "$RECORDER_RUNNING"
+printf "\"%s\":\"%s\",\n" "onvif_running"       "$ONVIF_RUNNING"
+printf "\"%s\":\"%s\",\n" "mqtt_running"        "$MQTT_RUNNING"
+printf "\"%s\":\"%s\",\n" "mqtt_config_running" "$MQTT_CONFIG_RUNNING"
+printf "\"%s\":\"%s\",\n" "ntpd_running"        "$NTPD_RUNNING"
+printf "\"%s\":\"%s\",\n" "cloud_running"       "$CLOUD_RUNNING"
+printf "\"%s\":\"%s\",\n" "p2p_running"         "$P2P_RUNNING"
+printf "\"%s\":\"%s\",\n" "disable_cloud"       "$DISABLE_CLOUD"
+printf "\"%s\":\"%s\",\n" "timezone"            "$TIMEZONE"
+printf "\"%s\":\"%s\",\n" "tz_source"           "$TZ_SOURCE"
+printf "\"%s\":\"%s\",\n" "record_dest"         "$RECORD_DEST"
+printf "\"%s\":\"%s\"\n"  "log_dest"            "$LOG_DEST"
 
 printf "}"
+
+# Publish the snapshot atomically and send it to the client.
+exec >&3 3>&-
+mv "$CACHE.new" "$CACHE"
+cat "$CACHE"
