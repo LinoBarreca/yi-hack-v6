@@ -184,7 +184,7 @@ void print_usage(char *progname)
     fprintf(stderr, "\t-r RES, --resolution RES\n");
     fprintf(stderr, "\t\tset resolution: LOW, HIGH or AUDIO (default HIGH)\n");
     fprintf(stderr, "\t-m MODEL, --model MODEL\n");
-    fprintf(stderr, "\t\tselect cam model: yi_home, yi_home_1080, yi_dome_1080p, yi_cloud_dome_1080p, yi_dome or yi_outdoor\n");
+    fprintf(stderr, "\t\tselect cam model: yi_home, yi_home_1080p, yi_dome_1080p, yi_cloud_dome_1080p, yi_dome or yi_outdoor (or the firmware code suffix: y18, y20, h20, y19, v201, h30)\n");
     fprintf(stderr, "\t--table_offset\n");
     fprintf(stderr, "\t\toffset of the table for the resolution selected\n");
     fprintf(stderr, "\t--table_record_size\n");
@@ -308,7 +308,12 @@ int main(int argc, char **argv) {
             break;
 
         case 'm':
-            if (strcasecmp("yi_home", optarg) == 0) {
+            // Accept both the model name and the firmware code suffix (y18=Yi Home,
+            // y20=Yi 1080p Home, h20=Yi Dome 1080p, y19=Yi Cloud Dome 1080p, v201=Yi
+            // Dome, h30=Yi Outdoor). .camver ships the suffix (e.g. "y20") and the
+            // start scripts pass it verbatim, so match it here instead of silently
+            // falling back to the default (yi_home_1080p) offset set.
+            if (strcasecmp("yi_home", optarg) == 0 || strcasecmp("y18", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_HOME;
                 table_low_offset = TABLE_LOW_OFFSET_YI_HOME;
                 table_audio_offset = TABLE_AUDIO_OFFSET_YI_HOME;
@@ -322,7 +327,7 @@ int main(int argc, char **argv) {
                 frame_offset_offset = FRAME_OFFSET_OFFSET_YI_HOME;
                 frame_length_offset = FRAME_LENGTH_OFFSET_YI_HOME;
                 frame_ts_offset = FRAME_TS_OFFSET_YI_HOME;
-            } else if (strcasecmp("yi_home_1080p", optarg) == 0) {
+            } else if (strcasecmp("yi_home_1080p", optarg) == 0 || strcasecmp("y20", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_HOME_1080P;
                 table_low_offset = TABLE_LOW_OFFSET_YI_HOME_1080P;
                 table_audio_offset = TABLE_AUDIO_OFFSET_YI_HOME_1080P;
@@ -336,7 +341,7 @@ int main(int argc, char **argv) {
                 frame_offset_offset = FRAME_OFFSET_OFFSET_YI_HOME_1080P;
                 frame_length_offset = FRAME_LENGTH_OFFSET_YI_HOME_1080P;
                 frame_ts_offset = FRAME_TS_OFFSET_YI_HOME_1080P;
-            } else if (strcasecmp("yi_dome_1080p", optarg) == 0) {
+            } else if (strcasecmp("yi_dome_1080p", optarg) == 0 || strcasecmp("h20", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_DOME_1080P;
                 table_low_offset = TABLE_LOW_OFFSET_YI_DOME_1080P;
                 table_audio_offset = TABLE_AUDIO_OFFSET_YI_DOME_1080P;
@@ -350,7 +355,7 @@ int main(int argc, char **argv) {
                 frame_offset_offset = FRAME_OFFSET_OFFSET_YI_DOME_1080P;
                 frame_length_offset = FRAME_LENGTH_OFFSET_YI_DOME_1080P;
                 frame_ts_offset = FRAME_TS_OFFSET_YI_DOME_1080P;
-            } else if (strcasecmp("yi_cloud_dome_1080p", optarg) == 0) {
+            } else if (strcasecmp("yi_cloud_dome_1080p", optarg) == 0 || strcasecmp("y19", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_CLOUD_DOME_1080P;
                 table_low_offset = TABLE_LOW_OFFSET_YI_CLOUD_DOME_1080P;
                 table_audio_offset = TABLE_AUDIO_OFFSET_YI_CLOUD_DOME_1080P;
@@ -364,7 +369,7 @@ int main(int argc, char **argv) {
                 frame_offset_offset = FRAME_OFFSET_OFFSET_YI_CLOUD_DOME_1080P;
                 frame_length_offset = FRAME_LENGTH_OFFSET_YI_CLOUD_DOME_1080P;
                 frame_ts_offset = FRAME_TS_OFFSET_YI_CLOUD_DOME_1080P;
-            } else if (strcasecmp("yi_dome", optarg) == 0) {
+            } else if (strcasecmp("yi_dome", optarg) == 0 || strcasecmp("v201", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_DOME;
                 table_low_offset = TABLE_LOW_OFFSET_YI_DOME;
                 table_audio_offset = TABLE_AUDIO_OFFSET_YI_DOME;
@@ -378,7 +383,7 @@ int main(int argc, char **argv) {
                 frame_offset_offset = FRAME_OFFSET_OFFSET_YI_DOME;
                 frame_length_offset = FRAME_LENGTH_OFFSET_YI_DOME;
                 frame_ts_offset = FRAME_TS_OFFSET_YI_DOME;
-            } else if (strcasecmp("yi_outdoor", optarg) == 0) {
+            } else if (strcasecmp("yi_outdoor", optarg) == 0 || strcasecmp("h30", optarg) == 0) {
                 table_high_offset = TABLE_HIGH_OFFSET_YI_OUTDOOR;
                 table_low_offset = TABLE_LOW_OFFSET_YI_OUTDOOR;
                 table_audio_offset = TABLE_AUDIO_OFFSET_YI_OUTDOOR;
