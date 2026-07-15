@@ -676,7 +676,8 @@ document.addEventListener('alpine:init', () => {
                 });
                 await api.setConf('onvif', {
                     ENABLED: this.onvif.ENABLED || 'no', WSDD: this.onvif.WSDD || 'no',
-                    PROFILE: this.onvif.PROFILE || 'high'
+                    PROFILE: this.onvif.PROFILE || 'high',
+                    SNAPSHOT: this.onvif.SNAPSHOT || 'same'
                 });
                 await api.setConf('snapshot', {
                     ENABLED: this.snap.ENABLED || 'yes',

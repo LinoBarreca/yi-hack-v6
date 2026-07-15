@@ -32,8 +32,8 @@ make || exit 1
 
 mkdir -p ../_install/www/onvif || exit 1
 mkdir -p ../_install/bin || exit 1
-mkdir -p ../_install/etc/onvif_notify_server || exit 1
-mkdir -p ../_install/etc/wsd_simple_server || exit 1
+mkdir -p ../_install/resources/onvif || exit 1
+mkdir -p ../_install/resources/wsd || exit 1
 
 cp ./onvif_simple_server ../_install/www/onvif || exit 1
 echo "#!/home/yi-hack/www/onvif/onvif_simple_server" > ../_install/www/onvif/device_service
@@ -51,10 +51,10 @@ cp -R ./media_service_files ../_install/www/onvif
 cp -R ./ptz_service_files ../_install/www/onvif
 
 cp ./onvif_notify_server ../_install/bin || exit 1
-cp -R ./notify_files/* ../_install/etc/onvif_notify_server
+cp -R ./notify_files/* ../_install/resources/onvif
 
 cp ./wsd_simple_server ../_install/bin || exit 1
-cp -R ./wsd_files/* ../_install/etc/wsd_simple_server
+cp -R ./wsd_files/* ../_install/resources/wsd
 
 ${STRIP} ../_install/bin/* || exit 1
 ${STRIP} ../_install/www/onvif/onvif_simple_server || exit 1

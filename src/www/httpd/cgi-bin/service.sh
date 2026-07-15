@@ -88,18 +88,29 @@ start_onvif()
         HIGHWIDTH="1920"
         HIGHHEIGHT="1080"
     fi
-    if [[ $2 == "yes" ]; then
+    if [[ $2 == "yes" ]] ; then
         WATERMARK="&watermark=yes"
     fi
+
+    # Which snapshot URL each profile advertises: same/high/low/none
+    # (services/onvif.conf SNAPSHOT; none = clients fall back to RTSP stills).
+    SNAPURL_HIGH="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK"
+    SNAPURL_LOW="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK"
+    case "$(get_config services.onvif.SNAPSHOT)" in
+        high) SNAP_0=$SNAPURL_HIGH; SNAP_1=$SNAPURL_HIGH ;;
+        low)  SNAP_0=$SNAPURL_LOW;  SNAP_1=$SNAPURL_LOW ;;
+        none) SNAP_0="";            SNAP_1="" ;;
+        *)    SNAP_0=$SNAPURL_HIGH; SNAP_1=$SNAPURL_LOW ;;
+    esac
     if [[ $1 == "high" ]]; then
-        ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK\ntype=H264"
+        ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
     fi
     if [[ $1 == "low" ]]; then
-        ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK\ntype=H264"
+        ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264$SNAP_1\ntype=H264"
     fi
     if [[ $1 == "both" ]]; then
-        ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK\ntype=H264"
-        ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK\ntype=H264"
+        ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
+        ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264$SNAP_1\ntype=H264"
     fi
 
     ONVIF_SRVD_CONF="/tmp/onvif_simple_server.conf"

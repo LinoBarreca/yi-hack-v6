@@ -260,6 +260,20 @@ if [[ $(get_config services.snapshot.WATERMARK) == "yes" ]] ; then
     WATERMARK="&watermark=yes"
 fi
 
+# Which snapshot URL each ONVIF profile advertises (services/onvif.conf SNAPSHOT):
+# same = the profile's own resolution, high/low = force that resolution for every
+# profile, none = no snapurl at all (GetSnapshotUri answers with a SOAP fault and
+# clients like Home Assistant grab stills from the RTSP stream instead, which
+# offloads the JPEG encode from the camera CPU).
+SNAPURL_HIGH="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK"
+SNAPURL_LOW="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK"
+case "$(get_config services.onvif.SNAPSHOT)" in
+    high) SNAP_0=$SNAPURL_HIGH; SNAP_1=$SNAPURL_HIGH ;;
+    low)  SNAP_0=$SNAPURL_LOW;  SNAP_1=$SNAPURL_LOW ;;
+    none) SNAP_0="";            SNAP_1="" ;;
+    *)    SNAP_0=$SNAPURL_HIGH; SNAP_1=$SNAPURL_LOW ;;
+esac
+
 RRTSP_MODEL=$MODEL_SUFFIX
 RRTSP_RES=$(get_config services.rtsp.STREAM)
 RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
@@ -281,20 +295,20 @@ if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
     fi
     if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
-        ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK\ntype=H264"
+        ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264$SNAP_1\ntype=H264"
     fi
     if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
-        ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK\ntype=H264"
+        ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
     fi
     if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
          h264grabber -r low -m $MODEL_SUFFIX -f &
          h264grabber -r high -m $MODEL_SUFFIX -f &
         if [[ $(get_config services.onvif.PROFILE) == "low" ]] || [[ $(get_config services.onvif.PROFILE) == "both" ]] ; then
-            ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK\ntype=H264"
+            ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264$SNAP_1\ntype=H264"
         fi
         if [[ $(get_config services.onvif.PROFILE) == "high" ]] || [[ $(get_config services.onvif.PROFILE) == "both" ]] ; then
-            ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK\ntype=H264"
+            ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
         fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
     fi

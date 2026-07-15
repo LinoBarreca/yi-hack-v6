@@ -110,7 +110,9 @@ FLASH_FREE=$(df -h /home 2>/dev/null | awk 'NR==2{print $4}')
 svc() { pidof "$1" >/dev/null 2>&1 && echo yes || echo no; }
 RTSP_RUNNING=$(svc rRTSPServer)
 RECORDER_RUNNING=$(svc ffmpeg)
-ONVIF_RUNNING=$(svc onvif_simple_server)
+# onvif_simple_server is a CGI (per-request, never a process); the persistent
+# daemon started when ONVIF is enabled is onvif_notify_server -> probe that.
+ONVIF_RUNNING=$(svc onvif_notify_server)
 MQTT_RUNNING=$(svc mqttv4)
 MQTT_CONFIG_RUNNING=$(svc mqtt-config)
 NTPD_RUNNING=$(svc ntpd)
