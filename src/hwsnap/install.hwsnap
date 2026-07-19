@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SCRIPT_DIR=$(cd `dirname $0` && pwd)
+cd $SCRIPT_DIR
+
+mkdir -p ../../build/extra/bin/ || exit 1
+
+cp -a ./_install/* ../../build/extra/ || exit 1

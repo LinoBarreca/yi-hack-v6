@@ -32,3 +32,6 @@ src/ipc_cmd/ipc_cmd/ipc2file
 TODO.md
 CAMERA_FIRMWARE_DESIGN.md
 simulated_boot.log
+src/hisdk/
+src/hwsnap/hwsnap/hwsnap
+src/hwsnap/hwsnap/*.o
