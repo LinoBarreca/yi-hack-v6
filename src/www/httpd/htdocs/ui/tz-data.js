@@ -1,3 +1,21 @@
+/*
+ * This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
+ * Copyright (c) 2021-2023 alienatedsec - v5 specific
+ * Copyright (c) 2026 Lino Barreca.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* Timezone reference: location -> POSIX TZ string for /etc/TZ (uClibc).
    Recovered from the v5 timezone table; strings carry the DST rules
    (e.g. CET-1CEST,M3.5.0,M10.5.0/3 = CEST from last Sun of March to

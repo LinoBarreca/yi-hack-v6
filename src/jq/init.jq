@@ -1,5 +1,23 @@
 #!/bin/bash
 
+#
+#  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
+#  Copyright (c) 2021-2023 alienatedsec - v5 specific
+#  Copyright (c) 2026 Lino Barreca.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, version 3.
+#
+#  This program is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+
 # jq 1.8.2 (jqlang). Upgraded from 1.6: the old release recompiled its ~1700-line
 # builtin library on every startup (accidentally quadratic - ~10-12 s per run on
 # this SoC). 1.7 fixed that; 1.8.2 is the current stable. Regex (oniguruma) and
