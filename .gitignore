@@ -35,3 +35,4 @@ simulated_boot.log
 src/hisdk/
 src/hwsnap/hwsnap/hwsnap
 src/hwsnap/hwsnap/*.o
+src/snapshot/snapshot/watermark

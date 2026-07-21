@@ -34,6 +34,7 @@ This firmware will add the following features:
   - [Completely redesigned web interface](docs/web-interface.md) (live view, diagnostics with one-click bug-report bundle, and a UI that knows which options work together — impossible combinations are simply not offered)
 
 - **v6 Improvements**
+  - [Ultra-fast snapshots](docs/ultra-fast-snapshots.md) (hardware-captured JPEGs)
   - [Simplified file layout](docs/simplified-file-layout.md)
   - [Minimized flash wear](docs/reduced-flash-wear.md) (reduced unnecessary writes introduced by all the previous yi-hack)
   - [Updated busybox & wpa_supplicant](docs/updated-busybox-wpa.md) (more secure)

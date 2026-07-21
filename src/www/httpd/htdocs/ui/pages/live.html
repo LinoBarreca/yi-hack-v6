@@ -12,25 +12,27 @@
     <div class="yh-card" x-show="!snapshotOff">
         <div style="position:relative">
             <img :src="src" alt="Live camera snapshot"
-                 style="width:100%;border-radius:8px;background:#000;min-height:200px"
-                 @error="err = true" @load="err = false" />
+                 style="width:100%;border-radius:8px;background:#000;min-height:200px" />
             <div class="help mt-1" x-show="err" style="color:var(--yh-crit)">Snapshot failed —
                 is the camera on? (Camera settings → Camera on)</div>
         </div>
+        <div class="help mt-1" x-show="!wm && stamp && !err" x-text="stamp" style="text-align:right"></div>
         <div class="savebar mt-2">
             <span class="btn-group" role="group" aria-label="Resolution">
-                <button class="btn btn-sm" :class="res === 'high' ? 'btn-warning' : 'btn-outline-secondary'" @click="res = 'high'">High res</button>
-                <button class="btn btn-sm" :class="res === 'low' ? 'btn-warning' : 'btn-outline-secondary'" @click="res = 'low'">Low res</button>
+                <button class="btn btn-sm" :class="res === 'high' ? 'btn-warning' : 'btn-outline-secondary'" @click="setRes('high')">High res</button>
+                <button class="btn btn-sm" :class="res === 'low' ? 'btn-warning' : 'btn-outline-secondary'" @click="setRes('low')">Low res</button>
             </span>
-            <span class="btn-group" role="group" aria-label="Refresh interval">
-                <template x-for="i in [1, 3, 10]" :key="i">
-                    <button class="btn btn-sm" :class="every === i ? 'btn-warning' : 'btn-outline-secondary'"
-                            @click="setEvery(i)" x-text="i + ' s'"></button>
-                </template>
-                <button class="btn btn-sm" :class="every === 0 ? 'btn-warning' : 'btn-outline-secondary'"
-                        @click="setEvery(0)">paused</button>
+            <span class="btn-group" role="group" aria-label="Refresh">
+                <button class="btn btn-sm" :class="playing ? 'btn-warning' : 'btn-outline-secondary'"
+                        @click="start()">Continuous</button>
+                <button class="btn btn-sm" :class="!playing ? 'btn-warning' : 'btn-outline-secondary'"
+                        @click="stop()">Paused</button>
             </span>
-            <a class="btn btn-sm btn-outline-secondary" :href="'cgi-bin/snapshot.sh?res=' + res" download="snapshot.jpg">Save snapshot</a>
+            <button class="btn btn-sm" :class="wm ? 'btn-warning' : 'btn-outline-secondary'"
+                    @click="toggleWm()">Watermark</button>
+            <a class="btn btn-sm btn-outline-secondary"
+               :href="'cgi-bin/snapshot.sh?res=' + res + (wm ? '&watermark=yes' : '')" download="snapshot.jpg">Save snapshot</a>
+            <span class="help" style="margin-left:auto" x-show="playing" x-text="fps.toFixed(2) + ' fps'"></span>
         </div>
     </div>
 

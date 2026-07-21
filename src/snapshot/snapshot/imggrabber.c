@@ -48,12 +48,8 @@
 #include "libavutil/opt.h"
 
 #include "convert2jpg.h"
-#include "add_water.h"
 
 #define FF_INPUT_BUFFER_PADDING_SIZE 32
-
-#define PATH_RES_HIGH "/home/yi-hack/extra/resources/watermark/high/wm_540p_"
-#define PATH_RES_LOW  "/home/yi-hack/extra/resources/watermark/low/wm_540p_"
 
 // yi_home
 #define TABLE_HIGH_OFFSET_YI_HOME 0x10
@@ -294,44 +290,6 @@ unsigned char *frame_decode(unsigned char *p, int length, int width, int height)
 }
 
 
-int add_watermark(char *buffer, int width, int height, struct tm *watermark_tm)
-{
-    int w_res, h_res;
-    char path_res[1024];
-    FILE *fBuf;
-    WaterMarkInfo WM_info;
-
-    w_res = width;
-    h_res = height;
-    if (width == 640) {
-        strcpy(path_res, PATH_RES_LOW);
-    } else if (width == 1280) {
-        strcpy(path_res, PATH_RES_LOW);
-    } else {
-        strcpy(path_res, PATH_RES_HIGH);
-    }
-
-    if (WMInit(&WM_info, path_res) < 0) {
-        fprintf(stderr, "water mark init error\n");
-        free(buffer);
-        return -1;
-    } else {
-        if (width == 640) {
-            AddWM(&WM_info, width, height, buffer,
-                buffer + width*height, width-230, height-20, watermark_tm);
-        } else if (width == 1280) {
-            AddWM(&WM_info, w_res, h_res, buffer,
-                buffer + width*height, width-345, height-30, watermark_tm);
-        } else {
-            AddWM(&WM_info, w_res, h_res, buffer,
-                buffer + width*height, width-460, height-40, watermark_tm);
-        }
-        WMRelease(&WM_info);
-    }
-
-    return 0;
-}
-
 pid_t proc_find(const char* process_name, pid_t process_pid)
 {
     DIR* dir;
@@ -391,8 +349,6 @@ void print_usage(char *prog_name)
     fprintf(stderr, "\t    --frame_offset_offset VAL    Set the offset of the frame offset in the record\n");
     fprintf(stderr, "\t    --frame_length_offset VAL    Set the offset of the frame lenght in the record\n");
     fprintf(stderr, "\t    --frame_type_offset VAL      Set the offset of the frame type in the record\n");
-    fprintf(stderr, "\t-w, --watermark                  Add watermark to image\n");
-    fprintf(stderr, "\t-t, --watermark_time             Set the time of the watermark\n");
     fprintf(stderr, "\t-d, --debug                      Enable debug\n");
     fprintf(stderr, "\t-h, --help                       Show this help\n");
 }
@@ -429,9 +385,6 @@ int main(int argc, char **argv) {
 
     unsigned char *addr;
     int resolution = RESOLUTION_HIGH;
-    int watermark = 0;
-    int watermark_time = 0;
-    struct tm watermark_tm;
 
     unsigned char *bufferh264, *bufferyuv;
     int bufferh264_size;
@@ -474,8 +427,6 @@ int main(int argc, char **argv) {
             {"frame_offset_offset",  required_argument, 0, '6'},
             {"frame_length_offset",  required_argument, 0, '7'},
             {"frame_type_offset",  required_argument, 0, '8'},
-            {"watermark",  no_argument, 0, 'w'},
-            {"watermark_time",  required_argument, 0, 't'},
             {"debug",  no_argument, 0, 'd'},
             {"help",  no_argument, 0, 'h'},
             {0, 0, 0, 0}
@@ -483,7 +434,7 @@ int main(int argc, char **argv) {
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "r:9:a:m:0:1:2:3:4:5:6:7:8:wt:dh",
+        c = getopt_long (argc, argv, "r:9:a:m:0:1:2:3:4:5:6:7:8:dh",
                          long_options, &option_index);
 
         /* Detect the end of the options. */
@@ -603,29 +554,6 @@ int main(int argc, char **argv) {
             }
             break;
 
-        case 'w':
-            watermark = 1;
-            break;
-
-        case 't':
-            {
-                int d0, d1, d2, d3, d4, d5, d6;
-                d0 = sscanf(optarg, "%d-%d-%d %d:%d:%d", &d1, &d2, &d3, &d4, &d5 ,&d6);
-                if (d0 == 6) {
-                    watermark_tm.tm_year = d1 - 1900;
-                    watermark_tm.tm_mon = d2 - 1;
-                    watermark_tm.tm_mday = d3;
-                    watermark_tm.tm_hour = d4;
-                    watermark_tm.tm_min = d5;
-                    watermark_tm.tm_sec = d6;
-                    watermark_time = 1;
-                } else {
-                    print_usage(argv[0]);
-                    exit(EXIT_FAILURE);
-                }
-                break;
-            }
-
         case '0':
         case '1':
         case '2':
@@ -708,10 +636,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Resolution/watermark come from the caller's -r/-w flags. The motion/event
-    // snapshot flags are derived from config/services/snapshot.conf by the
-    // take_snapshot.sh wrapper; the web CGI passes its own per-request flags.
-
     // Check if the process is already running
     pid_t my_pid = getpid();
     if (proc_find(basename(argv[0]), my_pid) != -1) {
@@ -720,11 +644,9 @@ int main(int argc, char **argv) {
     }
 
 // This method doesn't have performace issue
-// But:
-//   - is not available for high resolution
-//   - it's not possible to add watermarks
+// But it's not available for high resolution
 #ifdef USE_NATIVE_API
-    if ((resolution == RESOLUTION_LOW) && (watermark == 0)) {
+    if (resolution == RESOLUTION_LOW) {
         int old_stdout = dup(1);
         int nj;
         char sj[1024];
@@ -908,21 +830,6 @@ int main(int argc, char **argv) {
     if (bufferyuv == NULL) {
         fprintf(stderr, "Error decoding h264 frame\n");
         return -7;
-    }
-
-    if (watermark) {
-        if (debug) fprintf(stderr, "Adding watermark\n");
-        if (watermark_time == 1) {
-            if (add_watermark(bufferyuv, width, height, &watermark_tm) < 0) {
-                fprintf(stderr, "Error adding watermark\n");
-                return -8;
-            }
-        } else {
-            if (add_watermark(bufferyuv, width, height, NULL) < 0) {
-                fprintf(stderr, "Error adding watermark\n");
-                return -8;
-            }
-        }
     }
 
     if (debug) fprintf(stderr, "Encoding jpeg image\n");

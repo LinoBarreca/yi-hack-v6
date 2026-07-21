@@ -1,4 +1,5 @@
 OBJECTS = imggrabber.o convert2jpg.o add_water.o water_mark.o cap_pic.o
+WM_OBJECTS = watermark.o convert2jpg.o jpg2yuv.o add_water.o water_mark.o
 FFMPEG = ffmpeg-6.0
 FFMPEG_DIR = ./$(FFMPEG)
 INC_FF = -I$(FFMPEG_DIR)
@@ -9,7 +10,7 @@ JPEGSRC = jpegsrc.v9e
 INC_J = -I$(JPEGLIB_DIR)
 LIB_J = $(JPEGLIB_DIR)/.libs/libjpeg.a
 
-all: imggrabber
+all: imggrabber watermark
 
 imggrabber.o: imggrabber.c $(HEADERS)
 	@$(build_ffmpeg)
@@ -28,15 +29,26 @@ water_mark.o: water_mark.c $(HEADERS)
 cap_pic.o: cap_pic.c $(HEADERS)
 	$(CC) -c $< $(INC_J) -fPIC -O2 -o $@
 
+watermark.o: watermark.c $(HEADERS)
+	@$(build_jpeglib)
+	$(CC) -c $< $(INC_J) -fPIC -O2 -o $@
+
+jpg2yuv.o: jpg2yuv.c $(HEADERS)
+	$(CC) -c $< $(INC_J) -fPIC -O2 -o $@
+
 imggrabber: $(OBJECTS)
 	$(CC) $(OBJECTS) $(LIB_J) $(LIB_FF) -fPIC -O2 -o $@
+	$(STRIP) $@
+
+watermark: $(WM_OBJECTS)
+	$(CC) $(WM_OBJECTS) $(LIB_J) -fPIC -O2 -o $@
 	$(STRIP) $@
 
 .PHONY: clean
 
 clean:
-	rm -f imggrabber
-	rm -f $(OBJECTS)
+	rm -f imggrabber watermark
+	rm -f $(OBJECTS) $(WM_OBJECTS)
 
 distclean: clean
 	rm -rf SDK

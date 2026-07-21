@@ -249,6 +249,9 @@ if [[ $HTTPD_PORT != "80" ]] ; then
     D_HTTPD_PORT=:$HTTPD_PORT
 fi
 
+# services.snapshot.ENABLED is now a 3-way no|legacy|v6 selector (which capture
+# backend, imggrabber or hwsnap -- see take_snapshot.sh/cgi-bin/snapshot.sh);
+# "no" is still the literal disable value both backends check directly.
 if [[ $(get_config services.snapshot.ENABLED) == "no" ]] ; then
     touch /tmp/snapshot.disabled
 fi

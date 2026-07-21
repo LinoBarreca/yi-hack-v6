@@ -1,5 +1,8 @@
 #include "add_water.h"
 
+#define PATH_RES_HIGH "/home/yi-hack/extra/resources/watermark/high/wm_540p_"
+#define PATH_RES_LOW  "/home/yi-hack/extra/resources/watermark/low/wm_540p_"
+
 int WMInit(WaterMarkInfo *WM_info, char WMPath[30])
 {
     int i;
@@ -122,6 +125,50 @@ int AddWM (WaterMarkInfo *WM_info, unsigned int bg_width, unsigned int bg_height
     WM_Param.number = 19;
 
     watermark_blending(&BG_info, WM_info, &WM_Param);
+
+    return 0;
+}
+
+int add_watermark(unsigned char *buffer, int width, int height, struct tm *watermark_tm)
+{
+    char path_res[1024];
+    WaterMarkInfo WM_info;
+
+    /* Position picked per pixel width. LOW assets are 12x16px/glyph (19 glyphs =
+     * 228px wide); HIGH assets are 24x32px/glyph (456px wide) -- see the wm_pos_x/y
+     * math below, verified against each canvas size (bmp header measurement, plan
+     * step 0). width==320 is hwsnap's low-res snap channel; it reuses the 640 case's
+     * own formula unchanged since it's the same physical glyph set, just a smaller
+     * canvas that formula still fits (90..318 x, 172..188 y). */
+    if (width == 320) {
+        strcpy(path_res, PATH_RES_LOW);
+    } else if (width == 640) {
+        strcpy(path_res, PATH_RES_LOW);
+    } else if (width == 1280) {
+        strcpy(path_res, PATH_RES_LOW);
+    } else {
+        strcpy(path_res, PATH_RES_HIGH);
+    }
+
+    if (WMInit(&WM_info, path_res) < 0) {
+        fprintf(stderr, "water mark init error\n");
+        return -1;
+    }
+
+    if (width == 320) {
+        AddWM(&WM_info, width, height, buffer,
+            buffer + width*height, width-230, height-20, watermark_tm);
+    } else if (width == 640) {
+        AddWM(&WM_info, width, height, buffer,
+            buffer + width*height, width-230, height-20, watermark_tm);
+    } else if (width == 1280) {
+        AddWM(&WM_info, width, height, buffer,
+            buffer + width*height, width-345, height-30, watermark_tm);
+    } else {
+        AddWM(&WM_info, width, height, buffer,
+            buffer + width*height, width-460, height-40, watermark_tm);
+    }
+    WMRelease(&WM_info);
 
     return 0;
 }

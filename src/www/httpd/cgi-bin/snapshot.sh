@@ -12,38 +12,58 @@ validateFile()
     esac
 }
 
-CONF_FILE="/home/yi-hack/config/camera.conf"
+CONFIG_DIR="${CONFIG_DIR:-/home/yi-hack/config}"
 
-if grep -q SWITCH_ON=no "$CONF_FILE"; then
+fail503()
+{
     printf "Status: 503 Service Unavailable\r\n"
     printf "Content-type: application/json\r\n\r\n"
     printf "{\n"
     printf "\"%s\":\"%s\"\\n" "error" "true"
     printf "}"
     exit 0
-fi
+}
 
-MODEL_SUFFIX=$(cat /home/app/.camver)
+# This CGI is the live-view hot path (the viewer chains one request per frame), so
+# read both config values inline with builtins instead of forking grep / sourcing
+# get_config.sh - each fork costs ~50-70ms on this CPU and dominated the latency
+# once v6/hwsnap made the capture itself fast (~40ms).
+
+# Global camera switch (camera.conf SWITCH_ON=no -> camera off).
+while IFS='=' read -r K V; do
+    [ "$K" = "SWITCH_ON" ] && [ "$V" = "no" ] && fail503
+done < "$CONFIG_DIR/camera.conf"
+
+# Snapshot backend (services/snapshot.conf ENABLED): no | legacy | v6.
+MODE=legacy
+while IFS='=' read -r K V; do
+    [ "$K" = "ENABLED" ] && MODE=$V
+done < "$CONFIG_DIR/services/snapshot.conf"
+[ "$MODE" = "no" ] && fail503
+
+read MODEL_SUFFIX < /home/app/.camver
 BASE64="no"
-RES="-r high"
+RES="high"
 WATERMARK="no"
 OUTPUT_FILE="none"
 
-for I in 1 2 3 4
-do
-    CONF="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f1)"
-    VAL="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f2)"
-
-    if [ "$CONF" == "res" ] ; then
-        RES="-r $VAL"
-    elif [ "$CONF" == "watermark" ] ; then
-        WATERMARK=$VAL
-    elif [ "$CONF" == "base64" ] ; then
-        BASE64=$VAL
-    elif [ "$CONF" == "file" ] ; then
-        OUTPUT_FILE=$VAL
-    fi
+# Parse QUERY_STRING with pure parameter expansion (no echo|cut subshells). The
+# old cut-based loop spawned ~24 processes per request (~1.4s on this CPU) - it
+# dominated the whole snapshot latency once v6/hwsnap made the capture itself fast.
+OIFS=$IFS
+IFS='&'
+for PAIR in $QUERY_STRING ; do
+    KEY=${PAIR%%=*}
+    VAL=${PAIR#*=}
+    case "$KEY" in
+        res)       RES=$VAL ;;
+        watermark) WATERMARK=$VAL ;;
+        base64)    BASE64=$VAL ;;
+        file)      OUTPUT_FILE=$VAL ;;
+    esac
 done
+IFS=$OIFS
+[ "$RES" = "low" ] || RES=high    # anything but an explicit "low" -> high
 
 REDIRECT=""
 if [ "$OUTPUT_FILE" != "none" ] ; then
@@ -57,17 +77,33 @@ if [ "$OUTPUT_FILE" != "none" ] ; then
     fi
 fi
 
+# capture: write one raw JPEG to stdout, imggrabber (legacy) or hwsnap (v6) per
+# services.snapshot.ENABLED. snapshot: capture, optionally piped through
+# watermark per services.snapshot.WATERMARK (the query param, not the config file).
+capture()
+{
+    if [ "$MODE" == "v6" ] ; then
+        [ "$RES" == "low" ] && CHN=3 || CHN=2
+        # Snap channel is shared with rmm: a concurrent request can steal our
+        # frame -- retry once (hwsnap.c's own comment). Every hwsnap failure
+        # path exits before writing any stdout bytes, so this can't corrupt output.
+        hwsnap -c "$CHN" || hwsnap -c "$CHN"
+    else
+        imggrabber -m $MODEL_SUFFIX -r $RES
+    fi
+}
+
 if [ "$WATERMARK" == "yes" ] ; then
-    WATERMARK="-w"
+    snapshot() { capture | watermark; }
 else
-    WATERMARK=""
+    snapshot() { capture; }
 fi
 
 if [ "$REDIRECT" == "yes" ] ; then
     if [ "$BASE64" == "no" ] ; then
-        imggrabber -m $MODEL_SUFFIX $RES $WATERMARK > /tmp/sd/record/$OUTPUT_FILE
+        snapshot > /tmp/sd/record/$OUTPUT_FILE
     elif [ "$BASE64" == "yes" ] ; then
-        imggrabber -m $MODEL_SUFFIX $RES $WATERMARK | base64 > /tmp/sd/record/$OUTPUT_FILE
+        snapshot | base64 > /tmp/sd/record/$OUTPUT_FILE
     fi
     printf "Content-type: application/json\r\n\r\n"
     printf "{\n"
@@ -76,9 +112,9 @@ if [ "$REDIRECT" == "yes" ] ; then
 else
     if [ "$BASE64" == "no" ] ; then
         printf "Content-type: image/jpeg\r\n\r\n"
-        imggrabber -m $MODEL_SUFFIX $RES $WATERMARK
+        snapshot
     elif [ "$BASE64" == "yes" ] ; then
         printf "Content-type: image/jpeg;base64\r\n\r\n"
-        imggrabber -m $MODEL_SUFFIX $RES $WATERMARK | base64
+        snapshot | base64
     fi
 fi

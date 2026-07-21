@@ -1,4 +1,21 @@
 /*
+ * Copyright (c) 2026 Lino Barreca
+ * https://github.com/LinoBarreca/yi-hack-v6
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*
  * hwsnap - grab one JPEG from a hardware VENC snap channel.
  *
  * The stock Yi media daemon (rmm) configures the full MPP pipeline at boot,
@@ -20,6 +37,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <signal.h>
 #include <sys/select.h>
 #include <sys/time.h>
 
@@ -64,6 +82,14 @@ int main(int argc, char **argv)
     long long t0, t1;
     int exit_code = 1;
     int started = 0;
+    unsigned char *jpeg_buf = NULL;
+    HI_U32 jpeg_len = 0, packs = 0;
+
+    // A cancelled request in the live viewer closes our stdout pipe; without this a
+    // write below would raise SIGPIPE and kill us before ReleaseStream, leaking the
+    // VENC buffer (see the release-before-write note further down). Ignore it so the
+    // write just fails and we still clean up.
+    signal(SIGPIPE, SIG_IGN);
 
     while (1) {
         static struct option long_options[] = {
@@ -87,6 +113,13 @@ int main(int argc, char **argv)
             print_usage(argv[0]);
             return 1;
         }
+    }
+
+    // Same disable switch imggrabber honors: keeps both capture backends
+    // consistent regardless of which one a caller invokes directly.
+    if (access("/tmp/snapshot.disabled", F_OK) == 0) {
+        fprintf(stderr, "Snapshot is disabled\n");
+        return 0;
     }
 
     t0 = now_ms();
@@ -145,33 +178,56 @@ int main(int argc, char **argv)
         goto out_stop;
     }
 
-    if (out_file != NULL) {
-        fout = fopen(out_file, "w");
-        if (fout == NULL) {
-            fprintf(stderr, "cannot open %s\n", out_file);
-            HI_MPI_VENC_ReleaseStream(chn, &stream);
-            free(stream.pstPack);
-            goto out_stop;
+    // Copy the encoded bytes into our own buffer and RELEASE the VENC stream BEFORE
+    // writing anything to the output. Writing to stdout can block or hit a broken
+    // pipe (a cancelled HTTP request in the live viewer), and if that killed us
+    // between GetStream and ReleaseStream the VENC buffer would leak.
+    packs = stream.u32PackCount;
+    jpeg_len = 0;
+    for (i = 0; i < stream.u32PackCount; i++)
+        jpeg_len += stream.pstPack[i].u32Len - stream.pstPack[i].u32Offset;
+    jpeg_buf = malloc(jpeg_len);
+    if (jpeg_buf != NULL) {
+        HI_U32 off = 0;
+        for (i = 0; i < stream.u32PackCount; i++) {
+            VENC_PACK_S *pack = &stream.pstPack[i];
+            HI_U32 len = pack->u32Len - pack->u32Offset;
+            memcpy(jpeg_buf + off, pack->pu8Addr + pack->u32Offset, len);
+            off += len;
         }
     }
-
-    for (i = 0; i < stream.u32PackCount; i++) {
-        VENC_PACK_S *pack = &stream.pstPack[i];
-        fwrite(pack->pu8Addr + pack->u32Offset, pack->u32Len - pack->u32Offset, 1, fout);
-    }
-    fflush(fout);
-    if (out_file != NULL)
-        fclose(fout);
 
     ret = HI_MPI_VENC_ReleaseStream(chn, &stream);
     if (ret != HI_SUCCESS)
         fprintf(stderr, "HI_MPI_VENC_ReleaseStream(%d) failed: %#x\n", chn, ret);
     free(stream.pstPack);
 
+    if (jpeg_buf == NULL) {
+        fprintf(stderr, "malloc failed\n");
+        goto out_stop;
+    }
+
+    // From here the VENC buffer is already back with the encoder, so a SIGPIPE or a
+    // short write below can no longer leak it or wedge the channel.
+    if (out_file != NULL) {
+        fout = fopen(out_file, "w");
+        if (fout == NULL) {
+            fprintf(stderr, "cannot open %s\n", out_file);
+            free(jpeg_buf);
+            goto out_stop;
+        }
+    }
+
+    fwrite(jpeg_buf, 1, jpeg_len, fout);
+    fflush(fout);
+    if (out_file != NULL)
+        fclose(fout);
+    free(jpeg_buf);
+
     t1 = now_ms();
     if (debug)
         fprintf(stderr, "JPEG captured from chn %d in %lld ms (%u packs)\n",
-                chn, t1 - t0, stream.u32PackCount);
+                chn, t1 - t0, packs);
     exit_code = 0;
 
 out_stop:

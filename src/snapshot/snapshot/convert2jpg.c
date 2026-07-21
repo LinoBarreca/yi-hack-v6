@@ -68,6 +68,7 @@ int YUVtoJPG(char *output_file, unsigned char *input, const int width, const int
     cinfo.in_color_space = JCS_YCbCr; //libJPEG expects YUV 3bytes, 24bit
 
     jpeg_set_defaults(&cinfo);
+    cinfo.dct_method = JDCT_FASTEST; // IJG default (ISLOW) is meaningfully slower on this CPU
     jpeg_set_quality(&cinfo, JPEG_QUALITY, TRUE);
     jpeg_start_compress(&cinfo, TRUE);
 

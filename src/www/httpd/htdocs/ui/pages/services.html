@@ -147,19 +147,20 @@
                 </h2>
                 <fieldset :disabled="mg('services/snapshot.conf')" class="frm" style="border:0;padding:0;margin:0">
                     <div class="row2">
-                        <label for="sw-snap">Snapshots</label>
+                        <label for="in-snapmode">Snapshots</label>
                         <div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="sw-snap"
-                                       :checked="snap.ENABLED === 'yes'" :disabled="dis('services.snapshot.ENABLED')"
-                                       @change="snap.ENABLED = $event.target.checked ? 'yes' : 'no'" />
-                                <label class="form-check-label" for="sw-snap">Allow taking JPEG snapshots</label>
-                            </div>
+                            <select class="form-select" id="in-snapmode" x-model="snap.ENABLED"
+                                    :disabled="dis('services.snapshot.ENABLED')" style="max-width:220px">
+                                <option value="no">Off</option>
+                                <option value="legacy">Legacy (software decode)</option>
+                                <option value="v6">v6 (fast, hardware)</option>
+                            </select>
                             <div class="help">Used by Live view, the ONVIF snapshot and the MQTT
-                                motion picture — turning this off disables all three.</div>
+                                motion picture — turning this off disables all three. v6 is much
+                                faster but its low resolution is a fixed 320x192.</div>
                         </div>
                     </div>
-                    <template x-if="snap.ENABLED === 'yes'">
+                    <template x-if="snap.ENABLED !== 'no'">
                         <div class="row2">
                             <label for="in-snapres">Default resolution / watermark</label>
                             <div class="d-flex gap-2 align-items-center">

@@ -581,32 +581,77 @@ document.addEventListener('alpine:init', () => {
 
     /* ================= Live view ================= */
     Alpine.data('livePage', () => ({
-        res: 'high', every: 3, err: false,
-        src: '', timer: null, snapshotOff: false,
+        res: 'high', wm: false, playing: true, err: false,
+        src: '', stamp: '', fps: 0, lastSwap: 0, snapshotOff: false, loading: null,
 
         async init() {
             try { this.snapshotOff = (await conf('snapshot')).ENABLED === 'no'; }
             catch (e) { this.snapshotOff = false; }
-            this.refresh();
-            this.setEvery(this.every);
+            if (!this.snapshotOff) this.start();
         },
-        destroy() { if (this.timer) clearInterval(this.timer); },
+        destroy() { this.playing = false; this.cancel(); },
         get isPtz() { return Alpine.store('ui').status.ptz === 'yes'; },
 
-        refresh() {
-            if (this.snapshotOff) return;
-            this.src = 'cgi-bin/snapshot.sh?res=' + this.res + '&t=' + Date.now();
+        // Drop the in-flight background load (so its onload can't swap or chain).
+        cancel() {
+            if (this.loading) { this.loading.onload = this.loading.onerror = null; this.loading = null; }
         },
-        setEvery(i) {
-            this.every = i;
-            if (this.timer) clearInterval(this.timer);
-            this.timer = null;
-            if (i > 0) this.timer = setInterval(() => this.refresh(), i * 1000);
-            this.refresh();
+        // Preload the next snapshot off-screen; swap it into view only once it has
+        // fully loaded (seamless, no blank frame), then immediately queue the next.
+        // The chain is self-paced by the camera's real snapshot latency and never
+        // overlaps requests (one in flight at a time).
+        // Zero-padded local "YYYY-MM-DD HH:MM:SS" (matches the burned-in watermark).
+        fmt(d) {
+            const p = n => String(n).padStart(2, '0');
+            return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+                   ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        },
+        fetchNext() {
+            if (this.snapshotOff) return;
+            const img = new Image();
+            this.loading = img;
+            const started = new Date();           // when THIS request was kicked off
+            const url = 'cgi-bin/snapshot.sh?res=' + this.res +
+                        (this.wm ? '&watermark=yes' : '') + '&t=' + started.getTime();
+            img.onload = () => {
+                if (this.loading !== img) return;   // superseded (res change / stop)
+                this.src = url;                       // already cached -> instant swap
+                this.stamp = this.fmt(started);       // stamp of the now-visible frame
+                // Measured refresh rate = swaps/sec, smoothed (EMA) so it doesn't jitter.
+                const now = Date.now();
+                if (this.lastSwap) {
+                    const inst = 1000 / (now - this.lastSwap);
+                    this.fps = this.fps ? this.fps * 0.6 + inst * 0.4 : inst;
+                }
+                this.lastSwap = now;
+                this.err = false;
+                this.loading = null;
+                if (this.playing) this.fetchNext();   // continuous: chain immediately
+            };
+            img.onerror = () => {
+                if (this.loading !== img) return;
+                this.err = true;
+                this.loading = null;
+                if (this.playing) setTimeout(() => this.fetchNext(), 1000); // back off on error
+            };
+            img.src = url;
+        },
+        start() { this.playing = true; this.lastSwap = 0; if (!this.loading) this.fetchNext(); },
+        stop() { this.playing = false; this.fps = 0; this.lastSwap = 0; },
+        setRes(r) {
+            this.res = r;
+            this.cancel();      // abandon the in-flight (old-res) shot
+            this.fetchNext();   // take a fresh one at the new resolution now
+        },
+        toggleWm() {
+            this.wm = !this.wm;
+            this.cancel();      // abandon the in-flight (old-watermark) shot
+            this.fetchNext();   // take a fresh one with the new setting now
         },
         async move(dir) {
             await api.json('cgi-bin/ptz.sh?dir=' + dir + '&time=0.3').catch(() => {});
-            setTimeout(() => this.refresh(), 600);
+            // when paused, grab one fresh frame so the move is visible
+            if (!this.playing && !this.loading) setTimeout(() => this.fetchNext(), 600);
         }
     }));
 
@@ -680,7 +725,7 @@ document.addEventListener('alpine:init', () => {
                     SNAPSHOT: this.onvif.SNAPSHOT || 'same'
                 });
                 await api.setConf('snapshot', {
-                    ENABLED: this.snap.ENABLED || 'yes',
+                    ENABLED: this.snap.ENABLED || 'legacy',
                     RESOLUTION: this.snap.RESOLUTION || 'high',
                     WATERMARK: this.snap.WATERMARK || 'no'
                 });
