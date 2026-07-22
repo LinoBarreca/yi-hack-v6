@@ -16,7 +16,8 @@ REMOTE_NEWVERSION_FILE=/tmp/.hacknewver
 
 LOCAL_VERSION_FILE=/home/yi-hack/extra/../version
 
-if [[ $(get_config system.CHECK_UPDATES) == "yes" ]] ; then
+CHECK_UPDATES=""; load_config system CHECK_UPDATES
+if [[ $CHECK_UPDATES == "yes" ]] ; then
     while : ; do
         # Get the latest version number from github
         wget -T 10 -O $REMOTE_RELEASE_FILE $REMOTE_RELEASE_URL --no-check-certificate &> /dev/null

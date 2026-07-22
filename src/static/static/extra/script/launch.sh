@@ -85,9 +85,10 @@ launch_apps() {
 
 
 # Read model and versions from files
-model=$(cat /home/app/.camver)
-version_cam=$(cat /home/yi-hack/version)
-version_sd=$(cat /tmp/sd/yi-hack/version)
+model=""; read model < /home/app/.camver
+version_cam=""; read version_cam < /home/yi-hack/version
+# The SD copy is genuinely optional (no SD / no payload on it).
+version_sd=""; read version_sd 2>/dev/null < /tmp/sd/yi-hack/version
 echo "Using model: $model"
 echo "Version on cam: $version_cam"
 echo "Version on sd: $version_sd"

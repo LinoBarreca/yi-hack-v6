@@ -51,9 +51,9 @@ CONFIG_DIR="${CONFIG_DIR:-$LOGICAL/config}"
 . "$LOGICAL/base/script/get_config.sh"
 . "$LOGICAL/base/script/version_compat.sh"
 
-MODEL=$(cat /home/app/.camver 2>/dev/null)
+MODEL=""; read MODEL < /home/app/.camver
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') apply_config: $*"; }
-is_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
+is_mounted() { grep -q " $1 " /proc/mounts; }
 
 # Never overridden from the share:
 #  - camera.conf / ptz_presets.conf : runtime state written by the device
@@ -73,7 +73,8 @@ config_on() {
 }
 
 SRC=""
-if [ "$(get_config cifs.ENABLED)" = "yes" ] && is_mounted "$CIFS_MNT"; then
+ENABLED=""; load_config cifs ENABLED
+if [ "$ENABLED" = "yes" ] && is_mounted "$CIFS_MNT"; then
     SRC=$(config_on "$CIFS_MNT") && log "managed config <- CIFS ($SRC)"
 fi
 if [ -z "$SRC" ] && is_mounted "$SD_MNT"; then
@@ -98,7 +99,9 @@ fi
 # done against the NORMALIZED content via a tmpfs temp (no flash write), so unchanged
 # files still cost zero flash writes (only a real change touches the flash).
 NORM=/tmp/.apply_config.$$
-( cd "$SRC" 2>/dev/null && find . -name '*.conf' -type f ) | while IFS= read -r f; do
+# A missing $SRC would silently apply nothing - say so instead.
+[ -d "$SRC" ] || log "ERROR: source dir $SRC not found, no config applied"
+( cd "$SRC" && find . -name '*.conf' -type f ) | while IFS= read -r f; do
     rel=${f#./}
     base=${rel##*/}
     case " $EXCLUDE " in *" $base "*) log "skip $rel (runtime state, never overridden)"; continue ;; esac

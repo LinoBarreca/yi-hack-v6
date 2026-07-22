@@ -28,30 +28,19 @@ ADV_DIR="/home/yi-hack/extra/script/mqtt_advertise"
 
 # HA advertise rides on top of the MQTT bridge: skip entirely if MQTT is off
 # (the advertisers publish to the broker configured in services/mqtt.conf).
-if [ "$(get_config services.mqtt.ENABLED)" != "yes" ]; then
+ENABLED=""; load_config services.mqtt ENABLED
+if [ "$ENABLED" != "yes" ]; then
     exit 0
 fi
 
-LINK_ENABLE=$(get_config services.mqtt_advertise.LINK_ENABLE)
-LINK_BOOT=$(get_config services.mqtt_advertise.LINK_BOOT)
-LINK_CRON=$(get_config services.mqtt_advertise.LINK_CRON)
-LINK_CRONTAB=$(get_config services.mqtt_advertise.LINK_CRONTAB)
-INFO_GLOBAL_ENABLE=$(get_config services.mqtt_advertise.INFO_GLOBAL_ENABLE)
-INFO_GLOBAL_BOOT=$(get_config services.mqtt_advertise.INFO_GLOBAL_BOOT)
-INFO_GLOBAL_CRON=$(get_config services.mqtt_advertise.INFO_GLOBAL_CRON)
-INFO_GLOBAL_CRONTAB=$(get_config services.mqtt_advertise.INFO_GLOBAL_CRONTAB)
-CAMERA_SETTING_ENABLE=$(get_config services.mqtt_advertise.CAMERA_SETTING_ENABLE)
-CAMERA_SETTING_BOOT=$(get_config services.mqtt_advertise.CAMERA_SETTING_BOOT)
-CAMERA_SETTING_CRON=$(get_config services.mqtt_advertise.CAMERA_SETTING_CRON)
-CAMERA_SETTING_CRONTAB=$(get_config services.mqtt_advertise.CAMERA_SETTING_CRONTAB)
-TELEMETRY_ENABLE=$(get_config services.mqtt_advertise.TELEMETRY_ENABLE)
-TELEMETRY_BOOT=$(get_config services.mqtt_advertise.TELEMETRY_BOOT)
-TELEMETRY_CRON=$(get_config services.mqtt_advertise.TELEMETRY_CRON)
-TELEMETRY_CRONTAB=$(get_config services.mqtt_advertise.TELEMETRY_CRONTAB)
-HOMEASSISTANT_ENABLE=$(get_config services.mqtt_advertise.HOMEASSISTANT_ENABLE)
-HOMEASSISTANT_BOOT=$(get_config services.mqtt_advertise.HOMEASSISTANT_BOOT)
-HOMEASSISTANT_CRON=$(get_config services.mqtt_advertise.HOMEASSISTANT_CRON)
-HOMEASSISTANT_CRONTAB=$(get_config services.mqtt_advertise.HOMEASSISTANT_CRONTAB)
+# One batch fork-free pass; the old one-get_config-per-key style made 20
+# subshells x 3 forks ≈ 4s of boot time on this CPU.
+load_config services.mqtt_advertise \
+    LINK_ENABLE LINK_BOOT LINK_CRON LINK_CRONTAB \
+    INFO_GLOBAL_ENABLE INFO_GLOBAL_BOOT INFO_GLOBAL_CRON INFO_GLOBAL_CRONTAB \
+    CAMERA_SETTING_ENABLE CAMERA_SETTING_BOOT CAMERA_SETTING_CRON CAMERA_SETTING_CRONTAB \
+    TELEMETRY_ENABLE TELEMETRY_BOOT TELEMETRY_CRON TELEMETRY_CRONTAB \
+    HOMEASSISTANT_ENABLE HOMEASSISTANT_BOOT HOMEASSISTANT_CRON HOMEASSISTANT_CRONTAB
 
 if [ "$LINK_ENABLE" == "yes" ]; then
     if [ "$LINK_BOOT" == "yes" ]; then

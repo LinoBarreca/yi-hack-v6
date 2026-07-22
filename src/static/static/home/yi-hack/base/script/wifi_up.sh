@@ -55,15 +55,20 @@ WAIT=45                         # seconds to wait for association + DHCP IP
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') wifi_up: $*"; }
 
 # Read a NUL-terminated ASCII field from mtdblock2 (ash command substitution stops at NUL).
-read_mtd() { dd if="$MTD" bs=1 skip="$1" count="$FIELD_LEN" 2>/dev/null; }
+read_mtd() { dd if="$MTD" bs=1 skip="$1" count="$FIELD_LEN" 2>/dev/null; }  # dd-checked: callers test the rc
 
-CUR_SSID=$(read_mtd "$SSID_OFF")
-CUR_PSK=$(read_mtd "$PSK_OFF")
+# read_mtd's 2>/dev/null hides dd's stats AND its errors, so check the rc: an
+# unreadable mtd would leave both values empty and make the override test below
+# think the config differs - triggering a needless flash WRITE on every boot.
+CUR_SSID=$(read_mtd "$SSID_OFF") || log "ERROR: cannot read the current SSID from $MTD"
+CUR_PSK=$(read_mtd "$PSK_OFF")   || log "ERROR: cannot read the current PSK from $MTD"
 
 # --- Override: wifi.conf (flash) wins if it carries an SSID; apply to mtdblock2[28/92] ---
 # Only when it actually differs (idempotent: normal boots do ZERO flash writes).
-OVR_SSID=$(get_config wifi.SSID 2>/dev/null)
-OVR_PSK=$(get_config wifi.PSK 2>/dev/null)
+SSID=""; PSK=""
+load_config wifi SSID PSK
+OVR_SSID=$SSID
+OVR_PSK=$PSK
 
 if [ -n "$OVR_SSID" ] && { [ "$OVR_SSID" != "$CUR_SSID" ] || [ "$OVR_PSK" != "$CUR_PSK" ]; }; then
     if [ "${#OVR_SSID}" -le 63 ] && [ "${#OVR_PSK}" -le 63 ]; then
@@ -93,10 +98,15 @@ if [ -z "$SSID" ]; then
     exit 1
 fi
 
-ifconfig "$IFACE" up 2>/dev/null
+ifconfig "$IFACE" up || log "ERROR: cannot bring $IFACE up"
 
 # --- Associate (skip if already associated, e.g. dispatch or a prior run) ---
-if wpa_cli -i "$IFACE" status 2>/dev/null | grep -q "wpa_state=COMPLETED"; then
+# Capture instead of piping: piping discards wpa_cli's rc, so a wpa_cli that
+# failed looked exactly like "not associated" and sent us down the reconfigure
+# path (which writes flash) for what was really a tooling error.
+_wpa=$(wpa_cli -i "$IFACE" status) || log "WARNING: wpa_cli status failed - treating $IFACE as not associated"
+case "$_wpa" in *wpa_state=COMPLETED*) _assoc=1 ;; *) _assoc=0 ;; esac
+if [ "$_assoc" = 1 ]; then
     log "$IFACE already associated (wpa_state=COMPLETED); ensuring DHCP"
 else
     # Generate /tmp/wpa_supplicant.conf one-way. wpa_passphrase hashes WPA-PSK keys (8..63);
@@ -129,7 +139,9 @@ fi
 
 i=0
 while [ "$i" -lt "$WAIT" ]; do
-    if ifconfig "$IFACE" 2>/dev/null | grep -q "inet addr:"; then
+    _ifc=$(ifconfig "$IFACE") || log "WARNING: ifconfig $IFACE failed while waiting for an address"
+    case "$_ifc" in *"inet addr:"*) _hasip=1 ;; *) _hasip=0 ;; esac
+    if [ "$_hasip" = 1 ]; then
         log "$IFACE up with IP after ${i}s"
         exit 0
     fi

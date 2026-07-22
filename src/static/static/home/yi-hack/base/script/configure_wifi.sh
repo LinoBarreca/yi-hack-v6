@@ -9,8 +9,19 @@ function print_help {
 
 if [ -f "/tmp/sd/recover/mtdblock2_recover.bin" ]; then
     DATE=$(date '+%Y%m%d%H%M%S')
-    dd if=/dev/mtdblock2 of=/tmp/sd/recover/mtdblock2_prerecover_$DATE.bin 2>/dev/null
-    dd if=/tmp/sd/recover/mtdblock2_recover.bin of=/dev/mtdblock2 2>/dev/null
+    # This path restores the wifi partition from SD and then reboots. dd's
+    # output is NOT suppressed: it goes to the boot log, and a failure here
+    # must be visible - we are about to overwrite /dev/mtdblock2 and rename
+    # the recovery file away, so a silent failure costs the only copy of both
+    # the pre-recovery backup and the recovery image.
+    if ! dd if=/dev/mtdblock2 of=/tmp/sd/recover/mtdblock2_prerecover_$DATE.bin; then
+        echo "configure_wifi: pre-recovery backup FAILED - refusing to overwrite mtdblock2"
+        exit 1
+    fi
+    if ! dd if=/tmp/sd/recover/mtdblock2_recover.bin of=/dev/mtdblock2; then
+        echo "configure_wifi: restore to mtdblock2 FAILED - keeping the recovery file for a retry"
+        exit 1
+    fi
     mv /tmp/sd/recover/mtdblock2_recover.bin /tmp/sd/recover/mtdblock2_recover_done.bin
     reboot
 fi
@@ -48,8 +59,13 @@ if [ ${#KEY} -gt 63 ]; then
     exit 1
 fi
 
-CURRENT_SSID=$(dd bs=1 skip=28 count=64 if=/dev/mtdblock2 2>/dev/null)
-CURRENT_KEY=$(dd bs=1 skip=92 count=64 if=/dev/mtdblock2 2>/dev/null)
+# 2>/dev/null keeps dd's transfer stats out of the captured value; the rc is
+# checked because it also hides a genuine read failure, which would make both
+# fields look empty and the "already configured" test below silently wrong.
+CURRENT_SSID=$(dd bs=1 skip=28 count=64 if=/dev/mtdblock2 2>/dev/null) || \
+    { echo "error: cannot read current SSID from /dev/mtdblock2"; exit 1; }
+CURRENT_KEY=$(dd bs=1 skip=92 count=64 if=/dev/mtdblock2 2>/dev/null) || \
+    { echo "error: cannot read current key from /dev/mtdblock2"; exit 1; }
 
 echo $SSID ${#SSID} - $CURRENT_SSID ${#CURRENT_SSID}
 echo $KEY ${#KEY} - $CURRENT_KEY ${#CURRENT_KEY}
@@ -61,7 +77,12 @@ fi
 
 echo "creating partition backup..."
 DATE=$(date '+%Y%m%d%H%M%S')
-dd if=/dev/mtdblock2 of=/tmp/sd/mtdblock2_$DATE.bin 2>/dev/null
+# Not suppressed, and checked: the writes below are destructive and this is
+# the only copy of the pre-change partition.
+if ! dd if=/dev/mtdblock2 of=/tmp/sd/mtdblock2_$DATE.bin; then
+    echo "error: partition backup failed - refusing to modify /dev/mtdblock2"
+    exit 1
+fi
 
 # clear the existing passwords (to ensure we are null terminated)
 dd if=/dev/zero of=/dev/mtdblock2 bs=1 seek=28 count=64 conv=notrunc

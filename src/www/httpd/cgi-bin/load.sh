@@ -85,7 +85,12 @@ if [ $RES -eq 0 ]; then
         chmod 0644 /home/yi-hack/config/*.conf
         # per-service configs (present in backups taken from 6.0.x onward)
         if [ -d services ]; then
-            mv -f services/*.conf /home/yi-hack/config/services/ 2>/dev/null
+            # No 2>/dev/null: this restores the user's configuration, and a
+            # silent failure here leaves the camera on a half-restored config.
+            for f in services/*.conf; do
+                [ -e "$f" ] || break
+                mv -f "$f" /home/yi-hack/config/services/ || echo "load[ERROR]: cannot restore $f" >&2
+            done
             chmod 0644 /home/yi-hack/config/services/*.conf
         fi
         if [ -f hostname ]; then
@@ -118,34 +123,36 @@ if [ ! -f "/home/yi-hack/config/camera.conf" ]; then
     exit
 fi
 
-# Set camera settings
-if [[ $(get_config camera.SWITCH_ON) == "no" ]] ; then
+# Set camera settings (one batch config read, no get_config subshells)
+load_config camera SWITCH_ON SAVE_VIDEO_ON_MOTION SENSITIVITY LED IR ROTATE
+
+if [[ $SWITCH_ON == "no" ]] ; then
     ipc_cmd -t off
 else
     ipc_cmd -t on
 fi
 
-if [[ $(get_config camera.SAVE_VIDEO_ON_MOTION) == "no" ]] ; then
+if [[ $SAVE_VIDEO_ON_MOTION == "no" ]] ; then
     ipc_cmd -v always
 else
     ipc_cmd -v detect
 fi
 
-ipc_cmd -s $(get_config camera.SENSITIVITY)
+ipc_cmd -s $SENSITIVITY
 
-if [[ $(get_config camera.LED) == "no" ]] ; then
+if [[ $LED == "no" ]] ; then
     ipc_cmd -l off
 else
     ipc_cmd -l on
 fi
 
-if [[ $(get_config camera.IR) == "no" ]] ; then
+if [[ $IR == "no" ]] ; then
     ipc_cmd -i off
 else
     ipc_cmd -i on
 fi
 
-if [[ $(get_config camera.ROTATE) == "no" ]] ; then
+if [[ $ROTATE == "no" ]] ; then
     ipc_cmd -r off
 else
     ipc_cmd -r o

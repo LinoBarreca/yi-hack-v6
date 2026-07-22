@@ -40,8 +40,11 @@ LOG_FILE="/home/yi-hack/output/log/wd_record.log"
 INTERVAL=20
 
 # Nothing to record if the matrix says NO (no view) or the RTSP source is off.
-[ "$(get_config output.RECORD)" = "NO" ] && exit 0
-[ "$(get_config services.rtsp.ENABLED)" = "yes" ] || exit 0
+RECORD=""; ENABLED=""
+load_config output RECORD
+load_config services.rtsp ENABLED
+[ "$RECORD" = "NO" ] && exit 0
+[ "$ENABLED" = "yes" ] || exit 0
 
 ensure_dirs()
 {

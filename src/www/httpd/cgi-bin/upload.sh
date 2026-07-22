@@ -3,16 +3,6 @@
 # 6.0.1
 
 
-get_file_type()
-{   
-    CONF="$(echo $QUERY_STRING | cut -d'=' -f1)"
-    VAL="$(echo $QUERY_STRING | cut -d'=' -f2)"
-    
-    if [ $CONF == "file" ] ; then
-        echo $VAL
-    fi
-}
-
 get_random_tmp_file()
 {
     local CNT=5
@@ -20,7 +10,11 @@ get_random_tmp_file()
     local TMP_FILE=""
     
     while : ; do
-        RND=$(</dev/urandom tr -dc 0-9 | dd bs=$CNT count=1 2>/dev/null | sed -e 's/^0\+//' )
+        # dd-checked: 2>/dev/null keeps dd's stats out of RND. An empty result
+        # would collapse every upload onto the same temp name, so fall back to
+        # the pid rather than continuing with a constant.
+        RND=$(</dev/urandom tr -dc 0-9 | dd bs=$CNT count=1 2>/dev/null | sed -e 's/^0\+//' )  # dd-checked
+        [ -n "$RND" ] || { echo "upload[WARN]: no random source, using pid" >&2; RND=$$; }
         TMP_FILE="/tmp/.tmpupload.$RND"
         
         [ -f $TMP_FILE ] || break
@@ -53,15 +47,20 @@ get_file_from_post()
     filesize=`ls -l "$FILE" | awk '{print $5}'`
 
     # Truncate the file
-    dd of="$FILE" seek=$((filesize - tail_len)) bs=1 count=0 >/dev/null 2>/dev/null
+    # Truncate to drop the trailing MIME boundary. Checked: a silent failure
+    # leaves the boundary bytes appended to the uploaded file.
+    dd of="$FILE" seek=$((filesize - tail_len)) bs=1 count=0 >/dev/null 2>&1 || \
+        echo "upload[ERROR]: could not truncate $FILE, the MIME boundary is still appended" >&2
 }
 
 printf "Content-type: application/json\r\n\r\n"
 
-FILE_TYPE="$(get_file_type)"
+# QUERY_STRING is a single file=<name> pair; split with parameter expansion.
+FILE_TYPE=""
+[ "${QUERY_STRING%%=*}" = "file" ] && FILE_TYPE=${QUERY_STRING#*=}
 TMP_FILE=$(get_random_tmp_file)
 
-CUT_FILE_TYPE=$(echo $FILE_TYPE | cut -d'_' -f1)
+CUT_FILE_TYPE=${FILE_TYPE%%_*}
 
 if [[ "$CUT_FILE_TYPE" == "home" || "$CUT_FILE_TYPE" == "rootfs" ]] ; then
     # If home or rootfs image, place directly on sd card

@@ -43,18 +43,24 @@ out() { printf '{"ok":"%s","msg":"%s"}' "$1" "$2"; }
 
 printf "Content-type: application/json\r\n\r\n"
 
+# Batch fork-free config read; RW_<key> wins over the base cifs.<key> when set
+# (inherit-when-empty, same rule as mount_cifs_rw.sh). Pre-clear USER: CGI env.
+HOST=""; SHARE=""; USER=""; PASS=""; SEC=""; VERS=""
+RW_HOST=""; RW_SHARE=""; RW_USER=""; RW_PASS=""; RW_SEC=""; RW_VERS=""
 if [ "$SHARE_KIND" = "rw" ]; then
-    _p() { _v=$(get_config "cifs.RW_$1"); [ -n "$_v" ] && { echo "$_v"; return; }; get_config "cifs.$1"; }
-    HOST=$(_p HOST); SHARE=$(_p SHARE); USER=$(_p USER); PASS=$(_p PASS)
-    SEC=$(_p SEC);   VERS=$(_p VERS)
-    RW_HOST=$(get_config cifs.RW_HOST); RW_SHARE=$(get_config cifs.RW_SHARE)
+    load_config cifs HOST SHARE USER PASS SEC VERS \
+                     RW_HOST RW_SHARE RW_USER RW_PASS RW_SEC RW_VERS
     if [ -z "$RW_HOST" ] && [ -z "$RW_SHARE" ]; then
         out no "Output share not configured (set the share and/or server first, then save)."; exit 0
     fi
+    [ -n "$RW_HOST" ]  && HOST=$RW_HOST
+    [ -n "$RW_SHARE" ] && SHARE=$RW_SHARE
+    [ -n "$RW_USER" ]  && USER=$RW_USER
+    [ -n "$RW_PASS" ]  && PASS=$RW_PASS
+    [ -n "$RW_SEC" ]   && SEC=$RW_SEC
+    [ -n "$RW_VERS" ]  && VERS=$RW_VERS
 else
-    HOST=$(get_config cifs.HOST);  SHARE=$(get_config cifs.SHARE)
-    USER=$(get_config cifs.USER);  PASS=$(get_config cifs.PASS)
-    SEC=$(get_config cifs.SEC);    VERS=$(get_config cifs.VERS)
+    load_config cifs HOST SHARE USER PASS SEC VERS
 fi
 [ -z "$USER" ] && USER=guest
 [ -z "$SEC" ]  && SEC=ntlmssp
@@ -64,8 +70,11 @@ if [ -z "$HOST" ] || [ -z "$SHARE" ]; then
     out no "Server and share name are required (save the settings first)."; exit 0
 fi
 
-for m in md4 hmac cifs; do grep -q "^$m " /proc/modules || insmod /home/app/localko/$m.ko 2>/dev/null; done
-mkdir -p "$MP"; grep -q " $MP " /proc/mounts && umount "$MP" 2>/dev/null
+# insmod/umount errors go to the httpd log rather than /dev/null: when the
+# mount below fails, the real cause is usually here (missing .ko for this
+# model, or a stale mount that could not be cleared).
+for m in md4 hmac cifs; do grep -q "^$m " /proc/modules || insmod /home/app/localko/$m.ko; done
+mkdir -p "$MP"; grep -q " $MP " /proc/mounts && umount "$MP"
 
 RO_OPT=",ro"; [ "$SHARE_KIND" = "rw" ] && RO_OPT=""
 # timeout: a dead/unreachable server must produce an answer, not a hung CGI
@@ -83,12 +92,12 @@ if [ "$SHARE_KIND" = "rw" ]; then
         out no "Mounted, but NOT writable (check the share permissions on the server)."
     fi
 else
-    MODEL=$(cat /home/app/.camver 2>/dev/null)
+    MODEL=""; read MODEL < /home/app/.camver
     if [ -d "$MP/$MODEL/yi-hack" ] || [ -d "$MP/yi-hack" ]; then
         out yes "Mounted and the Yi-Hack firmware was found on the share."
     else
         out no "Mounted, but the Yi-Hack firmware (yi-hack/) was not found on the share."
     fi
 fi
-umount "$MP" 2>/dev/null
+umount "$MP"
 exit 0

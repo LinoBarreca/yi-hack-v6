@@ -2,13 +2,28 @@
 
 # 6.0.1
 
-MODEL_SUFFIX=`cat /home/app/.camver`
-FW_VERSION=`cat /home/yi-hack/extra/../version`
-BASELINE_VERSION=`cat /home/yi-hack/version`
+read MODEL_SUFFIX < /home/app/.camver
+read FW_VERSION < /home/yi-hack/extra/../version
+read BASELINE_VERSION < /home/yi-hack/version
 
 export PATH=/usr/bin:/usr/sbin:/bin:/sbin:/home/base/tools:/home/app/localbin:/home/base:/home/yi-hack/extra/bin:/home/yi-hack/extra/sbin:/home/yi-hack/extra/usr/bin:/home/yi-hack/extra/usr/sbin
 export LD_LIBRARY_PATH=/lib:/usr/lib:/home/lib:/home/qigan/lib:/home/app/locallib:/tmp/sd:/tmp/sd/gdb:/home/yi-hack/extra/lib
 
+
+# gh_fetch <url> <jq filter> - query the GitHub releases API.
+#
+# wget's stderr is suppressed only to keep its progress meter out of the CGI
+# response, but that also made a DNS/TLS/offline failure look exactly like
+# "no release found": the pipe into jq discards wget's exit status, leaving an
+# empty version string that the callers then treated as a valid answer. Capture
+# first, check the rc, and report the real cause to the httpd log.
+gh_fetch() {
+    _gf_json=$(wget -O - "$1" 2>/dev/null) || {
+        echo "fw_upgrade[ERROR]: cannot reach $1 (network/DNS/TLS failure)" >&2
+        return 1
+    }
+    printf '%s' "$_gf_json" | jq -r "$2"
+}
 
 NAME="${QUERY_STRING%%=*}"
 VAL="${QUERY_STRING#*=}"
@@ -20,9 +35,9 @@ fi
 if [ "$VAL" == "info" ] ; then
     printf "Content-type: application/json\r\n\r\n"
 
-    FW_VERSION=`cat /home/yi-hack/extra/../version`
-    LATEST_FW=`wget -O - https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases/latest 2>/dev/null | jq -r '.tag_name // ""'`
-    PRERELEASE_FW=`wget -O - https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases 2>/dev/null | jq -r '[.[] | select(.prerelease)][0].tag_name // ""'`
+    read FW_VERSION < /home/yi-hack/extra/../version
+    LATEST_FW=$(gh_fetch https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases/latest '.tag_name // ""')
+    PRERELEASE_FW=$(gh_fetch https://api.github.com/repos/LinoBarreca/yi-hack-v6/releases '[.[] | select(.prerelease)][0].tag_name // ""')
 	
     printf "{\n"
     printf "\"%s\":\"%s\",\n" "fw_version"       "$FW_VERSION"
@@ -61,7 +76,12 @@ elif [ "$VAL" == "upgrade" ] ; then
 #        mv /tmp/sd/${MODEL_SUFFIX}_x.x.x.tgz /tmp/sd/${MODEL_SUFFIX}/${MODEL_SUFFIX}_x.x.x.tgz
         LATEST_FW="x.x.x"
     else
-        LATEST_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases/latest 2>/dev/null | jq -r '.tag_name // ""'`
+        LATEST_FW=$(gh_fetch https://api.github.com/repos/alienatedsec/yi-hack-v6/releases/latest '.tag_name // ""')
+        if [ -z "$LATEST_FW" ]; then
+            printf "Content-type: text/html\r\n\r\n"
+            printf "Cannot reach the update server. Check the network connection."
+            exit
+        fi
         if [ "$FW_VERSION" == "$LATEST_FW" ]; then
             printf "Content-type: text/html\r\n\r\n"
             printf "No new firmware available."
@@ -133,7 +153,12 @@ elif [ "$VAL" == "preupgrade" ] ; then
 #        mv /tmp/sd/${MODEL_SUFFIX}_x.x.x.tgz /tmp/sd/${MODEL_SUFFIX}/${MODEL_SUFFIX}_x.x.x.tgz
         PRERELEASE_FW="x.x.x"
     else
-        PRERELEASE_FW=`wget -O - https://api.github.com/repos/alienatedsec/yi-hack-v6/releases 2>/dev/null | jq -r '[.[] | select(.prerelease)][0].tag_name // ""'`
+        PRERELEASE_FW=$(gh_fetch https://api.github.com/repos/alienatedsec/yi-hack-v6/releases '[.[] | select(.prerelease)][0].tag_name // ""')
+        if [ -z "$PRERELEASE_FW" ]; then
+            printf "Content-type: text/html\r\n\r\n"
+            printf "Cannot reach the update server. Check the network connection."
+            exit
+        fi
         if [ "$FW_VERSION" == "$PRERELEASE_FW" ]; then
             printf "Content-type: text/html\r\n\r\n"
             printf "No new firmware available."

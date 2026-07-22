@@ -25,7 +25,7 @@
 # flash; otherwise we keep the record in volatile /tmp.
 
 EXTRA=/home/yi-hack/extra
-MODEL=$(cat /home/app/.camver 2>/dev/null)
+MODEL=""; read MODEL < /home/app/.camver
 
 # Full download URL = base + model home image name (home_<model>m, model dynamic via .camver).
 DL_URL="${1}home_${MODEL}m"
@@ -46,7 +46,7 @@ echo "MD5: $2" >> "$OTA_DIR/upgrade_data.txt"
 if [ -d "$EXTRA" ]; then
     OUT="$OTA_DIR/home_${MODEL}m"
     wget -O "$OUT" "$DL_URL"
-    dl_md5=$(md5sum "$OUT" 2>/dev/null | awk '{print $1}')
+    dl_md5=$(md5sum "$OUT" | awk '{print $1}')
     if [ -n "$dl_md5" ] && [ "$dl_md5" = "$2" ]; then
         echo "$OUT MD5: $dl_md5 OK" >> "$OTA_DIR/upgrade_data.txt"
     else

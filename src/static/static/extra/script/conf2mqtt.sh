@@ -35,12 +35,14 @@ CONF_FILE="$CONFIG_DIR/$SECTION.conf"
 
 # MQTT connection (keys de-prefixed; file is config/services/mqtt.conf). The
 # MQTT_ prefix on the local variables avoids clashing with the shell's own
-# USER/etc. environment.
-MQTT_IP=$(get_config services.mqtt.BROKER_IP)
-MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)
-MQTT_USER=$(get_config services.mqtt.BROKER_USER)
-MQTT_PASSWORD=$(get_config services.mqtt.BROKER_PASSWORD)
-MQTT_PREFIX=$(get_config identity.MQTT_PREFIX)
+# USER/etc. environment. Batch fork-free reads (no get_config subshells).
+BROKER_IP=""; BROKER_PORT=""; BROKER_USER=""; BROKER_PASSWORD=""; MQTT_PREFIX=""
+load_config services.mqtt BROKER_IP BROKER_PORT BROKER_USER BROKER_PASSWORD
+load_config identity MQTT_PREFIX
+MQTT_IP=$BROKER_IP
+MQTT_PORT=$BROKER_PORT
+MQTT_USER=$BROKER_USER
+MQTT_PASSWORD=$BROKER_PASSWORD
 
 [ -z "$MQTT_IP" ] && exit 0
 [ -z "$MQTT_PORT" ] && exit 0

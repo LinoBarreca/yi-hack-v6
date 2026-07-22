@@ -16,13 +16,19 @@ cd $TMP_DIR
 cp /home/yi-hack/config/*.conf .
 if [ -d /home/yi-hack/config/services ]; then
     mkdir services
-    cp /home/yi-hack/config/services/*.conf services/ 2>/dev/null
+    # No 2>/dev/null: this is a backup, and a copy that fails silently produces
+    # an archive that looks complete but is not. An empty dir is the only
+    # expected non-error, so test the glob instead of suppressing cp.
+    for f in /home/yi-hack/config/services/*.conf; do
+        [ -e "$f" ] || break
+        cp "$f" services/ || echo "save[ERROR]: cannot back up $f" >&2
+    done
 fi
 if [ -f /home/yi-hack/config/hostname ]; then
     cp /home/yi-hack/config/hostname .
 fi
 # version marker (no leading dot: `tar cvf ... *` must pick it up)
-cp /home/yi-hack/version ./backup_version 2>/dev/null
+cp /home/yi-hack/version ./backup_version || echo "save[WARN]: no version marker in the backup" >&2
 
 tar cvf config.tar * > /dev/null
 bzip2 config.tar

@@ -112,8 +112,8 @@ elif [ $ACTION == "add_preset" ]; then
         echo "Error getting PTZ position"
         exit
     fi
-    POSX=$(echo $POS | cut -d ',' -f 1)
-    POSY=$(echo $POS | cut -d ',' -f 2)
+    POSX=${POS%%,*}
+    POSY=${POS#*,}; POSY=${POSY%%,*}
     if [ -z $POSX ] || [ -z $POSY ]; then
         echo "Error getting PTZ position"
         exit

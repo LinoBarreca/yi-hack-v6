@@ -76,7 +76,7 @@ if [ "$NAME" = "list" ] || [ -z "$NAME" ]; then
             case "$TARGET" in /*) F="$TARGET" ;; *) F="$LOGDIR/$TARGET" ;; esac
             # skip missing files and the /dev/null links of output.LOG=NO
             [ -f "$F" ] || [ -c "$F" ] || continue
-            [ "$(readlink "$F" 2>/dev/null)" = "/dev/null" ] && continue
+            [ "$(readlink "$F")" = "/dev/null" ] && continue
         fi
         [ "$FIRST" = 1 ] || printf ','
         printf '"%s"' "$id"

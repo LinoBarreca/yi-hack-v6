@@ -28,17 +28,19 @@ MP=/tmp/cifs_check
 
 if [ -z "$HOST" ] || [ -z "$SHARE" ]; then printf '{"ok":"no","msg":"Host and Share are required."}'; exit; fi
 
-for m in md4 hmac cifs; do lsmod | grep -q "^$m " || insmod /home/app/localko/$m.ko 2>/dev/null; done
-mkdir -p "$MP"; mount | grep -q " $MP " && umount "$MP" 2>/dev/null
+# insmod/umount errors go to the httpd log rather than /dev/null: when the
+# mount below fails, the real cause is usually here.
+for m in md4 hmac cifs; do lsmod | grep -q "^$m " || insmod /home/app/localko/$m.ko; done
+mkdir -p "$MP"; mount | grep -q " $MP " && umount "$MP"
 
 if mount -t cifs "//$HOST/$SHARE" "$MP" -o user="$USER",pass=,sec=ntlmssp,vers=1.0,ro 2>/tmp/cifstest.err; then
-    MODEL=$(cat /home/app/.camver 2>/dev/null)
+    MODEL=""; read MODEL < /home/app/.camver
     if [ -d "$MP/$MODEL/yi-hack" ] || [ -d "$MP/yi-hack" ]; then
         printf '{"ok":"yes","msg":"Mount OK and payload found on the share."}'
     else
         printf '{"ok":"no","msg":"Mounted, but payload (yi-hack/) not found on the share."}'
     fi
-    umount "$MP" 2>/dev/null
+    umount "$MP"
 else
     ERR=$(tr -d '"\n' < /tmp/cifstest.err | cut -c1-160)
     printf '{"ok":"no","msg":"Mount failed: %s"}' "$ERR"

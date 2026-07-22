@@ -42,8 +42,10 @@ fi
 
 . /home/yi-hack/base/script/get_config.sh
 
-TZ_CONF=$(get_config system.TIMEZONE)
-
-if [ ! -z "$TZ_CONF" ]; then
-    export TZ=$TZ_CONF
+# Fork-free read: env.sh is sourced by every login shell and every service
+# script, so a get_config subshell here (3 forks ≈ 200ms) taxes each of them.
+TIMEZONE=""
+load_config system TIMEZONE
+if [ ! -z "$TIMEZONE" ]; then
+    export TZ=$TIMEZONE
 fi

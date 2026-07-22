@@ -52,16 +52,17 @@ KO_DIR="/home/app/localko"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') mount_cifs: $*"; }
 
-[ "$(get_config cifs.ENABLED)" = "yes" ] || { log "CIFS not enabled (cifs.ENABLED != yes)"; exit 1; }
+# Batch fork-free read (one pass; the old per-key get_config subshells cost
+# ~200ms each on this CPU). Pre-clear USER: it is in the boot environment.
+ENABLED=""; HOST=""; SHARE=""; USER=""; PASS=""; SEC=""; VERS=""; RETRY=""; RETRY_DELAY=""
+load_config cifs ENABLED HOST SHARE USER PASS SEC VERS RETRY RETRY_DELAY
+[ "$ENABLED" = "yes" ] || { log "CIFS not enabled (cifs.ENABLED != yes)"; exit 1; }
 
-HOST=$(get_config cifs.HOST)
-SHARE=$(get_config cifs.SHARE)
-USER=$(get_config cifs.USER);  [ -z "$USER" ] && USER=guest
-PASS=$(get_config cifs.PASS)
-SEC=$(get_config cifs.SEC);    [ -z "$SEC" ]  && SEC=ntlmssp
-VERS=$(get_config cifs.VERS);  [ -z "$VERS" ] && VERS=1.0
-case $(get_config cifs.RETRY)       in ''|*[!0-9]*) RETRY=10 ;;       *) RETRY=$(get_config cifs.RETRY) ;; esac
-case $(get_config cifs.RETRY_DELAY) in ''|*[!0-9]*) RETRY_DELAY=6 ;;  *) RETRY_DELAY=$(get_config cifs.RETRY_DELAY) ;; esac
+[ -z "$USER" ] && USER=guest
+[ -z "$SEC" ]  && SEC=ntlmssp
+[ -z "$VERS" ] && VERS=1.0
+case $RETRY       in ''|*[!0-9]*) RETRY=10 ;; esac
+case $RETRY_DELAY in ''|*[!0-9]*) RETRY_DELAY=6 ;; esac
 
 if [ -z "$HOST" ] || [ -z "$SHARE" ]; then
     log "HOST or SHARE not configured in cifs.conf"
@@ -78,9 +79,9 @@ done
 mkdir -p "$MOUNTPOINT"
 
 # If already mounted for some reason, unmount to start clean
-grep -q " $MOUNTPOINT " /proc/mounts && umount "$MOUNTPOINT" 2>/dev/null
+grep -q " $MOUNTPOINT " /proc/mounts && { umount "$MOUNTPOINT" || log "WARNING: could not clear the existing mount on $MOUNTPOINT"; }
 
-MODEL=$(cat /home/app/.camver 2>/dev/null)
+MODEL=""; read MODEL < /home/app/.camver
 
 # Bound each attempt: a dead/unreachable server can hang mount(2) far longer than
 # the whole retry budget. Guarded: older rootfs builds have no timeout applet.
@@ -100,7 +101,7 @@ while [ "$i" -lt "$RETRY" ]; do
             exit 0
         fi
         log "mount OK but payload missing (looked for $MODEL/yi-hack and yi-hack)"
-        umount "$MOUNTPOINT" 2>/dev/null
+        umount "$MOUNTPOINT" || log "WARNING: umount $MOUNTPOINT failed, mount left behind"
         exit 2
     fi
     log "mount failed (attempt $i/$RETRY): ${_err:-timed out or unknown error} - retrying in ${RETRY_DELAY}s"

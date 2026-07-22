@@ -10,7 +10,7 @@ if pidof "$script_name" -o $$ >/dev/null;then
 fi
 
 
-MODEL_SUFFIX=$(cat /home/app/.camver)
+read MODEL_SUFFIX < /home/app/.camver
 
 # Routed through the output/log view (output.LOG matrix); on NO the view symlinks
 # this to /dev/null, so no separate switch is needed here.
@@ -22,15 +22,23 @@ COUNTER=0
 COUNTER_LIMIT=10
 INTERVAL=10
 
-if [[ "$(get_config services.rtsp.USER)" != "" ]] ; then
-    USERNAME=$(get_config services.rtsp.USER)
-    PASSWORD=$(get_config services.rtsp.PASSWORD)
+# Batch config read, once, before the loop (one builtin pass, no forks; the
+# values cannot change under a running watchdog without a service restart).
+USER=""; PASSWORD=""; PORT=""; ENABLED=""; STREAM=""; AUDIO=""
+load_config services.rtsp USER PASSWORD PORT ENABLED STREAM AUDIO
+RTSP_ENABLED=$ENABLED; RTSP_STREAM=$STREAM; RTSP_AUDIO=$AUDIO
+load_config system DISABLE_CLOUD
+
+if [[ "$USER" != "" ]] ; then
+    USERNAME=$USER
+else
+    PASSWORD=""   # credentials only apply as a pair (matches the old behavior)
 fi
 
-RRTSP_RES=$(get_config services.rtsp.STREAM)
-RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
+RRTSP_RES=$RTSP_STREAM
+RRTSP_AUDIO=$RTSP_AUDIO
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_PORT=$(get_config services.rtsp.PORT)
+RRTSP_PORT=$PORT
 if [ ! -z $USERNAME ]; then
     RRTSP_USER="-u $USERNAME"
 fi
@@ -48,17 +56,17 @@ restart_grabber()
 {
     killall -q rRTSPServer
     killall -q h264grabber
-    if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
+    if [[ $RTSP_STREAM == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
+    if [[ $RTSP_STREAM == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
+    if [[ $RTSP_STREAM == "both" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.AUDIO) == "yes" ]]; then
+    if [[ $RTSP_AUDIO == "yes" ]]; then
         h264grabber -r AUDIO -m $MODEL_SUFFIX -f &
     fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT $RRTSP_USER $RRTSP_PWD &
@@ -66,7 +74,7 @@ restart_grabber()
 
 restart_cloud()
 {
-    if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
+    if [[ $DISABLE_CLOUD == "yes" ]] ; then
     (
         cd /home/app
         ./cloud &
@@ -81,7 +89,17 @@ restart_mqttv4()
 
 check_rtsp()
 {
-    SOCKET=`netstat -ltn 2>/dev/null | grep -c ":$RTSP_PORT "`
+    # netstat's stderr is deliberately NOT suppressed and its rc is checked:
+    # piping straight into `grep -c` threw both away, so a netstat that failed
+    # (or rejected an option on this busybox build) yielded SOCKET=0, which
+    # quietly disables the locked-process detection below - the watchdog stays
+    # up and reports nothing while never checking anything.
+    _ns=$(netstat -ltn)
+    if [ $? -ne 0 ]; then
+        echo "$(date +'%Y-%m-%d %H:%M:%S') - WARNING: netstat failed, socket check skipped this cycle" >> $LOG_FILE
+    fi
+    # Fork-free count: only ">0" is ever tested, so match instead of grep -c.
+    case "$_ns" in *":$RTSP_PORT "*) SOCKET=1 ;; *) SOCKET=0 ;; esac
     CPU=`top -b -n 1 | awk '/rRTSPServer/ && !/awk/ {v=$8} END {print v}'`
 
     if [ "$CPU" == "" ]; then
@@ -111,7 +129,7 @@ check_rtsp()
 check_cloud()
 {
     CPU=`top -b -n 1 | awk '/cloud/ && !/awk/ {v=$8} END {print v}'`
-    if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
+    if [[ $DISABLE_CLOUD == "yes" ]] ; then
     (
     if [ "$CPU" == "" ]; then
         echo "$(date +'%Y-%m-%d %H:%M:%S') - No running processes, restarting ./cloud & ..." >> $LOG_FILE
@@ -150,7 +168,7 @@ check_mqttv4()
     fi
 }
 
-if [[ $(get_config services.rtsp.ENABLED) == "no" ]] ; then
+if [[ $RTSP_ENABLED == "no" ]] ; then
     exit
 fi
 

@@ -36,12 +36,12 @@ while read -r LINE ; do
 done < "$CONF_FILE"
 
 if [ "$CONF_TYPE" = "system" ] ; then
-    HOSTNAME=$(cat "/home/yi-hack/config/hostname")
+    read HOSTNAME < /home/yi-hack/config/hostname
     printf "\"%s\":\"%s\",\n" "HOSTNAME" "${HOSTNAME//\"/\\\"}"  # Escape double quotes in hostname
 fi
 
 if [ "$CONF_TYPE" = "camera" ] ; then
-    HOMEVER=$(cat /home/homever)
+    read HOMEVER < /home/homever
     printf "\"%s\":\"%s\",\n" "HOMEVER" "$HOMEVER"
 fi
 

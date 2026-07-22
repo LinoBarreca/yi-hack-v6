@@ -24,11 +24,9 @@ esac
 
 DIR="none"
 
-CONF="$(echo $QUERY_STRING | cut -d'=' -f1)"
-VAL="$(echo $QUERY_STRING | cut -d'=' -f2)"
-
-if [ "$CONF" == "dir" ] ; then
-    DIR="$VAL"
+# Single dir=<value> pair, split with parameter expansion (no echo|cut forks).
+if [ "${QUERY_STRING%%=*}" == "dir" ] ; then
+    DIR="${QUERY_STRING#*=}"
 fi
 
 if [ "$DIR" == "all" ]; then

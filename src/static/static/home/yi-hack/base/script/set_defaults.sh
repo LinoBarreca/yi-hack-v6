@@ -48,8 +48,11 @@ _try() {   # _try <raw-value> <source-label> : accept if sane (alnum, >= 8 chars
     return 1
 }
 resolve_serial() {
-    _try "$(dd if=/dev/mtdblock6 bs=1 skip=36 count=20 2>/dev/null)" "mtd6(vd1)@36"  && return
-    _try "$(dd if=/tmp/mmap.info  bs=1 skip=592 count=20 2>/dev/null)" "mmap.info@592" && return
+    # dd-checked: 2>/dev/null only hides dd's transfer stats here; a failed read
+    # yields an empty value, _try rejects it, and the chain falls through to the
+    # next source - with a WARNING logged below if every source fails.
+    _try "$(dd if=/dev/mtdblock6 bs=1 skip=36 count=20 2>/dev/null)" "mtd6(vd1)@36"  && return  # dd-checked
+    _try "$(dd if=/tmp/mmap.info  bs=1 skip=592 count=20 2>/dev/null)" "mmap.info@592" && return  # dd-checked
     for _i in eth0 wlan0; do
         [ -f "/sys/class/net/$_i/address" ] && \
             _try "$(tr -d ':' < "/sys/class/net/$_i/address")" "mac($_i)" && return
@@ -81,7 +84,7 @@ log "identity base = $SERIAL (source: $SERIAL_SRC)"
 # uses it instead of resetting the host to an empty name.
 HN_FILE="$CONFIG_DIR/hostname"
 if [ ! -s "$HN_FILE" ]; then
-    _cur=$(hostname 2>/dev/null)
+    _cur=$(hostname) || log "WARNING: hostname command failed"
     case "$_cur" in ""|"(none)"|localhost) _cur="" ;; esac
     if [ -n "$_cur" ]; then
         echo "$_cur" > "$HN_FILE";   log "hostname <- $_cur (from dhcp)"

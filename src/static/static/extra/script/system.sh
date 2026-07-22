@@ -25,8 +25,8 @@
 # /home/yi-hack/{base,config,extra,output,www} - there is NO YI_HACK_PREFIX and no
 # SD-vs-flash detection (the symlink layer decides where extra/output/www point).
 
-YI_HACK_VER=$(cat /home/yi-hack/extra/../version 2>/dev/null)
-MODEL_SUFFIX=$(cat /home/app/.camver)
+YI_HACK_VER=""; read YI_HACK_VER < /home/yi-hack/extra/../version
+read MODEL_SUFFIX < /home/app/.camver
 
 # yi-hack environment: single source (farm-first busybox PATH flip, LD_LIBRARY_PATH,
 # TZ, get_config) shared with the login shells (/etc/profile sources it too).
@@ -36,7 +36,9 @@ MODEL_SUFFIX=$(cat /home/app/.camver)
 export PATH=$PATH:/home/yi-hack/base/script
 
 ulimit -s 1024
-mkdir /dev/shm 2>/dev/null
+# mkdir (no -p): "already exists" is the normal case and the only expected
+# failure, so test instead of blanket-suppressing a real error.
+[ -d /dev/shm ] || mkdir /dev/shm
 
 touch /tmp/httpd.conf
 
@@ -91,6 +93,60 @@ fi
 
 hostname -F /home/yi-hack/config/hostname
 
+# ---- Batch config load ----
+# One builtin pass per file (load_config); the old one-get_config-per-key style
+# made 43 subshells x 3 forks ≈ 8s of boot time on this CPU. Must stay after
+# check_conf/restore_locked_configs/set_defaults above - they seed and patch the
+# very keys read here. Generic key names (USER/PASSWORD/PORT/ENABLED) exist in
+# several files, so each load is renamed into per-service variables right away.
+USER=""; PASSWORD=""; PORT=""; ENABLED=""
+load_config services.httpd USER PASSWORD PORT ENABLED
+HTTPD_USER=$USER; HTTPD_PASSWORD=$PASSWORD; HTTPD_ENABLED=$ENABLED
+case $PORT in
+    ''|*[!0-9]*) HTTPD_PORT=80 ;;
+    *) HTTPD_PORT=$PORT ;;
+esac
+
+USER=""; PASSWORD=""; PORT=""; ENABLED=""; STREAM=""; AUDIO=""; TIME_OSD=""
+load_config services.rtsp USER PASSWORD PORT ENABLED STREAM AUDIO TIME_OSD
+USERNAME=$USER; RTSP_PASSWORD=$PASSWORD; RTSP_ENABLED=$ENABLED
+RTSP_STREAM=$STREAM; RTSP_AUDIO=$AUDIO; RTSP_TIME_OSD=$TIME_OSD
+RTSP_PORT_RAW=$PORT   # rRTSPServer historically gets the raw value, not the default
+case $PORT in
+    ''|*[!0-9]*) RTSP_PORT=554 ;;
+    *) RTSP_PORT=$PORT ;;
+esac
+
+PASSWORD=""; ENABLED=""
+load_config services.sshd PASSWORD ENABLED
+SSH_PASSWORD=$PASSWORD; SSHD_ENABLED=$ENABLED
+
+ENABLED=""; SERVER=""
+load_config services.ntpd ENABLED SERVER
+NTPD_ENABLED=$ENABLED; NTPD_SERVER=$SERVER
+
+ENABLED=""; load_config services.telnetd ENABLED; TELNETD_ENABLED=$ENABLED
+ENABLED=""; load_config services.ftpd ENABLED;    FTPD_ENABLED=$ENABLED
+
+ENABLED=""; CONFIG_ENABLED=""
+load_config services.mqtt ENABLED CONFIG_ENABLED
+MQTT_ENABLED=$ENABLED; MQTT_CONFIG_ENABLED=$CONFIG_ENABLED
+
+ENABLED=""; WATERMARK=""
+load_config services.snapshot ENABLED WATERMARK
+SNAPSHOT_ENABLED=$ENABLED; SNAPSHOT_WATERMARK=$WATERMARK
+
+ENABLED=""; SNAPSHOT=""; NETIF=""; PROFILE=""; WSDD=""
+load_config services.onvif ENABLED SNAPSHOT NETIF PROFILE WSDD
+ONVIF_ENABLED=$ENABLED; ONVIF_SNAPSHOT=$SNAPSHOT
+ONVIF_NETIF_CFG=$NETIF; ONVIF_PROFILE_CFG=$PROFILE; ONVIF_WSDD=$WSDD
+
+ENABLED=""; load_config services.ftp_upload ENABLED; FTP_UPLOAD_ENABLED=$ENABLED
+load_config system DISABLE_CLOUD REC_WITHOUT_CLOUD CRONTAB
+load_config output RECORD
+load_config recording FREE_SPACE
+# ---- End batch config load ----
+
 # Swap: destination is decided by the output matrix; build_view.sh created
 # /home/yi-hack/output/swap (a symlink) only if output.SWAP_FILE != NO and the target is writable.
 if [ -d /home/yi-hack/output/swap ]; then
@@ -113,8 +169,6 @@ if [ -d /home/yi-hack/output/swap ]; then
 fi
 
 # Web (httpd) basic auth - isolated from the RTSP/ONVIF stream credentials.
-HTTPD_USER=$(get_config services.httpd.USER)
-HTTPD_PASSWORD=$(get_config services.httpd.PASSWORD)
 if [ -n "$HTTPD_USER" ] ; then
     echo "/onvif::" > /tmp/httpd.conf
     echo "/:$HTTPD_USER:$HTTPD_PASSWORD" >> /tmp/httpd.conf
@@ -122,45 +176,34 @@ if [ -n "$HTTPD_USER" ] ; then
 fi
 
 # RTSP/ONVIF stream credentials (shared; the ONVIF stream URL embeds them).
-USERNAME=$(get_config services.rtsp.USER)
-PASSWORD=$(get_config services.rtsp.PASSWORD)
 if [ -n "$USERNAME" ] ; then
-    RTSP_USERPWD=$USERNAME:$PASSWORD@
-    ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
+    RTSP_USERPWD=$USERNAME:$RTSP_PASSWORD@
+    ONVIF_USERPWD="user=$USERNAME\npassword=$RTSP_PASSWORD"
 fi
 
-SSH_PASSWORD=$(get_config services.sshd.PASSWORD)
 if [ -n "$SSH_PASSWORD" ] ; then
     # Flash-wear: chpasswd rewrites /etc on the rootfs (mtd4) every time. Only run it when the
     # configured password actually changed, tracked by a marker (md5 of the configured pwd;
     # the plaintext already lives in system.conf, so the marker leaks nothing extra). The
     # marker is in config/ (mtd5): a v6 reflash resets rootfs+home together, keeping them in sync.
     _pwmark=$(echo -n "$SSH_PASSWORD" | md5sum | cut -d' ' -f1)
-    if [ "$_pwmark" != "$(cat /home/yi-hack/config/.sshpw_applied 2>/dev/null)" ] ; then
+    _pwapplied=""; read _pwapplied 2>/dev/null < /home/yi-hack/config/.sshpw_applied
+    if [ "$_pwmark" != "$_pwapplied" ] ; then
         echo "root:$SSH_PASSWORD" | chpasswd --md5
         echo "$_pwmark" > /home/yi-hack/config/.sshpw_applied
     fi
 fi
 
-case $(get_config services.rtsp.PORT) in
-    ''|*[!0-9]*) RTSP_PORT=554 ;;
-    *) RTSP_PORT=$(get_config services.rtsp.PORT) ;;
-esac
-case $(get_config services.httpd.PORT) in
-    ''|*[!0-9]*) HTTPD_PORT=80 ;;
-    *) HTTPD_PORT=$(get_config services.httpd.PORT) ;;
-esac
-
 # The ntpd daemon runs only with the cloud DISABLED: with the cloud on, the stock
 # 'cloud' daemon already syncs the clock (cloudAPI -c 136) and two writers would
 # fight. With the cloud off, cloudAPI_fake also does a one-shot NTP sync per
 # stock syntime call; this daemon adds continuous discipline on top.
-if [[ $(get_config services.ntpd.ENABLED) == "yes" ]] && [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
+if [[ $NTPD_ENABLED == "yes" ]] && [[ $DISABLE_CLOUD == "yes" ]] ; then
     # Wait until all the other processes have been initialized
-    sleep 5 && ntpd -p $(get_config services.ntpd.SERVER) &
+    sleep 5 && ntpd -p $NTPD_SERVER &
 fi
 
-if [[ $(get_config system.DISABLE_CLOUD) == "no" ]] ; then
+if [[ $DISABLE_CLOUD == "no" ]] ; then
     (
         cd /home/app
         # Stock logger first: the cloud daemons sendto its /tmp/logsock (best-effort, DGRAM).
@@ -170,25 +213,25 @@ if [[ $(get_config system.DISABLE_CLOUD) == "no" ]] ; then
         killall dispatch
         LD_PRELOAD=/home/yi-hack/extra/lib/ipc_multiplex.so ./dispatch &
         sleep 3
-        if [[ $(get_config services.rtsp.TIME_OSD) == "yes" ]] ; then
+        if [[ $RTSP_TIME_OSD == "yes" ]] ; then
             echo -ne '\x01\x00\x00\x00' | dd of=/tmp/mmap.info bs=1 seek=0 count=4 conv=notrunc
         fi
         LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib" ./rmm &
         sleep 8
         # Stock mp4record only when the native recorder is off (output.RECORD=NO);
         # otherwise both would write to /tmp/sd/record and collide.
-        if [[ $(get_config output.RECORD) == "NO" ]] ; then
+        if [[ $RECORD == "NO" ]] ; then
             ./mp4record &
         fi
         ./cloud &
         ./p2p_tnp &
-        if [[ $(cat /home/app/.camver) != "yi_dome" ]] ; then
+        if [[ $MODEL_SUFFIX != "yi_dome" ]] ; then
             ./oss &
         fi
         ./watch_process &
     )
 fi
-if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
+if [[ $DISABLE_CLOUD == "yes" ]] ; then
     (
         cd /home/app
         # Stock logger first: the cloud daemons sendto its /tmp/logsock (best-effort, DGRAM).
@@ -198,13 +241,13 @@ if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
         killall dispatch
         LD_PRELOAD=/home/yi-hack/extra/lib/ipc_multiplex.so ./dispatch &
         sleep 3
-        if [[ $(get_config services.rtsp.TIME_OSD) == "yes" ]] ; then
+        if [[ $RTSP_TIME_OSD == "yes" ]] ; then
             echo -ne '\x01\x00\x00\x00' | dd of=/tmp/mmap.info bs=1 seek=0 count=4 conv=notrunc
         fi
         LD_LIBRARY_PATH="/home/yi-hack/extra/lib:/home/yi-hack/base/lib:/lib:/home/lib:/home/app/locallib:/home/hisiko/hisilib" ./rmm &
 		sleep 8
         # Stock mp4record to SD only when the native recorder is off (see above).
-        if [[ $(get_config system.REC_WITHOUT_CLOUD) == "yes" ]] && [[ $(get_config output.RECORD) == "SD" ]] ; then
+        if [[ $REC_WITHOUT_CLOUD == "yes" ]] && [[ $RECORD == "SD" ]] ; then
             cd /home/app
             ./mp4record &
         fi
@@ -213,7 +256,7 @@ if [[ $(get_config system.DISABLE_CLOUD) == "yes" ]] ; then
     )
 fi
 
-if [[ $(get_config services.httpd.ENABLED) == "yes" ]] ; then
+if [[ $HTTPD_ENABLED == "yes" ]] ; then
     # Single logical web path; build_view.sh points it to extra/www (full) or base/www-min (rescue).
     # NOTE: recordings live at /home/yi-hack/output/record; the events CGIs read from there
     # (no www/record bind-mount - extra/www may be read-only CIFS).
@@ -222,11 +265,11 @@ if [[ $(get_config services.httpd.ENABLED) == "yes" ]] ; then
     httpd -p $HTTPD_PORT -h /home/yi-hack/www -c /tmp/httpd.conf
 fi
 
-if [[ $(get_config services.telnetd.ENABLED) == "yes" ]] ; then
+if [[ $TELNETD_ENABLED == "yes" ]] ; then
     telnetd
 fi
 
-case $(get_config services.ftpd.ENABLED) in
+case $FTPD_ENABLED in
     busybox)
         tcpsvd -vE 0.0.0.0 21 ftpd -w &
         ;;
@@ -235,7 +278,7 @@ case $(get_config services.ftpd.ENABLED) in
         ;;
 esac
 
-if [[ $(get_config services.sshd.ENABLED) == "yes" ]] ; then
+if [[ $SSHD_ENABLED == "yes" ]] ; then
     if [ ! -f /home/yi-hack/config/dropbear/dropbear_ecdsa_host_key ]; then
         dropbearkey -t ecdsa -f /tmp/dropbear_ecdsa_host_key
         mv /tmp/dropbear_ecdsa_host_key /home/yi-hack/config/dropbear/
@@ -253,8 +296,8 @@ mqttv4 &
 # mqtt-config = remote configuration surface (cmnd/#, every parameter): own
 # gate so state publishing (mqttv4) can stay on with remote config off. The
 # HA camera-setting entities publish on cmnd/ and need it.
-if [[ $(get_config services.mqtt.ENABLED) == "yes" ]] ; then
-    if [[ $(get_config services.mqtt.CONFIG_ENABLED) == "yes" ]] ; then
+if [[ $MQTT_ENABLED == "yes" ]] ; then
+    if [[ $MQTT_CONFIG_ENABLED == "yes" ]] ; then
         mqtt-config &
     fi
 fi
@@ -270,14 +313,14 @@ fi
 # services.snapshot.ENABLED is now a 3-way no|legacy|v6 selector (which capture
 # backend, imggrabber or hwsnap -- see take_snapshot.sh/cgi-bin/snapshot.sh);
 # "no" is still the literal disable value both backends check directly.
-if [[ $(get_config services.snapshot.ENABLED) == "no" ]] ; then
+if [[ $SNAPSHOT_ENABLED == "no" ]] ; then
     touch /tmp/snapshot.disabled
 fi
 
 # ONVIF snapshot watermark follows the snapshot service setting (single source,
 # services/snapshot.conf WATERMARK): appended to the snapurl advertised below.
 WATERMARK=""
-if [[ $(get_config services.snapshot.WATERMARK) == "yes" ]] ; then
+if [[ $SNAPSHOT_WATERMARK == "yes" ]] ; then
     WATERMARK="&watermark=yes"
 fi
 
@@ -288,7 +331,7 @@ fi
 # offloads the JPEG encode from the camera CPU).
 SNAPURL_HIGH="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK"
 SNAPURL_LOW="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK"
-case "$(get_config services.onvif.SNAPSHOT)" in
+case "$ONVIF_SNAPSHOT" in
     high) SNAP_0=$SNAPURL_HIGH; SNAP_1=$SNAPURL_HIGH ;;
     low)  SNAP_0=$SNAPURL_LOW;  SNAP_1=$SNAPURL_LOW ;;
     none) SNAP_0="";            SNAP_1="" ;;
@@ -296,13 +339,13 @@ case "$(get_config services.onvif.SNAPSHOT)" in
 esac
 
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_RES=$(get_config services.rtsp.STREAM)
-RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
-RRTSP_PORT=$(get_config services.rtsp.PORT)
+RRTSP_RES=$RTSP_STREAM
+RRTSP_AUDIO=$RTSP_AUDIO
+RRTSP_PORT=$RTSP_PORT_RAW
 RRTSP_USER=$USERNAME
-RRTSP_PWD=$PASSWORD
+RRTSP_PWD=$RTSP_PASSWORD
 
-if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
+if [[ $RTSP_ENABLED == "yes" ]] ; then
 
     if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_home" ]] ; then
         HIGHWIDTH="1280"
@@ -311,24 +354,24 @@ if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
         HIGHWIDTH="1920"
         HIGHHEIGHT="1080"
     fi
-    if [[ $(get_config services.rtsp.AUDIO) == "yes" ]]; then
+    if [[ $RTSP_AUDIO == "yes" ]]; then
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
+    if [[ $RTSP_STREAM == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264$SNAP_1\ntype=H264"
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
+    if [[ $RTSP_STREAM == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
         ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
+    if [[ $RTSP_STREAM == "both" ]]; then
          h264grabber -r low -m $MODEL_SUFFIX -f &
          h264grabber -r high -m $MODEL_SUFFIX -f &
-        if [[ $(get_config services.onvif.PROFILE) == "low" ]] || [[ $(get_config services.onvif.PROFILE) == "both" ]] ; then
+        if [[ $ONVIF_PROFILE_CFG == "low" ]] || [[ $ONVIF_PROFILE_CFG == "both" ]] ; then
             ONVIF_PROFILE_1="name=Profile_1\nwidth=640\nheight=360\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_1.h264$SNAP_1\ntype=H264"
         fi
-        if [[ $(get_config services.onvif.PROFILE) == "high" ]] || [[ $(get_config services.onvif.PROFILE) == "both" ]] ; then
+        if [[ $ONVIF_PROFILE_CFG == "high" ]] || [[ $ONVIF_PROFILE_CFG == "both" ]] ; then
             ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
         fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
@@ -338,21 +381,15 @@ if [[ $(get_config services.rtsp.ENABLED) == "yes" ]] ; then
     # the local RTSP stream to the output/record view (RAM/SD/CIFS) whenever
     # output.RECORD != NO; wd_record.sh launches and supervises it. mp4record
     # (SD-only, cloud path) is gated off when the native recorder is active.
-    if [[ $(get_config output.RECORD) != "NO" ]] ; then
+    if [[ $RECORD != "NO" ]] ; then
         /home/yi-hack/extra/script/wd_record.sh &
     fi
 fi
 
-if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
-    HW_ID=$(dd bs=1 count=4 skip=660 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
-    SERIAL_NUMBER=$(dd bs=1 count=16 skip=664 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
-else
-    HW_ID=$(dd bs=1 count=4 skip=592 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
-    SERIAL_NUMBER=$(dd bs=1 count=16 skip=596 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
-fi
+load_hw_ids "$MODEL_SUFFIX"
 
-if [[ $(get_config services.onvif.ENABLED) == "yes" ]] ; then
-    if [[ $(get_config services.onvif.NETIF) == "wlan0" ]] ; then
+if [[ $ONVIF_ENABLED == "yes" ]] ; then
+    if [[ $ONVIF_NETIF_CFG == "wlan0" ]] ; then
         ONVIF_NETIF="wlan0"
     else
         ONVIF_NETIF="eth0"
@@ -445,14 +482,12 @@ if [[ $(get_config services.onvif.ENABLED) == "yes" ]] ; then
     ipc2file
     onvif_notify_server --conf_file $ONVIF_SRVD_CONF
 
-    if [[ $(get_config services.onvif.WSDD) == "yes" ]] ; then
+    if [[ $ONVIF_WSDD == "yes" ]] ; then
         wsd_simple_server --pid_file /var/run/wsd_simple_server.pid --if_name $ONVIF_NETIF --xaddr "http://%s$D_HTTPD_PORT/onvif/device_service" -m yi_hack -n Yi
     fi
 fi
 
-# Add crontab
-CRONTAB=$(get_config system.CRONTAB)
-FREE_SPACE=$(get_config recording.FREE_SPACE)
+# Add crontab (CRONTAB and FREE_SPACE come from the batch config load above)
 mkdir -p /var/spool/cron/crontabs/
 if [ ! -z "$CRONTAB" ]; then
     echo "$CRONTAB" > /var/spool/cron/crontabs/root
@@ -472,7 +507,7 @@ if [ -f "/home/yi-hack/extra/script/mqtt_advertise/startup.sh" ]; then
     /home/yi-hack/extra/script/mqtt_advertise/startup.sh
 fi
 
-if [[ $(get_config services.ftp_upload.ENABLED) == "yes" ]] ; then
+if [[ $FTP_UPLOAD_ENABLED == "yes" ]] ; then
     /home/yi-hack/extra/script/ftppush.sh start &
 fi
 

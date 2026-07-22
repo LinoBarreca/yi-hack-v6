@@ -23,10 +23,11 @@ export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
 MOSQUITTO_PUB="/home/yi-hack/extra/bin/mosquitto_pub"
 
 . /home/yi-hack/base/script/get_config.sh
+. /home/yi-hack/extra/script/mqtt_advertise/mqtt_common.sh
 
 get_network_addr() {
     LOCAL_IP=$(ifconfig $1 | awk '/inet addr/{print substr($2,6)}')
-    LOCAL_MAC=$(cat /sys/class/net/$1/address)
+    LOCAL_MAC=""; read LOCAL_MAC < /sys/class/net/$1/address
 }
 
 get_network_addr eth0
@@ -34,60 +35,37 @@ if [ -z $LOCAL_IP ]; then
     get_network_addr wlan0
 fi
 
-HTTPD_PORT=$(get_config services.httpd.PORT)
-HOSTNAME=$(hostname)
-MQTT_IP=$(get_config services.mqtt.BROKER_IP)
-MQTT_PORT=$(get_config services.mqtt.BROKER_PORT)
-MQTT_USER=$(get_config services.mqtt.BROKER_USER)
-MQTT_PASSWORD=$(get_config services.mqtt.BROKER_PASSWORD)
-MQTT_QOS=$(get_config services.mqtt.QOS)
+# Batch fork-free config reads (see mqtt_common.sh): the old
+# one-get_config-per-key style made 42 subshells x 3 forks ≈ 8s per run.
+PORT=""; load_config services.httpd PORT; HTTPD_PORT=$PORT
 
-TOPIC_BIRTH_WILL=$(get_config services.mqtt.TOPIC_BIRTH_WILL)
-BIRTH_MSG=$(get_config services.mqtt.BIRTH_MSG)
-WILL_MSG=$(get_config services.mqtt.WILL_MSG)
+# Sets HOSTNAME, HOST (broker/port/user words) and MQTT_PREFIX.
+mqtt_load_broker
 
-TOPIC_MOTION=$(get_config services.mqtt.TOPIC_MOTION)
-MOTION_START_MSG=$(get_config services.mqtt.MOTION_START_MSG)
-MOTION_STOP_MSG=$(get_config services.mqtt.MOTION_STOP_MSG)
+QOS=""
+load_config services.mqtt QOS \
+    TOPIC_BIRTH_WILL BIRTH_MSG WILL_MSG \
+    TOPIC_MOTION MOTION_START_MSG MOTION_STOP_MSG \
+    TOPIC_AI_HUMAN_DETECTION AI_HUMAN_DETECTION_MSG \
+    TOPIC_BABY_CRYING BABY_CRYING_MSG \
+    TOPIC_SOUND_DETECTION SOUND_DETECTION_MSG \
+    TOPIC_MOTION_IMAGE \
+    RETAIN_MOTION RETAIN_AI_HUMAN_DETECTION RETAIN_SOUND_DETECTION RETAIN_MOTION_IMAGE
+MQTT_QOS=$QOS   # QOS is reused below as a JSON fragment, keep the config value
 
-TOPIC_AI_HUMAN_DETECTION=$(get_config services.mqtt.TOPIC_AI_HUMAN_DETECTION)
-AI_HUMAN_DETECTION_MSG=$(get_config services.mqtt.AI_HUMAN_DETECTION_MSG)
+load_config services.mqtt_advertise \
+    HOMEASSISTANT_MQTT_PREFIX HOMEASSISTANT_RETAIN HOMEASSISTANT_QOS \
+    HOMEASSISTANT_MANUFACTURER HOMEASSISTANT_MODEL \
+    INFO_GLOBAL_ENABLE INFO_GLOBAL_TOPIC INFO_GLOBAL_RETAIN INFO_GLOBAL_QOS \
+    CAMERA_SETTING_ENABLE \
+    TELEMETRY_ENABLE TELEMETRY_TOPIC TELEMETRY_RETAIN TELEMETRY_QOS
+MANUFACTURER=$HOMEASSISTANT_MANUFACTURER
+MODEL=$HOMEASSISTANT_MODEL
 
-TOPIC_BABY_CRYING=$(get_config services.mqtt.TOPIC_BABY_CRYING)
-BABY_CRYING_MSG=$(get_config services.mqtt.BABY_CRYING_MSG)
-
-TOPIC_SOUND_DETECTION=$(get_config services.mqtt.TOPIC_SOUND_DETECTION)
-SOUND_DETECTION_MSG=$(get_config services.mqtt.SOUND_DETECTION_MSG)
-
-TOPIC_MOTION_IMAGE=$(get_config services.mqtt.TOPIC_MOTION_IMAGE)
-
-HOST=$MQTT_IP
-if [ ! -z $MQTT_PORT ]; then
-    HOST=$HOST' -p '$MQTT_PORT
-fi
-if [ ! -z $MQTT_USER ]; then
-    HOST=$HOST' -u '$MQTT_USER' -P '$MQTT_PASSWORD
-fi
-
-MQTT_PREFIX=$(get_config identity.MQTT_PREFIX)
-
-HOMEASSISTANT_MQTT_PREFIX=$(get_config services.mqtt_advertise.HOMEASSISTANT_MQTT_PREFIX)
-HOMEASSISTANT_RETAIN=$(get_config services.mqtt_advertise.HOMEASSISTANT_RETAIN)
-HOMEASSISTANT_QOS=$(get_config services.mqtt_advertise.HOMEASSISTANT_QOS)
-INFO_GLOBAL_ENABLE=$(get_config services.mqtt_advertise.INFO_GLOBAL_ENABLE)
-INFO_GLOBAL_TOPIC=$(get_config services.mqtt_advertise.INFO_GLOBAL_TOPIC)
-INFO_GLOBAL_RETAIN=$(get_config services.mqtt_advertise.INFO_GLOBAL_RETAIN)
-INFO_GLOBAL_QOS=$(get_config services.mqtt_advertise.INFO_GLOBAL_QOS)
-CAMERA_SETTING_ENABLE=$(get_config services.mqtt_advertise.CAMERA_SETTING_ENABLE)
-TELEMETRY_ENABLE=$(get_config services.mqtt_advertise.TELEMETRY_ENABLE)
-TELEMETRY_TOPIC=$(get_config services.mqtt_advertise.TELEMETRY_TOPIC)
-TELEMETRY_RETAIN=$(get_config services.mqtt_advertise.TELEMETRY_RETAIN)
-TELEMETRY_QOS=$(get_config services.mqtt_advertise.TELEMETRY_QOS)
-NAME=$(get_config identity.HOMEASSISTANT_NAME)
-IDENTIFIERS=$(get_config identity.HOMEASSISTANT_IDENTIFIERS)
-MANUFACTURER=$(get_config services.mqtt_advertise.HOMEASSISTANT_MANUFACTURER)
-MODEL=$(get_config services.mqtt_advertise.HOMEASSISTANT_MODEL)
-SW_VERSION=$(cat /home/yi-hack/extra/../version)
+load_config identity HOMEASSISTANT_NAME HOMEASSISTANT_IDENTIFIERS
+NAME=$HOMEASSISTANT_NAME
+IDENTIFIERS=$HOMEASSISTANT_IDENTIFIERS
+SW_VERSION=""; read SW_VERSION < /home/yi-hack/extra/../version
 DEVICE_DETAILS="{\"identifiers\":[\"$IDENTIFIERS\"],\"connections\":[[\"mac\",\"${LOCAL_MAC}\"]],\"manufacturer\":\"$MANUFACTURER\",\"model\":\"$MODEL\",\"name\":\"$NAME\",\"sw_version\":\"$SW_VERSION\",\"configuration_url\":\"http://$LOCAL_IP:$HTTPD_PORT\"}"
 
 if [ "$HOMEASSISTANT_RETAIN" == "1" ]; then
@@ -238,7 +216,7 @@ fi
 UNIQUE_NAME="Movement"
 UNIQUE_ID=$IDENTIFIERS"-motion_detection"
 TOPIC=$HOMEASSISTANT_MQTT_PREFIX/binary_sensor/$IDENTIFIERS/motion_detection/config
-MQTT_RETAIN_MOTION=$(get_config services.mqtt.RETAIN_MOTION)
+MQTT_RETAIN_MOTION=$RETAIN_MOTION
 #Don't know why... ..Home Assistant don't allow retain for Sensor and Binary Sensor
 # if [ "$MQTT_RETAIN_MOTION" == "1" ]; then
 #    RETAIN='"retain":true, '
@@ -251,7 +229,7 @@ $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
 UNIQUE_NAME="Human Detection"
 UNIQUE_ID=$IDENTIFIERS"-ai_human_detection"
 TOPIC=$HOMEASSISTANT_MQTT_PREFIX/binary_sensor/$IDENTIFIERS/ai_human_detection/config
-MQTT_RETAIN_AI_HUMAN_DETECTION=$(get_config services.mqtt.RETAIN_AI_HUMAN_DETECTION)
+MQTT_RETAIN_AI_HUMAN_DETECTION=$RETAIN_AI_HUMAN_DETECTION
 #Don't know why... ..Home Assistant don't allow retain for Sensor and Binary Sensor
 # if [ "$MQTT_RETAIN_AI_HUMAN_DETECTION" == "1" ]; then
 #    RETAIN='"retain":true, '
@@ -264,7 +242,7 @@ $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
 UNIQUE_NAME="Sound Detection"
 UNIQUE_ID=$IDENTIFIERS"-sound_detection"
 TOPIC=$HOMEASSISTANT_MQTT_PREFIX/binary_sensor/$IDENTIFIERS/sound_detection/config
-MQTT_RETAIN_SOUND_DETECTION=$(get_config services.mqtt.RETAIN_SOUND_DETECTION)
+MQTT_RETAIN_SOUND_DETECTION=$RETAIN_SOUND_DETECTION
 #Don't know why... ..Home Assistant don't allow retain for Sensor and Binary Sensor
 # if [ "$MQTT_RETAIN_SOUND_DETECTION" == "1" ]; then
 #    RETAIN='"retain":true, '
@@ -280,7 +258,7 @@ $MOSQUITTO_PUB -i $HOSTNAME -h $HOST -t $TOPIC -m ""
 UNIQUE_NAME="Motion Detection Image"
 UNIQUE_ID=$IDENTIFIERS"-motion_detection_image"
 TOPIC=$HOMEASSISTANT_MQTT_PREFIX/camera/$IDENTIFIERS/motion_detection_image/config
-MQTT_RETAIN_MOTION_IMAGE=$(get_config services.mqtt.RETAIN_MOTION_IMAGE)
+MQTT_RETAIN_MOTION_IMAGE=$RETAIN_MOTION_IMAGE
 #Don't know why... ..Home Assistant don't allow retain for Sensor and Binary Sensor
 # if [ "$MQTT_RETAIN_MOTION_IMAGE" == "1" ]; then
 #    RETAIN='"retain":true, '

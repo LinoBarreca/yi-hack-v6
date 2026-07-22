@@ -40,13 +40,19 @@
 # Test override: BASE_VERSION_FILE
 : "${BASE_VERSION_FILE:=/home/yi-hack/version}"
 
-# echo the MAJOR.MINOR of a version string (e.g. "6.0.7" -> "6.0")
-_ver_mm() { echo "$1" | cut -d. -f1,2; }
+# echo the MAJOR.MINOR of a version string (e.g. "6.0.7" -> "6.0"); builtins
+# only - no cut fork (boot path, ~50-70ms per fork on this CPU)
+_ver_mm() {
+    case "$1" in
+        *.*) _mm_rest=${1#*.}; echo "${1%%.*}.${_mm_rest%%.*}" ;;
+        *)   echo "$1" ;;
+    esac
+}
 
 payload_compatible() {
     _vc_pr="$1"
-    _vc_base=$(cat "$BASE_VERSION_FILE" 2>/dev/null)
-    _vc_payload=$(cat "$_vc_pr/version" 2>/dev/null)
+    _vc_base="";    read _vc_base    2>/dev/null < "$BASE_VERSION_FILE"
+    _vc_payload=""; read _vc_payload 2>/dev/null < "$_vc_pr/version"
 
     if [ -z "$_vc_base" ] || [ -z "$_vc_payload" ]; then
         echo "version_compat: missing version (base='$_vc_base' payload='$_vc_payload') -> incompatible"

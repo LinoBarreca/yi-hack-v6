@@ -41,12 +41,13 @@ export PATH="$PATH:/home/yi-hack/extra/bin:/bin:/usr/bin"
 REC_DIR="/home/yi-hack/output/record"
 [ -d "$REC_DIR" ] || exit 0        # no view -> RECORD=NO or destination unavailable
 
-RTSP_PORT=$(get_config services.rtsp.PORT)
+# Batch fork-free config read. Pre-clear USER: it is in the environment.
+PORT=""; USER=""; PASSWORD=""; STREAM=""; AUDIO=""
+load_config services.rtsp PORT USER PASSWORD STREAM AUDIO
+RTSP_PORT=$PORT
 [ -z "$RTSP_PORT" ] && RTSP_PORT=554
-RTSP_USER=$(get_config services.rtsp.USER)
-RTSP_PASSWORD=$(get_config services.rtsp.PASSWORD)
-STREAM=$(get_config services.rtsp.STREAM)
-AUDIO=$(get_config services.rtsp.AUDIO)
+RTSP_USER=$USER
+RTSP_PASSWORD=$PASSWORD
 
 # high/both -> main stream ch0_0 ; low -> sub stream ch0_1
 if [ "$STREAM" = "low" ]; then CH="ch0_1.h264"; else CH="ch0_0.h264"; fi
@@ -60,7 +61,8 @@ URL="rtsp://${AUTH}127.0.0.1:${RTSP_PORT}/${CH}"
 # record video-only.
 if [ "$AUDIO" = "yes" ] || [ "$AUDIO" = "aac" ]; then MAP="-map 0"; else MAP="-map 0:v:0"; fi
 
-SEG=$(get_config recording.SEGMENT_TIME)
+SEGMENT_TIME=""; load_config recording SEGMENT_TIME
+SEG=$SEGMENT_TIME
 case "$SEG" in ''|*[!0-9]*) SEG=60 ;; esac
 
 # Create the current hour dir before ffmpeg opens the first segment (the segment

@@ -88,7 +88,7 @@ if [ "$OUTPUT_FILE" != "none" ] ; then
     OUTPUT_FILE=$(validateFile "$OUTPUT_FILE")
     if [ "$OUTPUT_FILE" != "invalid" ]; then
         OUTPUT_DIR=$(cd "$(dirname "/tmp/sd/record/$OUTPUT_FILE")"; pwd)
-        OUTPUT_DIR=$(echo "$OUTPUT_DIR" | cut -c1-14)
+        OUTPUT_DIR=${OUTPUT_DIR:0:14}
         if [ "$OUTPUT_DIR" == "/tmp/sd/record" ]; then
             REDIRECT="yes"
         fi

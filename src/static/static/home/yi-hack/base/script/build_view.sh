@@ -47,10 +47,10 @@ CIFS_RW_MNT="${CIFS_RW_MNT:-}"   # dedicated RW mount for output->CIFS (empty = 
 . "$LOGICAL/base/script/get_config.sh"
 . "$LOGICAL/base/script/version_compat.sh"
 
-MODEL=$(cat /home/app/.camver 2>/dev/null)
+MODEL=""; read MODEL < /home/app/.camver
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') build_view: $*"; }
 
-is_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
+is_mounted() { grep -q " $1 " /proc/mounts; }
 writable() {
     is_mounted "$1" || return 1
     _t="$1/.wtest.$$"; (: > "$_t") 2>/dev/null && { rm -f "$_t"; return 0; }
@@ -70,7 +70,8 @@ relink() { rm -f "$2"; ln -s "$1" "$2"; }   # rm + ln -s (busybox-compatible, no
 # ---------------- extra (single symlink) ----------------
 rm -f "$LOGICAL/extra"
 EXTRA_SRC=""
-if [ "$(get_config cifs.ENABLED)" = "yes" ] && is_mounted "$CIFS_MNT"; then
+ENABLED=""; load_config cifs ENABLED
+if [ "$ENABLED" = "yes" ] && is_mounted "$CIFS_MNT"; then
     EXTRA_SRC=$(extra_on "$CIFS_MNT") && log "extra <- CIFS ($EXTRA_SRC)"
 fi
 if [ -z "$EXTRA_SRC" ] && is_mounted "$SD_MNT"; then
@@ -177,8 +178,10 @@ setup_record() {
     esac
 }
 
-setup_record         "$(get_config output.RECORD)"
-setup_log            "$(get_config output.LOG)"
-link_output swap     "$(get_config output.SWAP_FILE)"
+RECORD=""; LOG=""; SWAP_FILE=""
+load_config output RECORD LOG SWAP_FILE
+setup_record         "$RECORD"
+setup_log            "$LOG"
+link_output swap     "$SWAP_FILE"
 
 [ -n "$EXTRA_SRC" ] && exit 0 || exit 1

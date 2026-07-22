@@ -23,7 +23,7 @@ killall udhcpc
 
 # Configured hostname (may be blank until set_defaults fills it on first boot).
 HN=""
-[ -f /home/yi-hack/config/hostname ] && HN=$(cat /home/yi-hack/config/hostname)
+[ -f /home/yi-hack/config/hostname ] && read HN < /home/yi-hack/config/hostname
 
 # -O hostname : request the DHCP server's host-name option (12), so a DHCP-assigned
 #               name can seed a blank hostname - default.script applies $hostname.

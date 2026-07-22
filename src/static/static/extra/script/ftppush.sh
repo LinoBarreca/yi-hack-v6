@@ -30,7 +30,7 @@ LOG_MAX_LINES="200"
 LAST_FILE_SENT_FILE="/tmp/last_file_sent"
 LAST_FILE_SENT="1970-01-01T00:00"
 if [ -f ${LAST_FILE_SENT_FILE} ]; then
-	LAST_FILE_SENT=$(cat /tmp/last_file_sent)
+	read LAST_FILE_SENT < ${LAST_FILE_SENT_FILE}
 fi
 echo $LAST_FILE_SENT > ${LAST_FILE_SENT_FILE}
 
@@ -41,7 +41,11 @@ echo $LAST_FILE_SENT > ${LAST_FILE_SENT_FILE}
 checkFiles ()
 {
 	#
-	FTP_FILE_DELETE_AFTER_UPLOAD="$(get_config services.ftp_upload.FILE_DELETE_AFTER_UPLOAD)"
+	# Re-read each cycle on purpose (a config change applies without a service
+	# restart) - but with the fork-free batch reader, not a get_config subshell.
+	FILE_DELETE_AFTER_UPLOAD=""
+	load_config services.ftp_upload FILE_DELETE_AFTER_UPLOAD
+	FTP_FILE_DELETE_AFTER_UPLOAD="$FILE_DELETE_AFTER_UPLOAD"
 	#
 	logAdd "[INFO] checkFiles"
 	#
@@ -62,12 +66,12 @@ checkFiles ()
 		# fixed character offsets: the view prefix (/home/yi-hack/output/record) is
 		# longer than the old /tmp/sd/record, so hardcoded offsets broke the dedup.
 		# Dir = YYYY'Y'MM'M'DD'D'HH'H'  ; file = MM'M'SS'S'.mp4
-		FILE_DIR="$(lbasename "$(dirname "${file}")")"
-		FILE_BASE="$(lbasename "${file}")"
+		FILE_DIR="${file%/*}"; FILE_DIR="${FILE_DIR##*/}"
+		FILE_BASE="${file##*/}"
 		FILE_DATE=${FILE_DIR:0:4}-${FILE_DIR:5:2}-${FILE_DIR:8:2}T${FILE_DIR:11:2}:${FILE_BASE:0:2}
 		FILE_YEAR=${FILE_DATE:0:4}
 		FILE_REMPART=${FILE_DATE:5:2}${FILE_DATE:8:2}${FILE_DATE:11:2}${FILE_DATE:14:2}
-		LAST_FILE_SENT=$(cat /tmp/last_file_sent)
+		read LAST_FILE_SENT < ${LAST_FILE_SENT_FILE}
 		LAST_FILE_SENT_YEAR=${LAST_FILE_SENT:0:4}
 		LAST_FILE_SENT_REMPART=${LAST_FILE_SENT:5:2}${LAST_FILE_SENT:8:2}${LAST_FILE_SENT:11:2}${LAST_FILE_SENT:14:2}
 		if [ ${FILE_YEAR} -gt ${LAST_FILE_SENT_YEAR} ]; then
@@ -157,12 +161,15 @@ uploadToFtp ()
 	# 	"0" on SUCCESS
 	# 	"1" on FAILURE
 	#
-	# Consts.
-	FTP_HOST="$(get_config services.ftp_upload.HOST)"
-	FTP_DIR="$(get_config services.ftp_upload.DIR)"
-	FTP_DIR_TREE="$(get_config services.ftp_upload.DIR_TREE)"
-	FTP_USERNAME="$(get_config services.ftp_upload.USERNAME)"
-	FTP_PASSWORD="$(get_config services.ftp_upload.PASSWORD)"
+	# Consts. Re-read per upload on purpose (config changes apply live); one
+	# fork-free batch pass instead of five get_config subshells.
+	HOST=""; DIR=""; DIR_TREE=""; USERNAME=""; PASSWORD=""
+	load_config services.ftp_upload HOST DIR DIR_TREE USERNAME PASSWORD
+	FTP_HOST="$HOST"
+	FTP_DIR="$DIR"
+	FTP_DIR_TREE="$DIR_TREE"
+	FTP_USERNAME="$USERNAME"
+	FTP_PASSWORD="$PASSWORD"
 	#
 	# Variables.
 	UTF_FULLFN="${2}"
@@ -229,7 +236,9 @@ serviceMain ()
 			chmod -R 0755 "${FOLDER_TO_WATCH}"
 		fi
 		#
-		if [[ $(get_config services.ftp_upload.ENABLED) == "yes" ]] ; then
+		# Re-read each cycle on purpose (toggle applies without a restart).
+		ENABLED=""; load_config services.ftp_upload ENABLED
+		if [[ $ENABLED == "yes" ]] ; then
 			checkFiles
 		fi
 		#

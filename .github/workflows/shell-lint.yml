@@ -1,0 +1,15 @@
+name: Shell hot-path lint
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: fork-per-token anti-pattern gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run lint_shell_hotpaths.sh
+        run: sh scripts/lint_shell_hotpaths.sh

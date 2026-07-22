@@ -46,30 +46,33 @@ KO_DIR="/home/app/localko"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') mount_cifs_rw: $*" >&2; }
 
+# Batch fork-free read: RW_* and base keys in one pass (the old per-key
+# get_config subshells cost ~200ms each). Pre-clear USER: boot environment.
+RW_HOST=""; RW_SHARE=""; RW_USER=""; RW_PASS=""; RW_SEC=""; RW_VERS=""
+HOST=""; SHARE=""; USER=""; PASS=""; SEC=""; VERS=""; RETRY=""; RETRY_DELAY=""
+load_config cifs RW_HOST RW_SHARE RW_USER RW_PASS RW_SEC RW_VERS \
+                 HOST SHARE USER PASS SEC VERS RETRY RETRY_DELAY
+
 # Configured = the user declared a distinct RW share (host and/or share name).
 # Without this, inheritance would silently RW-mount the firmware share every boot.
-RW_HOST=$(get_config cifs.RW_HOST)
-RW_SHARE=$(get_config cifs.RW_SHARE)
 if [ -z "$RW_HOST" ] && [ -z "$RW_SHARE" ]; then
     log "RW share not configured (RW_HOST/RW_SHARE empty), nothing to mount"
     exit 1
 fi
 
 # RW_<key> if set, else the base cifs.<key> (inherit-when-empty).
-_p() {
-    _v=$(get_config "cifs.RW_$1")
-    [ -n "$_v" ] && { echo "$_v"; return; }
-    get_config "cifs.$1"
-}
+[ -n "$RW_HOST" ]  && HOST=$RW_HOST
+[ -n "$RW_SHARE" ] && SHARE=$RW_SHARE
+[ -n "$RW_USER" ]  && USER=$RW_USER
+[ -n "$RW_PASS" ]  && PASS=$RW_PASS
+[ -n "$RW_SEC" ]   && SEC=$RW_SEC
+[ -n "$RW_VERS" ]  && VERS=$RW_VERS
 
-HOST=$(_p HOST)
-SHARE=$(_p SHARE)
-USER=$(_p USER);  [ -z "$USER" ] && USER=guest
-PASS=$(_p PASS)
-SEC=$(_p SEC);    [ -z "$SEC" ]  && SEC=ntlmssp
-VERS=$(_p VERS);  [ -z "$VERS" ] && VERS=1.0
-case $(get_config cifs.RETRY)       in ''|*[!0-9]*) RETRY=10 ;;      *) RETRY=$(get_config cifs.RETRY) ;; esac
-case $(get_config cifs.RETRY_DELAY) in ''|*[!0-9]*) RETRY_DELAY=6 ;; *) RETRY_DELAY=$(get_config cifs.RETRY_DELAY) ;; esac
+[ -z "$USER" ] && USER=guest
+[ -z "$SEC" ]  && SEC=ntlmssp
+[ -z "$VERS" ] && VERS=1.0
+case $RETRY       in ''|*[!0-9]*) RETRY=10 ;; esac
+case $RETRY_DELAY in ''|*[!0-9]*) RETRY_DELAY=6 ;; esac
 
 if [ -z "$HOST" ] || [ -z "$SHARE" ]; then
     log "RW share HOST or SHARE still empty after inheritance (RW_* / cifs.*)"
@@ -84,7 +87,7 @@ for m in md4 hmac cifs; do
 done
 
 mkdir -p "$MOUNTPOINT"
-grep -q " $MOUNTPOINT " /proc/mounts && umount "$MOUNTPOINT" 2>/dev/null
+grep -q " $MOUNTPOINT " /proc/mounts && { umount "$MOUNTPOINT" || log "WARNING: could not clear the existing mount on $MOUNTPOINT"; }
 
 # Bound each attempt (see mount_cifs.sh). Guarded: older rootfs may lack timeout.
 T=""; command -v timeout >/dev/null && T="timeout 20"
@@ -104,7 +107,7 @@ while [ "$i" -lt "$RETRY" ]; do
             exit 0
         fi
         log "mounted but NOT writable //$HOST/$SHARE (check server perms) -> giving up"
-        umount "$MOUNTPOINT" 2>/dev/null
+        umount "$MOUNTPOINT" || log "WARNING: umount $MOUNTPOINT failed, mount left behind"
         exit 1
     fi
     log "mount failed (attempt $i/$RETRY): ${_err:-timed out or unknown error} - retrying in ${RETRY_DELAY}s"

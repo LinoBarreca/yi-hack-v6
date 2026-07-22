@@ -18,9 +18,12 @@ printf "Content-type: application/json\r\n\r\n"
 
 printf "{\n"
 
-printf "\"%s\":\"%s\",\n"  "LOCAL_VERSION" "$(cat $LOCAL_VERSION_FILE)"
-printf "\"%s\":\"%s\",\n"  "REMOTE_VERSION" "$(cat $REMOTE_VERSION_FILE)"
-printf "\"%s\":\"%s\",\n"  "NEEDS_UPDATE" "$(cat $REMOTE_NEWVERSION_FILE)"
+LOCAL_VERSION="";  read LOCAL_VERSION  < $LOCAL_VERSION_FILE
+REMOTE_VERSION=""; read REMOTE_VERSION 2>/dev/null < $REMOTE_VERSION_FILE
+NEEDS_UPDATE="";   read NEEDS_UPDATE   2>/dev/null < $REMOTE_NEWVERSION_FILE
+printf "\"%s\":\"%s\",\n"  "LOCAL_VERSION" "$LOCAL_VERSION"
+printf "\"%s\":\"%s\",\n"  "REMOTE_VERSION" "$REMOTE_VERSION"
+printf "\"%s\":\"%s\",\n"  "NEEDS_UPDATE" "$NEEDS_UPDATE"
 printf "\"%s\":\"%s\",\n"  "IS_SD_PRESENT" "$IS_SD_PRESENT"
 
 # Empty values to "close" the json

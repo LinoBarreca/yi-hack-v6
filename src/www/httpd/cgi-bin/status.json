@@ -1,5 +1,23 @@
 #!/bin/sh
 
+#
+#  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
+#  Copyright (c) 2021-2023 alienatedsec - v5 specific
+#  Copyright (c) 2026 Lino Barreca.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, version 3.
+#
+#  This program is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+
 # 6.0.1
 
 printf "Content-type: application/json\r\n\r\n"
@@ -12,7 +30,7 @@ printf "Content-type: application/json\r\n\r\n"
 CACHE=/tmp/.status.cache
 LOCK=/tmp/.status.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
-    _owner=$(cat "$LOCK/pid" 2>/dev/null)
+    _owner=""; read _owner 2>/dev/null < "$LOCK/pid"
     if [ -n "$_owner" ] && kill -0 "$_owner" 2>/dev/null; then
         if [ -f "$CACHE" ]; then cat "$CACHE"; else printf '{"busy":"yes"}'; fi
         exit 0
@@ -25,19 +43,17 @@ trap 'rm -rf "$LOCK"' EXIT
 exec 3>&1
 exec > "$CACHE.new"
 
+# This CGI is polled by the UI: read plain single-line files with the `read`
+# builtin instead of $(cat) - each command substitution forks (~50-70ms here).
 NAME="yi-hack-v6"
-HOSTNAME=$(hostname)
-FW_VERSION=$(cat /home/yi-hack/extra/../version)
-BASEFW_VERSION=$(cat /home/yi-hack/version)
-HOME_VERSION=$(cat /home/app/.appver)
-MODEL_SUFFIX=$(cat /home/app/.camver)
-if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
-    HARDWARE_ID=$(dd bs=1 count=4 skip=660 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
-    SERIAL_NUMBER=$(dd bs=1 count=16 skip=664 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
-else
-    HARDWARE_ID=$(dd bs=1 count=4 skip=592 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
-    SERIAL_NUMBER=$(dd bs=1 count=16 skip=596 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
-fi
+. /home/yi-hack/base/script/get_config.sh
+read HOSTNAME < /proc/sys/kernel/hostname
+read FW_VERSION < /home/yi-hack/extra/../version
+read BASEFW_VERSION < /home/yi-hack/version
+read HOME_VERSION < /home/app/.appver
+read MODEL_SUFFIX < /home/app/.camver
+load_hw_ids "$MODEL_SUFFIX"
+HARDWARE_ID="$HW_ID"
 if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
     PTZ="yes"
 else
@@ -45,10 +61,17 @@ else
 fi
 
 LOCAL_TIME=$(date)
-UPTIME=$(cut -d ' ' -f1 /proc/uptime)
-LOAD_AVG=$(cut -d ' ' -f1-3 /proc/loadavg)
-TOTAL_MEMORY=$(free -k | awk 'NR==2{print $2}')
-FREE_MEMORY=$(free -k | awk 'NR==2{print $4+$6+$7}')
+read UPTIME _ < /proc/uptime
+read _load1 _load5 _load15 _ < /proc/loadavg
+LOAD_AVG="$_load1 $_load5 $_load15"
+# Same numbers `free -k` shows (it reads /proc/meminfo): free = MemFree+Buffers+Cached.
+TOTAL_MEMORY=0; FREE_MEMORY=0
+while read -r _key _val _; do
+    case "$_key" in
+        MemTotal:)                 TOTAL_MEMORY=$_val ;;
+        MemFree:|Buffers:|Cached:) FREE_MEMORY=$((FREE_MEMORY+_val)) ;;
+    esac
+done < /proc/meminfo
 # sub(), NOT gsub(): busybox awk gsub() spins forever on this build (verified on camera)
 FREE_SD=$(df /tmp/sd/ | awk '/mmc/{sub(/%/,"",$5); print $5}')
 if [ -z "$FREE_SD" ]; then
@@ -64,12 +87,12 @@ MAC_ADDR=$(ifconfig wlan0 | awk '/HWaddr/{print substr($5,1)}')
 WLAN_ESSID=$(iwconfig wlan0 | awk -F\" '/ESSID/{print $2}')
 WLAN_STRENGTH=$(awk 'END { if ($4 <= -100) { print 0 } else if ( $4 <= -50) { print (($4 + 100)*2) } else {print 100} }' /proc/net/wireless)
 
-. /home/yi-hack/base/script/get_config.sh
-
 # --- v6 UI extensions (the legacy keys above are kept untouched) ---
 
 # Where the Yi-Hack firmware (extra) is loaded from: network share / SD / flash rescue.
-EXTRA_TARGET=$(readlink /home/yi-hack/extra 2>/dev/null)
+# readlink is silent (rc 1, no stderr) when the path is not a symlink, which
+# is the legitimate "rescue" case below - nothing to suppress.
+EXTRA_TARGET=$(readlink /home/yi-hack/extra)
 case "$EXTRA_TARGET" in
     /tmp/cifs-ro/*) FIRMWARE_SOURCE="network" ;;
     /tmp/sd/*)      FIRMWARE_SOURCE="sd" ;;
@@ -92,19 +115,21 @@ CIFS_RW_FREE=""
 if [ "$CIFS_RW_MOUNTED" = "yes" ]; then
     _pidf=/tmp/.rwfree.pid
     _valf=/tmp/.rwfree.val
-    _old=$(cat $_pidf 2>/dev/null)
+    _old=""; read _old 2>/dev/null < $_pidf
     if [ -z "$_old" ] || ! kill -0 "$_old" 2>/dev/null; then
         ( df -h /tmp/cifs-rw 2>/dev/null | awk 'NR==2{print $4}' > $_valf.new && mv $_valf.new $_valf ) &
         echo $! > $_pidf
         _i=0
-        while [ $_i -lt 10 ] && kill -0 "$(cat $_pidf 2>/dev/null)" 2>/dev/null; do
+        while [ $_i -lt 10 ]; do
+            _probe=""; read _probe 2>/dev/null < $_pidf
+            [ -n "$_probe" ] && kill -0 "$_probe" 2>/dev/null || break
             usleep 100000
             _i=$((_i+1))
         done
     fi
-    CIFS_RW_FREE=$(cat $_valf 2>/dev/null)
+    read CIFS_RW_FREE 2>/dev/null < $_valf
 fi
-FLASH_FREE=$(df -h /home 2>/dev/null | awk 'NR==2{print $4}')
+FLASH_FREE=$(df -h /home | awk 'NR==2{print $4}')
 
 # Per-service state (pidof over the farm PATH; absent binary -> "no").
 svc() { pidof "$1" >/dev/null 2>&1 && echo yes || echo no; }
@@ -119,11 +144,12 @@ NTPD_RUNNING=$(svc ntpd)
 CLOUD_RUNNING=$(svc dispatch)
 P2P_RUNNING=$(svc p2p_tnp)
 
-DISABLE_CLOUD=$(get_config system.DISABLE_CLOUD)
-TIMEZONE=$(get_config system.TIMEZONE)
+# Batch config reads: one pass per file, zero forks (vs 3 forks per get_config).
+load_config system DISABLE_CLOUD TIMEZONE
+load_config output RECORD LOG
 if [ "$DISABLE_CLOUD" = "no" ]; then TZ_SOURCE="cloud"; else TZ_SOURCE="manual"; fi
-RECORD_DEST=$(get_config output.RECORD)
-LOG_DEST=$(get_config output.LOG)
+RECORD_DEST=$RECORD
+LOG_DEST=$LOG
 
 # Yeah, it's pretty ugly.. but hey, it works.
 

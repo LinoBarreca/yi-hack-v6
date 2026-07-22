@@ -19,7 +19,11 @@
 
 . /home/yi-hack/base/script/get_config.sh
 printf "Content-type: application/json\r\n\r\n"
-PV=$(cat /home/yi-hack/config/privacy 2>/dev/null); [ -z "$PV" ] && PV=off
+PV=""; read PV 2>/dev/null < /home/yi-hack/config/privacy; [ -z "$PV" ] && PV=off
+# Batch fork-free config reads via load_config. Pre-clear: a missing key must
+# not leak an inherited env value (USER is in the CGI environment).
+ENABLED=""; HOST=""; SHARE=""; USER=""; SSID=""
+load_config cifs ENABLED HOST SHARE USER
+load_config wifi SSID
 printf '{"CIFS_ENABLED":"%s","CIFS_HOST":"%s","CIFS_SHARE":"%s","CIFS_USER":"%s","WIFI_SSID":"%s","PRIVACY":"%s"}' \
- "$(get_config cifs.ENABLED)" "$(get_config cifs.HOST)" "$(get_config cifs.SHARE)" "$(get_config cifs.USER)" \
- "$(get_config wifi.SSID 2>/dev/null)" "$PV"
+ "$ENABLED" "$HOST" "$SHARE" "$USER" "$SSID" "$PV"

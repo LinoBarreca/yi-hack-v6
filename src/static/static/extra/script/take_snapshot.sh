@@ -29,13 +29,18 @@
 CONFIG_DIR="${CONFIG_DIR:-/home/yi-hack/config}"
 . /home/yi-hack/base/script/get_config.sh
 
-MOD=$(cat /home/app/.camver 2>/dev/null)
+# This runs per motion/event snapshot: builtins only for the config reads
+# (a get_config subshell costs 3 forks ≈ 200ms on this CPU).
+MOD=""; read MOD < /home/app/.camver
 
-RES=$(get_config services.snapshot.RESOLUTION)
+RESOLUTION=""; ENABLED=""; WATERMARK=""
+load_config services.snapshot RESOLUTION ENABLED WATERMARK
+
+RES=$RESOLUTION
 [ "$RES" = "low" ] || RES=high     # anything but an explicit "low" -> high
 
-MODE=$(get_config services.snapshot.ENABLED)
-WM=$(get_config services.snapshot.WATERMARK)
+MODE=$ENABLED
+WM=$WATERMARK
 
 if [ "$MODE" = "v6" ]; then
     [ "$RES" = "low" ] && CHN=3 || CHN=2

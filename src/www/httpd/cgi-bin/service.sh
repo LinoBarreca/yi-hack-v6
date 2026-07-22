@@ -4,33 +4,37 @@
 
 CONF_FILE="etc/system.conf"
 
-YI_HACK_VER=$(cat /home/yi-hack/extra/../version)
-MODEL_SUFFIX=$(cat /home/app/.camver)
-if [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
-    HW_ID=$(dd bs=1 count=4 skip=660 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
-    SERIAL_NUMBER=$(dd bs=1 count=16 skip=664 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
-else
-    HW_ID=$(dd bs=1 count=4 skip=592 if=/tmp/mmap.info 2>/dev/null | cut -c1-4)
-    SERIAL_NUMBER=$(dd bs=1 count=16 skip=596 if=/tmp/mmap.info 2>/dev/null | cut -c1-16)
-fi
 . /home/yi-hack/base/script/get_config.sh
+
+read YI_HACK_VER < /home/yi-hack/extra/../version
+read MODEL_SUFFIX < /home/app/.camver
+load_hw_ids "$MODEL_SUFFIX"
 
 init_config()
 {
-    if [[ x$(get_config services.rtsp.USER) != "x" ]] ; then
-        USERNAME=$(get_config services.rtsp.USER)
-        PASSWORD=$(get_config services.rtsp.PASSWORD)
+    # Batch config reads (one builtin pass per file, no get_config subshells).
+    # Pre-clear: a key missing from the file must not leak an inherited env
+    # value (USER is in the CGI environment). Both files have a PORT key, so
+    # the rtsp PORT is consumed before loading httpd.
+    USER=""; PASSWORD=""; PORT=""; STREAM=""; AUDIO=""
+    load_config services.rtsp USER PASSWORD PORT STREAM AUDIO
+    if [[ x$USER != "x" ]] ; then
+        USERNAME=$USER
         ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
         RTSP_USERPWD=$USERNAME:$PASSWORD@
+    else
+        PASSWORD=""
     fi
 
-    case $(get_config services.rtsp.PORT) in
+    case $PORT in
         ''|*[!0-9]*) RTSP_PORT=554 ;;
-        *) RTSP_PORT=$(get_config services.rtsp.PORT) ;;
+        *) RTSP_PORT=$PORT ;;
     esac
-    case $(get_config services.httpd.PORT) in
+    PORT=""
+    load_config services.httpd PORT
+    case $PORT in
         ''|*[!0-9]*) HTTPD_PORT=80 ;;
-        *) HTTPD_PORT=$(get_config services.httpd.PORT) ;;
+        *) HTTPD_PORT=$PORT ;;
     esac
 
     if [[ $RTSP_PORT != "554" ]] ; then
@@ -45,8 +49,8 @@ init_config()
 start_rtsp()
 {
 RRTSP_MODEL=$MODEL_SUFFIX
-RRTSP_RES=$(get_config services.rtsp.STREAM)
-RRTSP_AUDIO=$(get_config services.rtsp.AUDIO)
+RRTSP_RES=$STREAM
+RRTSP_AUDIO=$AUDIO
 RRTSP_PORT=$RTSP_PORT
 RRTSP_USER=$USERNAME
 RRTSP_PWD=$PASSWORD
@@ -54,16 +58,16 @@ RRTSP_PWD=$PASSWORD
 
 # The below section to be also copied to system.sh
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
-    if [[ $(get_config services.rtsp.AUDIO) == "yes" ]]; then
+    if [[ $AUDIO == "yes" ]]; then
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "low" ]]; then
+    if [[ $STREAM == "low" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "high" ]]; then
+    if [[ $STREAM == "high" ]]; then
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $(get_config services.rtsp.STREAM) == "both" ]]; then
+    if [[ $STREAM == "both" ]]; then
         h264grabber -r low -m $MODEL_SUFFIX -f &
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
@@ -96,7 +100,9 @@ start_onvif()
     # (services/onvif.conf SNAPSHOT; none = clients fall back to RTSP stills).
     SNAPURL_HIGH="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=high$WATERMARK"
     SNAPURL_LOW="\nsnapurl=http://$RTSP_USERPWD%s$D_HTTPD_PORT/cgi-bin/snapshot.sh?res=low$WATERMARK"
-    case "$(get_config services.onvif.SNAPSHOT)" in
+    SNAPSHOT=""
+    load_config services.onvif SNAPSHOT
+    case "$SNAPSHOT" in
         high) SNAP_0=$SNAPURL_HIGH; SNAP_1=$SNAPURL_HIGH ;;
         low)  SNAP_0=$SNAPURL_LOW;  SNAP_1=$SNAPURL_LOW ;;
         none) SNAP_0="";            SNAP_1="" ;;
@@ -218,7 +224,9 @@ stop_wsdd()
 start_ftpd()
 {
     if [[ "$1" == "none" ]] ; then
-        case $(get_config services.ftpd.ENABLED) in
+        ENABLED=""
+        load_config services.ftpd ENABLED
+        case $ENABLED in
             busybox)  FTPD_DAEMON="busybox" ;;
             pureftpd) FTPD_DAEMON="pure-ftpd" ;;
             *)        FTPD_DAEMON="none" ;;
@@ -239,7 +247,9 @@ start_ftpd()
 stop_ftpd()
 {
     if [[ "$1" == "none" ]] ; then
-        case $(get_config services.ftpd.ENABLED) in
+        ENABLED=""
+        load_config services.ftpd ENABLED
+        case $ENABLED in
             busybox)  FTPD_DAEMON="busybox" ;;
             pureftpd) FTPD_DAEMON="pure-ftpd" ;;
             *)        FTPD_DAEMON="none" ;;
@@ -259,17 +269,18 @@ stop_ftpd()
 
 ps_program()
 {
-    # pidof matches the exact process name (any of the args), not a substring
+    # pidof matches the exact process name (any of the args), not a substring.
+    # Sets RES directly (no $() subshell - a fork costs ~50-70ms on this CPU).
     if pidof "$@" > /dev/null; then
-        echo "started"
+        RES="started"
     else
-        echo "stopped"
+        RES="stopped"
     fi
 }
 
 . /home/yi-hack/www/cgi-bin/validate.sh
 
-if ! $(validateQueryString $QUERY_STRING); then
+if ! validateQueryString "$QUERY_STRING"; then
     printf "Content-type: application/json\r\n\r\n"
     printf "{\n"
     printf "\"%s\":\"%s\"\\n" "error" "true"
@@ -352,20 +363,20 @@ elif [ "$ACTION" == "stop" ] ; then
     fi
 elif [ "$ACTION" == "status" ] ; then
     if [ "$NAME" == "rtsp" ]; then
-        RES=$(ps_program rRTSPServer)
+        ps_program rRTSPServer
     elif [ "$NAME" == "onvif" ]; then
-        RES=$(ps_program onvif_simple_server)
+        ps_program onvif_simple_server
     elif [ "$NAME" == "wsdd" ]; then
-        RES=$(ps_program wsd_simple_server)
+        ps_program wsd_simple_server
     elif [ "$NAME" == "ftpd" ]; then
         # busybox mode: the idle listener is tcpsvd (ftpd only exists per-connection)
-        RES=$(ps_program pure-ftpd tcpsvd ftpd)
+        ps_program pure-ftpd tcpsvd ftpd
     elif [ "$NAME" == "mqtt" ]; then
-        RES=$(ps_program mqttv4)
+        ps_program mqttv4
     elif [ "$NAME" == "mp4record" ]; then
-        RES=$(ps_program mp4record)
+        ps_program mp4record
     elif [ "$NAME" == "all" ]; then
-        RES=$(ps_program rRTSPServer)
+        ps_program rRTSPServer
     fi
 fi
 

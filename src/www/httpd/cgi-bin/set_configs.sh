@@ -114,7 +114,9 @@ while IFS= read -r ROW || [ -n "$ROW" ]; do
     fi
 
     # Skip untouched keys: no flash write, no /etc/TZ write.
-    CUR=$(sed -n "/^${KEY}[[:blank:]]*=/{s/^[^=]*=//;p;q}" "$CONF_FILE" 2>/dev/null)
+    # Not suppressed: an unreadable conf file makes CUR empty for every key,
+    # which defeats the skip-untouched test below and rewrites flash needlessly.
+    CUR=$(sed -n "/^${KEY}[[:blank:]]*=/{s/^[^=]*=//;p;q}" "$CONF_FILE")
     [ "$CUR" == "$VALUE" ] && continue
 
     if [ "$KEY" == "TIMEZONE" ] ; then

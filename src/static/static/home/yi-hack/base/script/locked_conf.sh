@@ -46,9 +46,14 @@ CONFIG_DIR="${CONFIG_DIR:-/home/yi-hack/config}"
 LOCKED_CONF="${LOCKED_CONF:-$CONFIG_DIR/locked.conf}"
 
 # is_locked section.KEY -> 0 if present in locked.conf
+# Builtins only (no grep): the set paths call this once per submitted key and a
+# fork costs ~50-70ms on this CPU.
 is_locked() {
     [ -f "$LOCKED_CONF" ] || return 1
-    grep -q "^$1=" "$LOCKED_CONF"
+    while IFS= read -r _il_line || [ -n "$_il_line" ]; do
+        case "$_il_line" in "$1"=*) return 0 ;; esac
+    done < "$LOCKED_CONF"
+    return 1
 }
 
 # Write every locked key back to its target file with the forced value.

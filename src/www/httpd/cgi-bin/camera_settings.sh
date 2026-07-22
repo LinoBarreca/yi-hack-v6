@@ -1,5 +1,23 @@
 #!/bin/sh
 
+#
+#  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
+#  Copyright (c) 2021-2023 alienatedsec - v5 specific
+#  Copyright (c) 2026 Lino Barreca.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, version 3.
+#
+#  This program is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+
 # 6.0.1
 
 CONF_FILE="/home/yi-hack/config/camera.conf"
@@ -7,97 +25,92 @@ CONF_FILE="/home/yi-hack/config/camera.conf"
 # Build-time locked settings (config/locked.conf) cannot be changed from the UI.
 . /home/yi-hack/base/script/locked_conf.sh
 
-CONF_LAST="CONF_LAST"
+# Parse QUERY_STRING with parameter expansion (no echo|cut subshells - the old
+# fixed 1..9 cut loop forked ~4x per slot, ~50-70ms per fork on this CPU).
+OIFS=$IFS
+IFS='&'
+for PAIR in $QUERY_STRING ; do
+    CONF=${PAIR%%=*}
+    VAL=${PAIR#*=}
+    [ -n "$CONF" ] || continue
 
-for I in 1 2 3 4 5 6 7 8 9
-do
-    CONF="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f1)"
-    VAL="$(echo $QUERY_STRING | cut -d'&' -f$I | cut -d'=' -f2)"
-
-    if [ $CONF == $CONF_LAST ]; then
-        continue
-    fi
-    CONF_LAST=$CONF
-
+    # locked.conf keys are UPPERCASE (busybox ash has no ${VAR^^}; tr is one
+    # fork per submitted key, acceptable on this user-triggered path).
     if is_locked "camera.$(echo "$CONF" | tr 'a-z' 'A-Z')" ; then
         continue
     fi
 
-    if [ "$CONF" == "switch_on" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -t off
-            sleep 1
-            ipc_cmd -T  # Stop current motion detection event
-        else
-            ipc_cmd -t on
-        fi
-    elif [ "$CONF" == "save_video_on_motion" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -v always
-        else
-            ipc_cmd -v detect
-        fi
-    elif [ "$CONF" == "sensitivity" ] ; then
-        ipc_cmd -s $VAL
-    elif [ "$CONF" == "sound_detection" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -b off
-        else
-            ipc_cmd -b on
-        fi
-    elif [ "$CONF" == "sound_sensitivity" ] ; then
-        if [ "$VAL" == "50" ] || [ "$VAL" == "60" ] || [ "$VAL" == "70" ] || [ "$VAL" == "80" ] || [ "$VAL" == "90" ] ; then
-            ipc_cmd -n $VAL
-        fi
-    elif [ "$CONF" == "baby_crying_detect" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -B off
-        else
-            ipc_cmd -B on
-        fi
-    elif [ "$CONF" == "led" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -l off
-        else
-            ipc_cmd -l on
-        fi
-    elif [ "$CONF" == "ir" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -i off
-        else
-            ipc_cmd -i on
-        fi
-    elif [ "$CONF" == "mic" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -I off
-        else
-            ipc_cmd -I on
-        fi
-    elif [ "$CONF" == "rotate" ] ; then
-        if [ "$VAL" == "no" ] ; then
-            ipc_cmd -r off
-        else
-            ipc_cmd -r on
-        fi
-    # Settings below were only settable via MQTT cmnd/ before; flags match
-    # the validate.c table (mqtt-config), one source of truth for the mapping.
-    elif [ "$CONF" == "motion_detection" ] ; then
-        ipc_cmd -O $VAL
-    elif [ "$CONF" == "ai_human_detection" ] ; then
-        ipc_cmd -a $VAL
-    elif [ "$CONF" == "ai_vehicle_detection" ] ; then
-        ipc_cmd -E $VAL
-    elif [ "$CONF" == "ai_animal_detection" ] ; then
-        ipc_cmd -N $VAL
-    elif [ "$CONF" == "face_detection" ] ; then
-        ipc_cmd -c $VAL
-    elif [ "$CONF" == "motion_tracking" ] ; then
-        ipc_cmd -o $VAL
-    elif [ "$CONF" == "cruise" ] ; then
-        ipc_cmd -C $VAL
-    fi
-    sleep 1
+    case "$CONF" in
+        switch_on)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -t off
+                sleep 1
+                ipc_cmd -T  # Stop current motion detection event
+            else
+                ipc_cmd -t on
+            fi ;;
+        save_video_on_motion)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -v always
+            else
+                ipc_cmd -v detect
+            fi ;;
+        sensitivity)
+            ipc_cmd -s "$VAL" ;;
+        sound_detection)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -b off
+            else
+                ipc_cmd -b on
+            fi ;;
+        sound_sensitivity)
+            case "$VAL" in
+                50|60|70|80|90) ipc_cmd -n "$VAL" ;;
+            esac ;;
+        baby_crying_detect)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -B off
+            else
+                ipc_cmd -B on
+            fi ;;
+        led)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -l off
+            else
+                ipc_cmd -l on
+            fi ;;
+        ir)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -i off
+            else
+                ipc_cmd -i on
+            fi ;;
+        mic)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -I off
+            else
+                ipc_cmd -I on
+            fi ;;
+        rotate)
+            if [ "$VAL" = "no" ] ; then
+                ipc_cmd -r off
+            else
+                ipc_cmd -r on
+            fi ;;
+        # Settings below were only settable via MQTT cmnd/ before; flags match
+        # the validate.c table (mqtt-config), one source of truth for the mapping.
+        motion_detection)     ipc_cmd -O "$VAL" ;;
+        ai_human_detection)   ipc_cmd -a "$VAL" ;;
+        ai_vehicle_detection) ipc_cmd -E "$VAL" ;;
+        ai_animal_detection)  ipc_cmd -N "$VAL" ;;
+        face_detection)       ipc_cmd -c "$VAL" ;;
+        motion_tracking)      ipc_cmd -o "$VAL" ;;
+        cruise)               ipc_cmd -C "$VAL" ;;
+        *) continue ;;   # unknown key: no ipc_cmd sent, no settle sleep needed
+    esac
+    sleep 1   # let the stock app settle between consecutive ipc_cmd settings
 done
+IFS=$OIFS
 
 printf "Content-type: application/json\r\n\r\n"
 

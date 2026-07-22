@@ -34,12 +34,13 @@
 
 printf "Content-type: application/json\r\n\r\n"
 
-MODEL=$(cat /home/app/.camver 2>/dev/null)
+read MODEL < /home/app/.camver
 EXCLUDE="camera.conf ptz_presets.conf identity.conf hostname locked.conf"
 
-config_on() {
+config_on() {   # config_on <root> -> sets CONF_ON to the config dir, "" if none
+    CONF_ON=""
     for _c in "$1/$MODEL/yi-hack/config" "$1/yi-hack/$MODEL/config" "$1/yi-hack/config"; do
-        [ -d "$_c" ] && { echo "$_c"; return 0; }
+        [ -d "$_c" ] && { CONF_ON="$_c"; return 0; }
     done
     return 1
 }
@@ -48,12 +49,22 @@ config_on() {
 # after it (CIFS source). So the two trees apply in UNION, with the CIFS copy
 # winning per-file. Report BOTH, per file, or the UI shows the wrong ownership
 # (a system.conf provisioned only on the SD would look unmanaged).
+# One builtin pass over /proc/mounts (never stat the mounts themselves - SMB1).
+CIFS_RO_MOUNTED=no; SD_MOUNTED=no
+while read -r _dev _mnt _; do
+    case "$_mnt" in
+        /tmp/cifs-ro) CIFS_RO_MOUNTED=yes ;;
+        /tmp/sd)      SD_MOUNTED=yes ;;
+    esac
+done < /proc/mounts
+
+load_config cifs ENABLED
 SRC_CIFS=""; SRC_SD=""
-if [ "$(get_config cifs.ENABLED)" = "yes" ] && grep -q " /tmp/cifs-ro " /proc/mounts; then
-    SRC_CIFS=$(config_on /tmp/cifs-ro)
+if [ "$ENABLED" = "yes" ] && [ "$CIFS_RO_MOUNTED" = "yes" ]; then
+    config_on /tmp/cifs-ro && SRC_CIFS=$CONF_ON
 fi
-if grep -q " /tmp/sd " /proc/mounts; then
-    SRC_SD=$(config_on /tmp/sd)
+if [ "$SD_MOUNTED" = "yes" ]; then
+    config_on /tmp/sd && SRC_SD=$CONF_ON
 fi
 
 # ---- ?file=<rel>: dump the provisioning copy of one file ----
@@ -81,8 +92,11 @@ if [ -n "$REL" ]; then
         case "$_line" in *=*) ;; *) continue ;; esac
         _k=${_line%%=*}
         case "$_k" in *[!A-Za-z0-9_]*|"") continue ;; esac
-        # escape backslash and double quote for JSON
-        _v=$(printf '%s' "${_line#*=}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        # escape backslash and double quote for JSON (expansions, not sed:
+        # the old per-line printf|sed forked twice per config line)
+        _v=${_line#*=}
+        _v=${_v//\\/\\\\}
+        _v=${_v//\"/\\\"}
         [ "$FIRST" = 1 ] || printf ','
         printf '"%s":"%s"' "$_k" "$_v"
         FIRST=0
@@ -95,7 +109,8 @@ fi
 list_files() {   # list_files <dir> -> comma-separated JSON strings (only *.conf are provisioned)
     [ -n "$1" ] || return 0
     _first=1
-    ( cd "$1" 2>/dev/null && find . -name '*.conf' -type f ) | while IFS= read -r f; do
+    [ -d "$1" ] || { echo "conf_source[ERROR]: source dir $1 not found" >&2; return 0; }
+    ( cd "$1" && find . -name '*.conf' -type f ) | while IFS= read -r f; do
         rel=${f#./}
         base=${rel##*/}
         case " $EXCLUDE " in *" $base "*) continue ;; esac

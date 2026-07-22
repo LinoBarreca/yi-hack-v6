@@ -5,7 +5,7 @@
 
 . /home/yi-hack/www/cgi-bin/validate.sh
 
-if ! $(validateQueryString $QUERY_STRING); then
+if ! validateQueryString "$QUERY_STRING"; then
     printf "Content-type: application/json\r\n\r\n"
     printf "{\n"
     printf "\"%s\":\"%s\"\\n" "error" "true"
@@ -13,8 +13,10 @@ if ! $(validateQueryString $QUERY_STRING); then
     exit
 fi
 
-PARAM="$(echo $QUERY_STRING | cut -d'&' -f1 | cut -d'=' -f1)"
-VALUE="$(echo $QUERY_STRING | cut -d'&' -f1 | cut -d'=' -f2)"
+# First key=value pair, split with parameter expansion (no echo|cut forks).
+PAIR=${QUERY_STRING%%\&*}
+PARAM=${PAIR%%=*}
+VALUE=${PAIR#*=}
 
 TEST_WITH_PROXY="0"
 if [ "$PARAM" == "proxy" ]; then

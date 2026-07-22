@@ -63,22 +63,25 @@ ls -lR /home/yi-hack/output              > "$T/output_view.txt" 2>&1
 
 # --- logs ---
 mkdir -p "$T/logs"
-[ -e /dev/yi-boot.log ] && cat /dev/yi-boot.log > "$T/logs/yi-boot.log" 2>/dev/null
+[ -e /dev/yi-boot.log ] && cat /dev/yi-boot.log > "$T/logs/yi-boot.log" 2>"$T/logs/yi-boot.log.err"
 if [ -d "$LOGDIR" ]; then
     for f in "$LOGDIR"/*; do
         [ -f "$f" ] || continue
-        [ "$(readlink "$f" 2>/dev/null)" = "/dev/null" ] && continue
-        cp "$f" "$T/logs/" 2>/dev/null
+        [ "$(readlink "$f")" = "/dev/null" ] && continue
+        # A log we could not collect is itself a diagnostic - record it in the
+        # bundle instead of dropping it on the floor.
+        cp "$f" "$T/logs/" || echo "could not collect $f" >> "$T/logs/COLLECTION_ERRORS.txt"
     done
 fi
 
 # --- configuration, secrets redacted ---
 mkdir -p "$T/config"
-( cd "$CONFDIR" 2>/dev/null && find . -name '*.conf' -type f ) | while IFS= read -r f; do
+[ -d "$CONFDIR" ] || echo "config dir $CONFDIR missing - no configuration in this bundle" > "$T/config/MISSING.txt"
+( cd "$CONFDIR" && find . -name '*.conf' -type f ) | while IFS= read -r f; do
     rel=${f#./}
     # mkdir only for files in subdirs: on "system.conf" ${rel%/*} is the whole
     # name and would create a DIRECTORY shadowing the file
-    case "$rel" in */*) mkdir -p "$T/config/${rel%/*}" 2>/dev/null ;; esac
+    case "$rel" in */*) mkdir -p "$T/config/${rel%/*}" ;; esac
     sed -E 's/^([A-Z_]*(PASSWORD|PASS|PSK|SECRET)[A-Z_]*)=.+/\1=<redacted>/' \
         "$CONFDIR/$rel" > "$T/config/$rel"
 done

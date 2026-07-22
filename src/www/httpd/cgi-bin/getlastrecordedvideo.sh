@@ -100,7 +100,8 @@ done
 if [ "$TYPE" == "2" ]; then
     LOCAL_IP=$(ifconfig wlan0 | awk '/inet addr/{print substr($2,6)}')
     . /home/yi-hack/base/script/get_config.sh
-    HTTPD_PORT=$(get_config services.httpd.PORT)
+    PORT=""; load_config services.httpd PORT
+    HTTPD_PORT=$PORT
     [ -z "$HTTPD_PORT" ] && HTTPD_PORT=80
 
     printf "Content-type: text/plain\r\n\r\n"

@@ -53,7 +53,7 @@ case "$(get_config system.DEBUG_LOG)" in
     yes)
         if grep -q " /tmp/sd " /proc/mounts; then
             BOOTLOG=1; _sdlog=/tmp/sd
-            umount /tmp/sd 2>/dev/null
+            umount /tmp/sd || echo "[bootlog] WARNING: umount /tmp/sd failed, the sync remount below may not take effect"
             mount -o sync /dev/mmcblk0p1 /tmp/sd      # -o sync at mount (remount,sync unreliable on FAT)
             cp /dev/yi-boot.log /tmp/sd/yi-boot.log
             exec >> /tmp/sd/yi-boot.log 2>&1
@@ -66,17 +66,21 @@ if [ -n "$_sdlog" ]; then
     # Crash cores -> SD (space, pullable with the log, off the 16M /tmp tmpfs). Inherited by every
     # daemon launched from here on. The sync-mounted FAT makes each write slow but durable (debug only).
     mkdir -p "$_sdlog/cores"
-    echo "$_sdlog/cores/core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null
+    echo "$_sdlog/cores/core.%e.%p" > /proc/sys/kernel/core_pattern || \
+        echo "[bootlog] WARNING: cannot set core_pattern - crash cores will not reach the SD"
     ulimit -c unlimited
 fi
 # diag: dump key state at boot checkpoints (only when bootlog is on, to keep it quiet/fast otherwise).
 diag() {
     [ -n "$BOOTLOG" ] || return 0
     echo "----- diag: $* @ $(date '+%T') -----"
-    echo "-- ifconfig wlan0 --";   ifconfig wlan0 2>/dev/null
-    echo "-- wpa_cli status --";   wpa_cli -i wlan0 status 2>/dev/null
-    echo "-- mount --";            mount 2>/dev/null
-    echo "-- dmesg tail --";       dmesg 2>/dev/null | tail -25
+    # Nothing is suppressed here on purpose: this block exists to explain a
+    # failed boot, and stderr already goes to the same log (exec above). A tool
+    # that errors or rejects an option must show that, not an empty section.
+    echo "-- ifconfig wlan0 --";   ifconfig wlan0
+    echo "-- wpa_cli status --";   wpa_cli -i wlan0 status
+    echo "-- mount --";            mount
+    echo "-- dmesg tail --";       dmesg | tail -25
     echo "-----"
 }
 diag "S20 entry (pre apply_config)"
@@ -127,7 +131,9 @@ else
     # compiled into the binary (/home/yi-hack/config/dropbear/, which ships in the home image);
     # -B allows blank password so SSH is reachable exactly like telnet.
     /home/yi-hack/base/bin/dropbear -R -B &
-    if [ "$(cat /home/yi-hack/config/privacy 2>/dev/null)" != "on" ]; then
+    # Optional marker: absent = privacy off. read builtin, no fork.
+    _priv=""; read _priv 2>/dev/null < /home/yi-hack/config/privacy
+    if [ "$_priv" != "on" ]; then
         (
             cd /home/app
             ./log_server &
@@ -138,7 +144,8 @@ else
             ./mp4record &
             ./cloud &
             ./p2p_tnp &
-            if [[ $(cat /home/app/.camver) != "yi_dome" ]] ; then
+            _cam=""; read _cam < /home/app/.camver
+            if [[ $_cam != "yi_dome" ]] ; then
                 ./oss &
             fi
             ./watch_process &
