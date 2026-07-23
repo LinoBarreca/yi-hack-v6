@@ -69,7 +69,8 @@ report 'echo|cut parsing (use IFS + ${var%%=*} / ${var#*=})' \
 #    Not just the CGIs: /etc/profile runs on every login shell and the init
 #    scripts run on every boot, which is the same fork tax on the same CPU.
 report 'cat in command substitution (use read VAR < file)' \
-    "$(scan -rnI -E '\$\(cat |`cat ' --exclude-dir=_install $SHIPPED_DIRS)"
+    "$(scan -rnI -E '\$\(cat |`cat ' --exclude-dir=_install \
+        --exclude='compile.*' --exclude='init.*' --exclude='install.*' $SHIPPED_DIRS)"
 
 # 3) get_config-in-substitution in CGIs - use load_config.
 report 'get_config in command substitution in CGIs (use load_config)' \

@@ -534,6 +534,7 @@ document.addEventListener('alpine:init', () => {
     /* ================= Camera settings ================= */
     Alpine.data('cameraPage', () => ({
         c: {}, dirty: [], presets: [], newPreset: '',
+        pl: { MODE: 'stock', LDC: 0 }, plMsg: '',
         ready: false, savemsg: '',
         hwToggles: [
             { key: 'LED',    label: 'Status LED' },
@@ -551,11 +552,31 @@ document.addEventListener('alpine:init', () => {
         async init() {
             try {
                 this.c = await conf('camera');
+                this.pl = await conf('pipeline').catch(() => ({}));
+                /* normalize so a missing/partial pipeline.conf still shows a valid
+                   selection (default stock) instead of a blank card */
+                if (['stock', 'online', 'offline'].indexOf(this.pl.MODE) < 0) this.pl.MODE = 'stock';
+                this.pl.LDC = Math.max(0, Math.min(100, parseInt(this.pl.LDC, 10) || 0));
                 if (this.isPtz) await this.loadPresets();
             } finally { this.ready = true; }
         },
         get isPtz() { return Alpine.store('ui').status.ptz === 'yes'; },
         lk(key) { return Alpine.store('rules').isLocked('camera.' + key); },
+
+        /* Pipeline is a static, reboot-applied config (config/pipeline.conf) —
+           separate from the runtime camera settings above. LDC only has an
+           effect in offline mode; force it to 0 otherwise so we never persist a
+           stale non-zero value that online mode would ignore anyway. */
+        async savePipeline() {
+            this.plMsg = 'Saving…';
+            try {
+                const mode = this.pl.MODE || 'stock';
+                const ldc = mode === 'offline' ? Math.max(0, Math.min(100, +this.pl.LDC || 0)) : 0;
+                this.pl.LDC = ldc;
+                await api.setConf('pipeline', { MODE: mode, LDC: String(ldc) });
+                this.plMsg = 'Saved — applies at the next reboot.';
+            } catch (e) { this.plMsg = 'Error while saving: ' + e; }
+        },
 
         mark(key) { if (!this.dirty.includes(key)) this.dirty.push(key); },
         set(key, checked) { this.c[key] = checked ? 'yes' : 'no'; this.mark(key); },

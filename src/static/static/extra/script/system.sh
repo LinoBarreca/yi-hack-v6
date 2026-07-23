@@ -145,6 +145,14 @@ ENABLED=""; load_config services.ftp_upload ENABLED; FTP_UPLOAD_ENABLED=$ENABLED
 load_config system DISABLE_CLOUD REC_WITHOUT_CLOUD CRONTAB
 load_config output RECORD
 load_config recording FREE_SPACE
+
+# Native pipeline selector (pipeline.conf). Generic MODE/LDC renamed at once; the
+# native block further down consumes PIPELINE_MODE/PIPELINE_LDC (no get_config
+# there - this is the boot path). Nothing between here and that block rewrites
+# pipeline.conf, so reading it now is equivalent to reading it there.
+MODE=""; LDC=""
+load_config pipeline MODE LDC
+PIPELINE_MODE=$MODE; PIPELINE_LDC=$LDC
 # ---- End batch config load ----
 
 # Swap: destination is decided by the output matrix; build_view.sh created
@@ -194,6 +202,52 @@ if [ -n "$SSH_PASSWORD" ] ; then
     fi
 fi
 
+# --- Native MPP pipeline (PIPELINE=online|offline) --------------------------
+# pipeline.MODE selects the media pipeline: `stock` = the Xiaomi stack (default),
+# `online`/`offline` = the v6 native pipeline (campipe). online is lowest
+# latency/RAM; offline adds lens distortion correction (LDC). When native we
+# DON'T start the stock media stack (rmm/dispatch/cloud/p2p/oss/watch_process)
+# nor the /tmp/view scraper (h264grabber) nor the rmm watchdog (wd_rtsp reboots
+# on rmm-gone); native_pipeline.sh reloads the SDK modules, runs campipe and
+# supervises it without rebooting. watch_process normally feeds the hardware
+# watchdog; since we skip it, we feed /dev/watchdog ourselves (NOW, before the
+# ~10s module reload).
+#
+# Safety: native activates only if MODEL=y20 AND the SDK modules + campipe are
+# present - otherwise it silently stays stock (so a native config on a build
+# without the assets never breaks boot). Physical escape hatch that survives a
+# bad flash config: `touch /tmp/sd/NO_NATIVE` forces stock regardless of the
+# configured mode; pulling the SD removes it. (The config pipeline.MODE is the
+# normal control - there is deliberately no "force native" flag, so an explicit
+# `stock` selection is always honoured.)
+# Native pipeline assets, shipped in the SD/CIFS payload (see install.campipe):
+#   modules -> extra/lib/modules/<ver>/ , campipe -> extra/bin/campipe .
+NATIVE_KO_VER=1.0.4.0
+NATIVE_KO_DIR=/home/yi-hack/extra/lib/modules/$NATIVE_KO_VER
+NATIVE_BIN=/home/yi-hack/extra/bin/campipe
+
+[ -f /tmp/sd/NO_NATIVE ] && PIPELINE_MODE=stock
+
+NATIVE_PIPELINE=no
+if { [ "$PIPELINE_MODE" = "online" ] || [ "$PIPELINE_MODE" = "offline" ]; } \
+   && [ "$MODEL_SUFFIX" = "y20" ] \
+   && [ -f "$NATIVE_KO_DIR/load3518e" ] && [ -x "$NATIVE_BIN" ] ; then
+    NATIVE_PIPELINE=yes
+    NATIVE_LDC=0
+    [ "$PIPELINE_MODE" = "offline" ] && NATIVE_LDC=$PIPELINE_LDC
+    echo "system.sh: native pipeline mode=$PIPELINE_MODE ldc=$NATIVE_LDC"
+    # Feed the hardware watchdog ourselves; must run NOW so the box survives the
+    # ~10s module reload native_pipeline.sh does.
+    ( exec 3>/dev/watchdog; while : ; do printf . >&3 2>/dev/null; sleep 15; done ) &
+    # h264grabber (the /tmp/view scraper) is a no-op in native: campipe writes the
+    # FIFOs directly. Shadow it for the RTSP-section launches below.
+    h264grabber() { : ; }
+    # Native media supervisor: SDK module reload + campipe + rRTSPServer, no reboot.
+    /home/yi-hack/extra/script/native_pipeline.sh "$PIPELINE_MODE" "$NATIVE_LDC" "$NATIVE_KO_DIR" "$NATIVE_BIN" &
+elif [ "$PIPELINE_MODE" != "stock" ] ; then
+    echo "system.sh: pipeline.MODE=$PIPELINE_MODE requested but native assets/model missing - staying stock"
+fi
+
 # The ntpd daemon runs only with the cloud DISABLED: with the cloud on, the stock
 # 'cloud' daemon already syncs the clock (cloudAPI -c 136) and two writers would
 # fight. With the cloud off, cloudAPI_fake also does a one-shot NTP sync per
@@ -203,7 +257,7 @@ if [[ $NTPD_ENABLED == "yes" ]] && [[ $DISABLE_CLOUD == "yes" ]] ; then
     sleep 5 && ntpd -p $NTPD_SERVER &
 fi
 
-if [[ $DISABLE_CLOUD == "no" ]] ; then
+if [[ $NATIVE_PIPELINE == "no" ]] && [[ $DISABLE_CLOUD == "no" ]] ; then
     (
         cd /home/app
         # Stock logger first: the cloud daemons sendto its /tmp/logsock (best-effort, DGRAM).
@@ -231,7 +285,7 @@ if [[ $DISABLE_CLOUD == "no" ]] ; then
         ./watch_process &
     )
 fi
-if [[ $DISABLE_CLOUD == "yes" ]] ; then
+if [[ $NATIVE_PIPELINE == "no" ]] && [[ $DISABLE_CLOUD == "yes" ]] ; then
     (
         cd /home/app
         # Stock logger first: the cloud daemons sendto its /tmp/logsock (best-effort, DGRAM).
@@ -374,9 +428,18 @@ if [[ $RTSP_ENABLED == "yes" ]] ; then
         if [[ $ONVIF_PROFILE_CFG == "high" ]] || [[ $ONVIF_PROFILE_CFG == "both" ]] ; then
             ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
         fi
-    rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
+    # In native mode native_pipeline.sh owns rRTSPServer (audio forced off);
+    # don't start a second one here.
+    if [[ $NATIVE_PIPELINE == "no" ]] ; then
+        rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
     fi
-    /home/yi-hack/extra/script/wd_rtsp.sh &
+    fi
+    # wd_rtsp reboots the camera when rmm is gone (check_rmm); in native mode rmm
+    # is intentionally not running (native_pipeline.sh supervises campipe/rRTSP
+    # without rebooting), so skip it.
+    if [[ $NATIVE_PIPELINE == "no" ]] ; then
+        /home/yi-hack/extra/script/wd_rtsp.sh &
+    fi
     # Native MP4 recorder (privacy-safe alternative to stock mp4record). Records
     # the local RTSP stream to the output/record view (RAM/SD/CIFS) whenever
     # output.RECORD != NO; wd_record.sh launches and supervises it. mp4record

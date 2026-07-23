@@ -186,6 +186,59 @@
                 </button>
                 <span class="msg" x-text="savemsg"></span>
             </div>
+
+            <div class="yh-card mt-4">
+                <h2>Video pipeline <span class="chip model">advanced</span></h2>
+                <p class="sub">How the camera produces video. The native pipeline is a v6
+                    replacement for the Xiaomi stack — choosing it turns off the cloud, the Yi
+                    app and stock detection. Changes apply at the next reboot.</p>
+                <div class="choices">
+                    <label class="choice" :class="{ sel: pl.MODE === 'stock' }">
+                        <input type="radio" name="plmode" value="stock" x-model="pl.MODE" />
+                        <b>Stock</b>
+                        <p>The Xiaomi media stack. Cloud, Yi app, and stock motion/AI detection
+                           all work. The safe default.</p>
+                    </label>
+                    <label class="choice" :class="{ sel: pl.MODE === 'online' }">
+                        <input type="radio" name="plmode" value="online" x-model="pl.MODE" />
+                        <b>Native — online</b>
+                        <p>v6 pipeline, lowest latency and memory. No lens distortion correction
+                           (the hardware only supports it in offline mode).</p>
+                    </label>
+                    <label class="choice" :class="{ sel: pl.MODE === 'offline' }">
+                        <input type="radio" name="plmode" value="offline" x-model="pl.MODE" />
+                        <b>Native — offline</b>
+                        <p>v6 pipeline with lens distortion correction available, at a small
+                           latency and memory cost.</p>
+                    </label>
+                </div>
+
+                <div class="frm" style="margin-top:1rem">
+                    <div class="row2">
+                        <label for="in-ldc">Lens correction
+                            <span class="chip state-off" x-show="pl.MODE !== 'offline'">offline only</span>
+                        </label>
+                        <div>
+                            <div class="d-flex gap-3 align-items-center">
+                                <input type="range" class="form-range" id="in-ldc" min="0" max="100" step="1"
+                                       style="max-width:260px" x-model.number="pl.LDC"
+                                       :disabled="pl.MODE !== 'offline'" />
+                                <span class="pill" x-text="(pl.MODE === 'offline' ? (+pl.LDC || 0) : 0)"></span>
+                            </div>
+                            <div class="help" x-show="pl.MODE === 'offline'">
+                                Straightens the fisheye barrel distortion. 0 = off, 100 = maximum.
+                                Try a mid value and check Live view.</div>
+                            <div class="help" x-show="pl.MODE !== 'offline'">
+                                Available only with the native <b>offline</b> pipeline.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="savebar">
+                    <button class="btn btn-warning" @click="savePipeline()">Save pipeline</button>
+                    <span class="msg" x-text="plMsg"></span>
+                </div>
+            </div>
         </div>
     </template>
 </div>

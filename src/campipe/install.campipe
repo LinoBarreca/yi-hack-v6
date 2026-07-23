@@ -1,0 +1,24 @@
+#!/bin/bash
+
+SCRIPT_DIR=$(cd `dirname $0` && pwd)
+cd $SCRIPT_DIR
+
+mkdir -p ../../build/extra/bin/ || exit 1
+
+cp -a ./_install/* ../../build/extra/ || exit 1
+
+# HiSilicon SDK kernel modules for the native pipeline. campipe links the SDK MPP
+# libs (src/hisdk/mpp/lib); the stock modules are a DIFFERENT build and make
+# HI_MPI_ISP_MemInit fail, so native_pipeline.sh reloads these consistent modules
+# at boot. Deployed to extra/lib/modules/<ver>/ (the runtime path native_pipeline.sh
+# and system.sh look in). Proprietary + gitignored under src/hisdk - if absent the
+# build still succeeds and the runtime falls back to the dev SD (/tmp/sd/sdk104).
+SDK_KO_VER=1.0.4.0
+SDK_KO_SRC=../hisdk/mpp/ko/$SDK_KO_VER
+if [ -d "$SDK_KO_SRC" ]; then
+    mkdir -p ../../build/extra/lib/modules/$SDK_KO_VER || exit 1
+    cp -a "$SDK_KO_SRC"/. ../../build/extra/lib/modules/$SDK_KO_VER/ || exit 1
+    echo "install.campipe: SDK modules $SDK_KO_VER -> extra/lib/modules/$SDK_KO_VER"
+else
+    echo "install.campipe: WARNING - $SDK_KO_SRC missing; native pipeline falls back to the dev SD at runtime"
+fi

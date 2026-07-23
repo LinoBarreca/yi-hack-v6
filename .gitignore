@@ -11,6 +11,7 @@
 
 /out
 /bin
+*.o
 
 # The following files are ignored because they need some cleanup
 REQUIRED_PACKAGES
@@ -24,7 +25,6 @@ scripts/packfiles.sh
 .file.swp
 src/**/busybox-1.*
 src/curl/sysroot/**
-src/ipc_cmd/ipc_cmd/*.o
 src/ipc_cmd/ipc_cmd/ipc_multiplexer
 src/ipc_cmd/ipc_cmd/ipc_read
 src/ipc_cmd/ipc_cmd/ipc2file
@@ -34,5 +34,5 @@ CAMERA_FIRMWARE_DESIGN.md
 simulated_boot.log
 src/hisdk/
 src/hwsnap/hwsnap/hwsnap
-src/hwsnap/hwsnap/*.o
 src/snapshot/snapshot/watermark
+src/campipe/campipe/campipe

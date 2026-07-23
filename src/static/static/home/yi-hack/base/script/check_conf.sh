@@ -53,6 +53,7 @@ RECORDING_CONF_FILE="$CONFIG_DIR/recording.conf"
 CAMERA_CONF_FILE="$CONFIG_DIR/camera.conf"
 IDENTITY_CONF_FILE="$CONFIG_DIR/identity.conf"
 PTZ_CONF_FILE="$CONFIG_DIR/ptz_presets.conf"
+PIPELINE_CONF_FILE="$CONFIG_DIR/pipeline.conf"
 SNAPSHOT_CONF_FILE="$CONFIG_DIR/services/snapshot.conf"
 HTTPD_CONF_FILE="$CONFIG_DIR/services/httpd.conf"
 RTSP_CONF_FILE="$CONFIG_DIR/services/rtsp.conf"
@@ -147,6 +148,11 @@ PARMS_SNAPSHOT="
 ENABLED=yes
 RESOLUTION=high
 WATERMARK=yes"
+
+# Video pipeline (v6-native). MODE=stock|online|offline, LDC=0..100 (offline only).
+PARMS_PIPELINE="
+MODE=stock
+LDC=0"
 
 PARMS_HTTPD="
 ENABLED=yes
@@ -293,6 +299,7 @@ seed_extra() {
     seed_defaults "$CAMERA_CONF_FILE"      "$PARMS_CAMERA"
     seed_defaults "$IDENTITY_CONF_FILE"    "$PARMS_IDENTITY"
     seed_defaults "$PTZ_CONF_FILE"         "$PARMS_PTZ"
+    seed_defaults "$PIPELINE_CONF_FILE"    "$PARMS_PIPELINE"
     seed_defaults "$SNAPSHOT_CONF_FILE"    "$PARMS_SNAPSHOT"
     seed_defaults "$HTTPD_CONF_FILE"       "$PARMS_HTTPD"
     seed_defaults "$RTSP_CONF_FILE"        "$PARMS_RTSP"

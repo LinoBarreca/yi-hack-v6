@@ -54,4 +54,22 @@ cp -R ./httpd/htdocs/images/. ./_install/www/images/
 echo "Copying the cgi-bin folder..."
 cp ./httpd/cgi-bin/* ./_install/www/cgi-bin
 
+# Cache-bust the app assets. busybox httpd sends NO cache headers, so browsers
+# heuristically cache ui/app.js, ui/app.css, etc. After a new build with the same
+# URLs the browser then serves STALE JS/CSS against fresh (cache:'no-store') page
+# fragments -> broken UI (e.g. an old app.js that predates a page's new bindings).
+# Stamp the local script/style URLs in index.html with a content hash so any
+# change to them yields a new URL = guaranteed reload; unchanged builds keep the
+# same hash (no needless re-download). Page fragments already use no-store; vendor
+# libs are version-pinned and change rarely, so only our own assets are stamped.
+V=$(cat ./_install/www/ui/app.js ./_install/www/ui/rules.js \
+        ./_install/www/ui/tz-data.js ./_install/www/ui/app.css | md5sum | cut -c1-10)
+sed -i \
+    -e "s|\"ui/tz-data.js\"|\"ui/tz-data.js?v=$V\"|" \
+    -e "s|\"ui/app.js\"|\"ui/app.js?v=$V\"|" \
+    -e "s|\"ui/rules.js\"|\"ui/rules.js?v=$V\"|" \
+    -e "s|\"ui/app.css\"|\"ui/app.css?v=$V\"|" \
+    ./_install/www/index.html
+echo "Cache-bust stamp: v=$V"
+
 echo "Compilation succeeded."
