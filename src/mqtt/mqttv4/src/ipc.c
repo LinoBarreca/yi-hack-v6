@@ -13,9 +13,25 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Copyright (c) 2026 Lino Barreca (https://github.com/LinoBarreca/yi-hack-v6).
  */
 
 #include "ipc.h"
+
+#include <sys/inotify.h>
+#include <sys/stat.h>
+#include <poll.h>
+
+/* Motion delivery = a marker file on the local event bus (/tmp/ipc). campipe
+ * (native mode) or ipc2file (stock mode) creates motion_alarm on the start edge
+ * and removes it on stop; we watch the directory with inotify and drive the same
+ * motion callbacks. Motion therefore works identically in both pipeline modes,
+ * and the mqueue (which only exists in stock mode) is no longer motion's source
+ * — see parse_message. The mqueue still carries the stock-only AI/sound/command
+ * events, and its absence in native mode is non-fatal (see ipc_init). */
+#define IPC_EVENT_DIR    "/tmp/ipc"
+#define IPC_MOTION_FILE  "motion_alarm"
 
 //-----------------------------------------------------------------------------
 // GENERAL STATIC VARS AND FUNCTIONS
@@ -70,13 +86,18 @@ char *ipc_cmd_params[][2] = {
 };
 
 static mqd_t ipc_mq;
+static int ipc_mq_ok;                 /* 0 when the mqueue is absent (native mode) */
 static pthread_t *tr_queue;
 int tr_queue_routine;
+static pthread_t *tr_inotify;
+static int tr_inotify_routine;
 
 static int open_queue();
 static int clear_queue();
 static int start_queue_thread();
 static void *queue_thread(void *args);
+static int start_inotify_thread();
+static void *inotify_thread(void *args);
 static int parse_message(char *msg, ssize_t len);
 
 static void call_callback(IPC_MESSAGE_TYPE type);
@@ -87,8 +108,6 @@ static void ipc_debug(const char* fmt, ...);
 // MESSAGES HANDLERS
 //-----------------------------------------------------------------------------
 
-static void handle_ipc_motion_start();
-static void handle_ipc_motion_stop();
 static void handle_ipc_ai_human_detection();
 static void handle_ipc_ai_vehicle_detection();
 static void handle_ipc_ai_animal_detection();
@@ -114,20 +133,30 @@ static func_ptr_t *ipc_callbacks;
 
 int ipc_init()
 {
-    int ret;
-
-    ret = open_queue();
-    if(ret != 0)
-        return -1;
-
-    ret = clear_queue();
-    if(ret != 0)
-        return -2;
-
     ipc_callbacks=malloc((sizeof(func_ptr_t))*IPC_MSG_LAST);
 
-    ret=start_queue_thread();
-    if(ret!=0)
+    /* The mqueue only exists in stock mode (ipc_multiplex.so creates it). In
+     * native mode it is absent — that is NOT an error: motion arrives via the
+     * inotify path below, and the mqueue-only events (AI/sound/command) simply
+     * don't occur in native mode. So a missing queue is non-fatal; without this
+     * mqttv4 would exit at boot in native mode and no MQTT would run at all. */
+    ipc_mq_ok = 0;
+    if(open_queue() == 0)
+    {
+        if(clear_queue() != 0)
+            return -2;
+        if(start_queue_thread() != 0)
+            return -2;
+        ipc_mq_ok = 1;
+    }
+    else
+    {
+        fprintf(stderr, "IPC mqueue %s absent - motion via inotify only\n",
+                IPC_QUEUE_NAME);
+    }
+
+    /* Motion (both pipeline modes) comes from the marker file. */
+    if(start_inotify_thread() != 0)
         return -2;
 
     return 0;
@@ -135,6 +164,13 @@ int ipc_init()
 
 void ipc_stop()
 {
+    if(tr_inotify!=NULL)
+    {
+        tr_inotify_routine=0;
+        pthread_join((*tr_inotify), NULL);
+        free(tr_inotify);
+    }
+
     if(tr_queue!=NULL)
     {
         tr_queue_routine=0;
@@ -145,7 +181,7 @@ void ipc_stop()
     if(ipc_callbacks!=NULL)
         free(ipc_callbacks);
 
-    if(ipc_mq>0)
+    if(ipc_mq_ok && ipc_mq>0)
         mq_close(ipc_mq);
 }
 
@@ -227,6 +263,91 @@ static void *queue_thread(void *args)
 }
 
 //-----------------------------------------------------------------------------
+// INOTIFY (MOTION MARKER FILE)
+//-----------------------------------------------------------------------------
+
+static int start_inotify_thread()
+{
+    tr_inotify = malloc(sizeof(pthread_t));
+    tr_inotify_routine = 1;
+    if(pthread_create(tr_inotify, NULL, &inotify_thread, NULL) != 0)
+    {
+        fprintf(stderr, "Can't create inotify thread.\n");
+        free(tr_inotify);
+        tr_inotify = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+static void *inotify_thread(void *args)
+{
+    int fd, wd;
+    char path[256];
+    struct stat st;
+    /* inotify_event is variable-length; align the buffer to read a batch. */
+    char buf[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
+
+    // campipe / ipc2file also create this, but we may start first.
+    mkdir(IPC_EVENT_DIR, 0755);
+
+    fd = inotify_init1(IN_NONBLOCK);
+    if(fd < 0)
+    {
+        fprintf(stderr, "inotify_init1 failed: %s\n", strerror(errno));
+        return 0;
+    }
+    wd = inotify_add_watch(fd, IPC_EVENT_DIR, IN_CREATE | IN_DELETE);
+    if(wd < 0)
+    {
+        fprintf(stderr, "inotify_add_watch(%s) failed: %s\n", IPC_EVENT_DIR, strerror(errno));
+        close(fd);
+        return 0;
+    }
+
+    /* Recover current state: if the marker already exists at startup (motion in
+     * progress when mqttv4 (re)started), fire a start so we're not stuck clear -
+     * a transient mqueue message could never offer this. */
+    snprintf(path, sizeof(path), "%s/%s", IPC_EVENT_DIR, IPC_MOTION_FILE);
+    if(stat(path, &st) == 0)
+        call_callback(IPC_MSG_MOTION_START);
+
+    while(tr_inotify_routine)
+    {
+        struct pollfd pfd = { fd, POLLIN, 0 };
+        ssize_t len;
+        char *p;
+
+        // Timed poll so we re-check tr_inotify_routine and can be joined.
+        if(poll(&pfd, 1, 500) <= 0)
+            continue;
+
+        len = read(fd, buf, sizeof(buf));
+        if(len <= 0)
+            continue;
+
+        for(p = buf; p < buf + len; )
+        {
+            struct inotify_event *e = (struct inotify_event *) p;
+            if(e->len > 0 && strcmp(e->name, IPC_MOTION_FILE) == 0)
+            {
+                if(e->mask & IN_CREATE)
+                    call_callback(IPC_MSG_MOTION_START);
+                else if(e->mask & IN_DELETE)
+                    call_callback(IPC_MSG_MOTION_STOP);
+            }
+            p += sizeof(struct inotify_event) + e->len;
+        }
+    }
+
+    inotify_rm_watch(fd, wd);
+    close(fd);
+
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
 // IPC PARSER
 //-----------------------------------------------------------------------------
 
@@ -239,22 +360,12 @@ static int parse_message(char *msg, ssize_t len)
         ipc_debug("%02x ", msg[i]);
     ipc_debug("\n");
 
-    if((len >= sizeof(IPC_MOTION_START) - 1) && (memcmp(msg, IPC_MOTION_START, sizeof(IPC_MOTION_START) - 1)==0))
-    {
-        handle_ipc_motion_start();
-        return 0;
-    }
-    if((len >= sizeof(IPC_MOTION_START_C) - 1) && (memcmp(msg, IPC_MOTION_START_C, sizeof(IPC_MOTION_START_C) - 1)==0))
-    {
-        handle_ipc_motion_start();
-        return 0;
-    }
-    else if((len >= sizeof(IPC_MOTION_STOP) - 1) && (memcmp(msg, IPC_MOTION_STOP, sizeof(IPC_MOTION_STOP) - 1)==0))
-    {
-        handle_ipc_motion_stop();
-        return 0;
-    }
-    else if((len >= sizeof(IPC_AI_HUMAN_DETECTION) - 1) && (memcmp(msg, IPC_AI_HUMAN_DETECTION, sizeof(IPC_AI_HUMAN_DETECTION) - 1)==0))
+    /* Motion is intentionally NOT parsed from the mqueue anymore: it arrives via
+     * the inotify marker-file path (inotify_thread), which works in both stock
+     * and native mode. Parsing it here too would double-fire in stock mode, where
+     * ipc2file also writes the marker from the same mqueue message. The remaining
+     * events below are stock-only and have no native-mode source. */
+    if((len >= sizeof(IPC_AI_HUMAN_DETECTION) - 1) && (memcmp(msg, IPC_AI_HUMAN_DETECTION, sizeof(IPC_AI_HUMAN_DETECTION) - 1)==0))
     {
         handle_ipc_ai_human_detection();
         return 0;
@@ -516,18 +627,6 @@ static void handle_ipc_unrecognized()
 {
     ipc_debug("GOT UNRECOGNIZED MESSAGE\n");
 //    call_callback(IPC_MSG_UNRECOGNIZED);
-}
-
-static void handle_ipc_motion_start()
-{
-    ipc_debug("GOT MOTION START\n");
-    call_callback(IPC_MSG_MOTION_START);
-}
-
-static void handle_ipc_motion_stop()
-{
-    ipc_debug("GOT MOTION STOP\n");
-    call_callback(IPC_MSG_MOTION_STOP);
 }
 
 static void handle_ipc_ai_human_detection()

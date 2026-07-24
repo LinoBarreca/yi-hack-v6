@@ -156,10 +156,15 @@ replace_line() {
 # the file is never reset under us - no runtime idempotency needed.
 #  - app/init.sh : the cloud daemons are relaunched by yi-hack after build_view, so REMOVE
 #                  the early stock launches (+ the now-orphan 'sleep 2'); bump swappiness 0->60.
+#                  Also REMOVE the unconditional hi_cipher.ko insmod: the only runtime user of
+#                  the /dev/cipher hardware engine is oss (cloud media upload), so yi-hack loads
+#                  it in system.sh right before oss instead (the update path in base/init.sh
+#                  loads its own). Loading it here pins mmz on every boot and makes the native
+#                  pipeline's load3518e -a fail to reload mmz.
 #  - base/init.sh: REMOVE the hanging rtc time read.
 patch_stock_init() {
     local app="$1/app/init.sh" base="$1/base/init.sh"
-    log "$MODEL: patching stock init scripts (remove cloud daemons, swappiness, rtc)..."
+    log "$MODEL: patching stock init scripts (remove cloud daemons, hi_cipher, swappiness, rtc)..."
     remove_line  "$app"  './log_server &'
     remove_line  "$app"  './dispatch &'
     remove_line  "$app"  './rmm &'
@@ -169,6 +174,7 @@ patch_stock_init() {
     remove_line  "$app"  './oss &'
     remove_line  "$app"  './watch_process &'
     remove_line  "$app"  'sleep 2'
+    remove_line  "$app"  'insmod /home/base/hi_cipher.ko'
     replace_line "$app"  'echo 0 > /proc/sys/vm/swappiness'  'echo 60 > /proc/sys/vm/swappiness'
     remove_line  "$base" 'rtctime=$(/home/base/tools/rtctool -g time)'
     remove_line  "$base" 'date -s $rtctime'

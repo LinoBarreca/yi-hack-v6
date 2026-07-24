@@ -43,13 +43,13 @@
 #define IPC_BABY_CRYING                 "\x04\x00\x00\x00\x02\x00\x00\x00\x02\x60\x02\x60\x00\x00\x00\x00"
 #define IPC_SOUND_DETECTION             "\x04\x00\x00\x00\x02\x00\x00\x00\x04\x60\x04\x60\x00\x00\x00\x00"
 
-#define PARENT_DIR                      "/tmp/onvif_notify_server"
-#define FILE_MOTION_START               "/tmp/onvif_notify_server/motion_alarm"
-#define FILE_AI_HUMAN_DETECTION         "/tmp/onvif_notify_server/human_detection"
-#define FILE_AI_VEHICLE_DETECTION       "/tmp/onvif_notify_server/vehicle_detection"
-#define FILE_AI_ANIMAL_DETECTION        "/tmp/onvif_notify_server/animal_detection"
-#define FILE_BABY_CRYING                "/tmp/onvif_notify_server/baby_crying"
-#define FILE_SOUND_DETECTION            "/tmp/onvif_notify_server/sound_detection"
+#define PARENT_DIR                      "/tmp/ipc"
+#define FILE_MOTION_START               "/tmp/ipc/motion_alarm"
+#define FILE_AI_HUMAN_DETECTION         "/tmp/ipc/human_detection"
+#define FILE_AI_VEHICLE_DETECTION       "/tmp/ipc/vehicle_detection"
+#define FILE_AI_ANIMAL_DETECTION        "/tmp/ipc/animal_detection"
+#define FILE_BABY_CRYING                "/tmp/ipc/baby_crying"
+#define FILE_SOUND_DETECTION            "/tmp/ipc/sound_detection"
 
 typedef enum
 {

@@ -171,43 +171,47 @@ start_onvif()
     echo "topic=tns1:VideoSource/MotionAlarm" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/motion_alarm" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/motion_alarm" >> $ONVIF_SRVD_CONF
     echo "#Event 1" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/PeopleDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/human_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/human_detection" >> $ONVIF_SRVD_CONF
     echo "#Event 2" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/VehicleDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/vehicle_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/vehicle_detection" >> $ONVIF_SRVD_CONF
     echo "#Event 3" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/DogCatDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/animal_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/animal_detection" >> $ONVIF_SRVD_CONF
     echo "#Event 4" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/BabyCryingDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/baby_crying" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/baby_crying" >> $ONVIF_SRVD_CONF
     echo "#Event 5" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:AudioAnalytics/Audio/DetectedSound" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/sound_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/sound_detection" >> $ONVIF_SRVD_CONF
 
     chmod 0600 $ONVIF_SRVD_CONF
     onvif_simple_server --conf_file $ONVIF_SRVD_CONF
-    ipc2file
+    # ipc2file (the stock mqueue -> /tmp/ipc bridge) is owned by boot, not by ONVIF:
+    # it also feeds mqttv4's motion (inotify), so it must not be tied to ONVIF's
+    # lifecycle. onvif_notify_server just watches /tmp/ipc (fed by ipc2file in stock
+    # mode or campipe in native mode).
     onvif_notify_server --conf_file $ONVIF_SRVD_CONF
 }
 
 stop_onvif()
 {
     killall onvif_notify_server
-    killall ipc2file
+    # Do NOT kill ipc2file here: it is the stock-mode motion source for mqttv4 too,
+    # independent of ONVIF (started at boot). Killing it would drop stock motion.
     killall onvif_simple_server
 }
 

@@ -19,15 +19,19 @@ CFLAGS  += -Wall -O2 -march=armv5te -mcpu=arm926ej-s -mno-unaligned-access \
            -fno-aggressive-loop-optimizations -ffunction-sections -fdata-sections \
            -I$(SDK)/include -I$(COMMON) $(DEFS)
 
-# Reuse the SDK's proven MPP init helpers (SYS/VB, VI, VPSS, VENC, ISP). None of
-# these five reference the VO/audio/IVE helpers, so we compile just them.
+# Reuse the SDK's proven MPP init helpers (SYS/VB, VI, VPSS, VENC, ISP) plus the
+# audio helpers (CfgAcodec/StartAo for the speaker). --gc-sections drops the unused
+# AENC/ADEC/AAC/file paths in sample_comm_audio.o.
 COMM_OBJ = sample_comm_sys.o sample_comm_vi.o sample_comm_vpss.o \
-           sample_comm_venc.o sample_comm_isp.o
+           sample_comm_venc.o sample_comm_isp.o sample_comm_audio.o
 
 # Static link (the camera has no MPP .so; rmm static-links the same libs). Order
 # matters: MPI first, then ISP algo libs + sensor, then audio VQE (pulled in by
 # libmpi even for video-only), then libc helpers.
-LDLIBS = $(REL_LIB)/libmpi.a $(REL_LIB)/libive.a $(REL_LIB)/libmd.a \
+# libmd.a (motion detection, ivs_md.o) calls HI_MPI_IVE_* which live in libive.a,
+# and libive.a in turn needs libmpi.a helpers - a circular dependency, so wrap the
+# three in a link group and let ld rescan them until resolved (order-independent).
+LDLIBS = -Wl,--start-group $(REL_LIB)/libmpi.a $(REL_LIB)/libive.a $(REL_LIB)/libmd.a -Wl,--end-group \
          $(REL_LIB)/libisp.a \
          $(REL_LIB)/lib_hiae.a $(REL_LIB)/lib_hiawb.a $(REL_LIB)/lib_hiaf.a \
          $(REL_LIB)/lib_hidefog.a $(REL_LIB)/lib_cmoscfg.a $(REL_LIB)/lib_iniparser.a \

@@ -105,12 +105,36 @@ RRTSP_USER=""; RRTSP_PWD=""
 [ -n "$PASSWORD" ] && RRTSP_PWD="-w $PASSWORD"
 RTSP_ENABLED=$ENABLED
 
+# Motion detection: campipe runs the IVE detector when CAMPIPE_MD=yes and signals
+# start/stop via the /tmp/ipc marker file (mqttv4 + onvif_notify_server watch it).
+# Pre-clear MOTION_DETECTION/SENSITIVITY (generic names, may be in the env).
+MOTION_DETECTION=""; SENSITIVITY=""
+load_config camera MOTION_DETECTION SENSITIVITY
+C_MD=$MOTION_DETECTION
+case "$SENSITIVITY" in low|medium|high) C_MD_SENS=$SENSITIVITY ;; *) C_MD_SENS=low ;; esac
+
+# The event-bus dir must exist before onvif_notify_server starts (it aborts if the
+# watched dir is missing) and before campipe writes the marker. Cheap + idempotent.
+mkdir -p /tmp/ipc
+
+# Speaker (audio out): the amp-enable + DAC level are board-specific, so look them
+# up in the per-model audio_hw.conf table. When the model is mapped, campipe brings
+# up AO, enables the amp, and plays PCM written to /tmp/audio_out_fifo; unmapped
+# model -> empty AMP_ON -> campipe leaves audio out (and the speaker) alone.
+AMP_ON=""; AMP_OFF=""; DAC_VOL=""
+if [ -f /home/yi-hack/extra/script/audio_hw.conf ] ; then
+    . /home/yi-hack/extra/script/audio_hw.conf
+    audio_hw "$MODEL_SUFFIX" || { AMP_ON=""; AMP_OFF=""; DAC_VOL=""; }
+fi
+
 # --- 4. supervise (no reboot) -----------------------------------------------
-log "supervisor loop: vblk=$C_VBLK ldc=$C_LDC rtsp=$RTSP_ENABLED res=$RRTSP_RES port=$RRTSP_PORT"
+log "supervisor loop: vblk=$C_VBLK ldc=$C_LDC md=$C_MD sens=$C_MD_SENS ao=${AMP_ON:+on} rtsp=$RTSP_ENABLED res=$RRTSP_RES port=$RRTSP_PORT"
 while : ; do
     if ! pidof campipe >/dev/null 2>&1 ; then
-        log "starting campipe (VBLK=$C_VBLK LDC=$C_LDC)"
-        CAMPIPE_VBLK=$C_VBLK CAMPIPE_LDC=$C_LDC "$CAMPIPE" >> "$LOG_FILE" 2>&1 &
+        log "starting campipe (VBLK=$C_VBLK LDC=$C_LDC MD=$C_MD SENS=$C_MD_SENS AO=${AMP_ON:+on})"
+        CAMPIPE_VBLK=$C_VBLK CAMPIPE_LDC=$C_LDC CAMPIPE_MD=$C_MD CAMPIPE_MD_SENS=$C_MD_SENS \
+            CAMPIPE_AMP_ON="$AMP_ON" CAMPIPE_AMP_OFF="$AMP_OFF" CAMPIPE_DAC_VOL="$DAC_VOL" \
+            "$CAMPIPE" >> "$LOG_FILE" 2>&1 &
         sleep 3
     fi
     if [ "$RTSP_ENABLED" = "yes" ] && ! pidof rRTSPServer >/dev/null 2>&1 ; then

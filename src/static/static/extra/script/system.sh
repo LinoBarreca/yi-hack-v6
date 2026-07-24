@@ -202,6 +202,13 @@ if [ -n "$SSH_PASSWORD" ] ; then
     fi
 fi
 
+# Local event bus. Motion (and, in stock mode, the AI/sound events) is signalled
+# by marker files under /tmp/ipc: ipc2file writes them in stock mode, campipe in
+# native mode, and both mqttv4 (inotify) and onvif_notify_server watch them.
+# Create the dir once here so no producer/consumer races on it at boot (in
+# particular onvif_notify_server aborts if the watched dir is missing).
+mkdir -p /tmp/ipc
+
 # --- Native MPP pipeline (PIPELINE=online|offline) --------------------------
 # pipeline.MODE selects the media pipeline: `stock` = the Xiaomi stack (default),
 # `online`/`offline` = the v6 native pipeline (campipe). online is lowest
@@ -280,6 +287,13 @@ if [[ $NATIVE_PIPELINE == "no" ]] && [[ $DISABLE_CLOUD == "no" ]] ; then
         ./cloud &
         ./p2p_tnp &
         if [[ $MODEL_SUFFIX != "yi_dome" ]] ; then
+            # oss hardware-encrypts uploaded media via /dev/cipher and is the only
+            # runtime user of hi_cipher.ko (cloudAPI uses software CyaSSL). Load the
+            # module here: it was removed from the stock app/init.sh unconditional
+            # insmod, which pinned mmz on every boot and made the native pipeline's
+            # load3518e -a fail to reload mmz. The update path loads its own in
+            # base/init.sh; native and stock-without-cloud never need it.
+            insmod /home/base/hi_cipher.ko
             ./oss &
         fi
         ./watch_process &
@@ -308,6 +322,29 @@ if [[ $NATIVE_PIPELINE == "no" ]] && [[ $DISABLE_CLOUD == "yes" ]] ; then
 		sleep 4
         ./cloud &
     )
+fi
+
+# Stock mqueue -> event-bus bridge. ipc2file reads dispatch's motion/AI/sound
+# mqueue and writes the matching /tmp/ipc marker files. It is the single motion
+# source that mqttv4 (inotify) and onvif_notify_server both consume in stock mode,
+# so it must run whenever the stock stack runs - independent of ONVIF. In native
+# mode campipe writes the marker directly and there is no mqueue, so skip it.
+# (pidfile-guarded: the ONVIF block no longer starts it.)
+#
+# ipc2file opens dispatch's mqueue /dev/mqueue/ipc_dispatch_2 with O_RDONLY and no
+# O_CREAT, and exits immediately if it is missing (see ipc2file.c open_queue).
+# Observed: at this point in boot that queue does not exist yet, so an ipc2file
+# started here dies; started once the queue is present, it stays up. Wait for the
+# queue in a background subshell (so the rest of boot is not delayed), then start it.
+if [[ $NATIVE_PIPELINE == "no" ]] ; then
+    (
+        _i=0
+        while [ ! -e /dev/mqueue/ipc_dispatch_2 ] && [ $_i -lt 120 ] ; do
+            sleep 1
+            _i=$((_i + 1))
+        done
+        ipc2file
+    ) &
 fi
 
 if [[ $HTTPD_ENABLED == "yes" ]] ; then
@@ -510,39 +547,41 @@ if [[ $ONVIF_ENABLED == "yes" ]] ; then
     echo "topic=tns1:VideoSource/MotionAlarm" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/motion_alarm" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/motion_alarm" >> $ONVIF_SRVD_CONF
     echo "#Event 1" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/PeopleDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/human_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/human_detection" >> $ONVIF_SRVD_CONF
     echo "#Event 2" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/VehicleDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/vehicle_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/vehicle_detection" >> $ONVIF_SRVD_CONF
     echo "#Event 3" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/DogCatDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/animal_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/animal_detection" >> $ONVIF_SRVD_CONF
     echo "#Event 4" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:RuleEngine/MyRuleDetector/BabyCryingDetect" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/baby_crying" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/baby_crying" >> $ONVIF_SRVD_CONF
     echo "#Event 5" >> $ONVIF_SRVD_CONF
     echo "topic=tns1:AudioAnalytics/Audio/DetectedSound" >> $ONVIF_SRVD_CONF
     echo "source_name=VideoSourceConfigurationToken" >> $ONVIF_SRVD_CONF
     echo "source_value=VideoSourceToken" >> $ONVIF_SRVD_CONF
-    echo "input_file=/tmp/onvif_notify_server/sound_detection" >> $ONVIF_SRVD_CONF
+    echo "input_file=/tmp/ipc/sound_detection" >> $ONVIF_SRVD_CONF
 
     chmod 0600 $ONVIF_SRVD_CONF
     # onvif_simple_server is a CGI: httpd routes /onvif/* to www/onvif/* (shebang ->
     # onvif_simple_server), which reads its default conf /tmp/onvif_simple_server.conf.
     # It is NOT a daemon - the old `onvif_simple_server --conf_file ...` here was a no-op
     # (the binary lives in www/onvif, never on PATH -> command-not-found), so it is removed.
-    ipc2file
+    # ipc2file (the stock mqueue -> /tmp/ipc bridge) is now started unconditionally in
+    # the stock section above, so it is no longer launched here; onvif_notify_server just
+    # watches /tmp/ipc, fed by ipc2file (stock) or campipe (native).
     onvif_notify_server --conf_file $ONVIF_SRVD_CONF
 
     if [[ $ONVIF_WSDD == "yes" ]] ; then
