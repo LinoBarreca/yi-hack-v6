@@ -159,6 +159,12 @@
 #define MIC_OFF 0
 #define MIC_ON  1
 
+/* Local marker-file bus (same /tmp/ipc directory the motion marker uses). The
+ * native pipeline has no stock IPC queue to talk to, so the mic mute is published
+ * here instead: presence of the file = microphone muted. campipe polls it. */
+#define MARKER_DIR      "/tmp/ipc"
+#define MIC_MUTE_MARKER MARKER_DIR "/mic_off"
+
 #define IPC_SOUND_DETECTION_OFF "\x02\x00\x00\x00\x08\x00\x00\x00\x3a\x10\x01\x00\x04\x00\x00\x00\x01\x00\x00\x00"
 #define IPC_SOUND_DETECTION_ON  "\x02\x00\x00\x00\x08\x00\x00\x00\x3a\x10\x01\x00\x04\x00\x00\x00\x02\x00\x00\x00"
 

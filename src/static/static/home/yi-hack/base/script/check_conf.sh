@@ -109,7 +109,8 @@ SWAP_FILE=NO"
 # -----------------------------------------------------------------------------
 PARMS_RECORDING="
 FREE_SPACE=10
-SEGMENT_TIME=60"
+SEGMENT_TIME=60
+STREAM=low"
 
 PARMS_CAMERA="
 SWITCH_ON=yes
@@ -163,7 +164,8 @@ PASSWORD="
 PARMS_RTSP="
 ENABLED=no
 STREAM=high
-AUDIO=no
+AUDIO=aac
+AUDIO_QUALITY=low
 AUDIO_NR_LEVEL=0
 PORT=554
 TIME_OSD=no

@@ -36,7 +36,15 @@ else
 fi
 
 RRTSP_RES=$RTSP_STREAM
-RRTSP_AUDIO=$RTSP_AUDIO
+# Same normalisation system.sh does: this watchdog only ever runs on the STOCK
+# pipeline, where the audio is the AAC h264grabber scrapes out of rmm, so aac is
+# the only codec available (g711 comes from campipe, native mode only). AUDIO is
+# an enum - testing it for "yes" alone would leave the grabber unstarted and the
+# restarted stream silent for the shipped "aac" default.
+case "$RTSP_AUDIO" in
+    yes|aac|g711) RRTSP_AUDIO=aac ;;
+    *)            RRTSP_AUDIO=no ;;
+esac
 RRTSP_MODEL=$MODEL_SUFFIX
 RRTSP_PORT=$PORT
 if [ ! -z $USERNAME ]; then
@@ -66,8 +74,8 @@ restart_grabber()
         h264grabber -r low -m $MODEL_SUFFIX -f &
         h264grabber -r high -m $MODEL_SUFFIX -f &
     fi
-    if [[ $RTSP_AUDIO == "yes" ]]; then
-        h264grabber -r AUDIO -m $MODEL_SUFFIX -f &
+    if [[ $RRTSP_AUDIO == "aac" ]]; then
+        h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT $RRTSP_USER $RRTSP_PWD &
 }

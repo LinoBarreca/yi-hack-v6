@@ -31,6 +31,7 @@ read MODEL_SUFFIX < /home/app/.camver
 # yi-hack environment: single source (farm-first busybox PATH flip, LD_LIBRARY_PATH,
 # TZ, get_config) shared with the login shells (/etc/profile sources it too).
 . /home/yi-hack/base/script/env.sh
+. /home/yi-hack/extra/script/url_helpers.sh   # urlencode (credentialed URLs)
 # base/script appended so helper scripts resolve by name (services only: login
 # shells don't need it, so it stays out of env.sh).
 export PATH=$PATH:/home/yi-hack/base/script
@@ -92,6 +93,19 @@ fi
 /home/yi-hack/base/script/set_defaults.sh
 
 hostname -F /home/yi-hack/config/hostname
+
+# Loopback. Nothing in the stock boot configures it, so 127.0.0.1 has NO address and
+# anything addressing the camera as localhost cannot connect - `ifconfig lo` shows the
+# interface with no "inet addr" line at all (busybox also omits the UP/RUNNING words,
+# so read the address line, not the flags). That silently broke the recorder:
+# record.sh pulls the camera's own stream from rtsp://...@127.0.0.1:554/, so recording
+# wrote nothing at all, video included. The CGI links.sh uses 127.0.0.1 too.
+#
+# Here rather than in base/system_init.sh because both consumers ship in the extra
+# payload and only exist on this branch - nothing in the base/rescue path uses
+# loopback - and this way the fix rides a payload sync instead of a home reflash.
+# Must stay ABOVE the service launches below. Idempotent, one fork.
+ifconfig lo 127.0.0.1 up
 
 # ---- Batch config load ----
 # One builtin pass per file (load_config); the old one-get_config-per-key style
@@ -183,9 +197,15 @@ if [ -n "$HTTPD_USER" ] ; then
     chmod 0600 /tmp/httpd.conf
 fi
 
-# RTSP/ONVIF stream credentials (shared; the ONVIF stream URL embeds them).
+# RTSP/ONVIF stream credentials. The ONVIF stream URL embeds them as
+# user:password@, so they must be percent-encoded - a password with URL-reserved
+# characters (@ : ; $ ...) otherwise corrupts the URL and ONVIF clients (go2rtc,
+# VLC) fail to open the stream. ONVIF_USERPWD stays raw: those are separate
+# user=/password= config fields (used for digest auth), not part of a URL.
 if [ -n "$USERNAME" ] ; then
-    RTSP_USERPWD=$USERNAME:$RTSP_PASSWORD@
+    urlencode "$USERNAME" RTSP_USER_ENC
+    urlencode "$RTSP_PASSWORD" RTSP_PWD_ENC
+    RTSP_USERPWD=$RTSP_USER_ENC:$RTSP_PWD_ENC@
     ONVIF_USERPWD="user=$USERNAME\npassword=$RTSP_PASSWORD"
 fi
 
@@ -255,11 +275,15 @@ elif [ "$PIPELINE_MODE" != "stock" ] ; then
     echo "system.sh: pipeline.MODE=$PIPELINE_MODE requested but native assets/model missing - staying stock"
 fi
 
-# The ntpd daemon runs only with the cloud DISABLED: with the cloud on, the stock
-# 'cloud' daemon already syncs the clock (cloudAPI -c 136) and two writers would
-# fight. With the cloud off, cloudAPI_fake also does a one-shot NTP sync per
-# stock syntime call; this daemon adds continuous discipline on top.
-if [[ $NTPD_ENABLED == "yes" ]] && [[ $DISABLE_CLOUD == "yes" ]] ; then
+# Time sync. Run ntpd when the cloud is DISABLED (with the cloud on, the stock
+# 'cloud' daemon syncs the clock itself - cloudAPI -c 136 - and two writers would
+# fight), OR in native pipeline mode. Native mode never starts the stock cloud
+# stack (cloudAPI_fake / syntime), so its one-shot NTP sync is absent - and with
+# the cloud nominally "on" (DISABLE_CLOUD=no) NOTHING would set the clock, leaving
+# it at 1970 (which breaks ONVIF WS-Security timestamps and dates log/recording
+# files wrongly). There is no writer conflict in native mode since the stock cloud
+# daemon isn't running.
+if [[ $NTPD_ENABLED == "yes" ]] && { [[ $DISABLE_CLOUD == "yes" ]] || [[ $NATIVE_PIPELINE == "yes" ]]; } ; then
     # Wait until all the other processes have been initialized
     sleep 5 && ntpd -p $NTPD_SERVER &
 fi
@@ -431,7 +455,16 @@ esac
 
 RRTSP_MODEL=$MODEL_SUFFIX
 RRTSP_RES=$RTSP_STREAM
-RRTSP_AUDIO=$RTSP_AUDIO
+# Stock-pipeline audio codec. Here the audio does not come from campipe but from
+# h264grabber scraping the AAC that rmm already produces, so AAC is the ONLY codec
+# this path can serve - g711 is encoded by campipe's AENC and exists in native mode
+# only. Map it to aac rather than to silence: the user asked for sound, and the
+# request that cannot be honoured is the codec, not the audio. "yes" is the legacy
+# spelling of "aac" (config files written before the codec became explicit).
+case "$RTSP_AUDIO" in
+    yes|aac|g711) RRTSP_AUDIO=aac ;;
+    *)            RRTSP_AUDIO=no ;;
+esac
 RRTSP_PORT=$RTSP_PORT_RAW
 RRTSP_USER=$USERNAME
 RRTSP_PWD=$RTSP_PASSWORD
@@ -445,7 +478,14 @@ if [[ $RTSP_ENABLED == "yes" ]] ; then
         HIGHWIDTH="1920"
         HIGHHEIGHT="1080"
     fi
-    if [[ $RTSP_AUDIO == "yes" ]]; then
+    # Gate on the NORMALISED codec, not on the raw config value: AUDIO is an enum
+    # (no/aac/g711, plus legacy "yes") since the native pipeline gained a codec
+    # choice, so testing for "yes" alone left the grabber unstarted - and the
+    # stream silent - for everyone whose config says "aac", which is now the
+    # shipped default.
+    if [[ $RRTSP_AUDIO == "aac" ]]; then
+        [[ $RTSP_AUDIO == "g711" ]] && \
+            echo "system.sh: services.rtsp AUDIO=g711 needs the native pipeline - serving aac instead"
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
     if [[ $RTSP_STREAM == "low" ]]; then
@@ -465,11 +505,15 @@ if [[ $RTSP_ENABLED == "yes" ]] ; then
         if [[ $ONVIF_PROFILE_CFG == "high" ]] || [[ $ONVIF_PROFILE_CFG == "both" ]] ; then
             ONVIF_PROFILE_0="name=Profile_0\nwidth=$HIGHWIDTH\nheight=$HIGHHEIGHT\nurl=rtsp://$RTSP_USERPWD%s$D_RTSP_PORT/ch0_0.h264$SNAP_0\ntype=H264"
         fi
-    # In native mode native_pipeline.sh owns rRTSPServer (audio forced off);
-    # don't start a second one here.
+    fi
+    # Outside the per-STREAM branches above: this launch used to sit INSIDE the
+    # "both" one, so with STREAM=high or low nothing here started the server and
+    # the stream only came up when wd_rtsp.sh noticed the missing process on its
+    # next tick - a stream that is simply absent for the first ~10s of every boot.
+    # In native mode native_pipeline.sh owns rRTSPServer (it passes its own audio
+    # settings); don't start a second one here.
     if [[ $NATIVE_PIPELINE == "no" ]] ; then
         rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
-    fi
     fi
     # wd_rtsp reboots the camera when rmm is gone (check_rmm); in native mode rmm
     # is intentionally not running (native_pipeline.sh supervises campipe/rRTSP

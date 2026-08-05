@@ -51,5 +51,9 @@ on/off).
 - **Hearing the camera (mic → Home Assistant):** already works. Enable audio on the
   video stream (RTSP) and Home Assistant / Frigate / go2rtc will carry the sound.
   The **Microphone** switch controls whether the mic is live.
-- **Talking through the camera (your voice → camera speaker):** not available yet.
-  This "push-to-talk" feature is planned for a future update.
+- **Talking through the camera (your voice → camera speaker):** works out of the box on the native video pipeline (Pipeline = online/offline).
+  The stream advertises an ONVIF-style audio backchannel (G.711), which Home Assistant's built-in go2rtc uses to show a microphone / talk button on the camera card — press it and speak, and the sound comes out of the camera speaker.
+  The speaker amplifier is powered only while you are talking, so there is no idle hiss.
+  Requires a model whose speaker hardware is mapped in the firmware (y20 for now); on the stock pipeline this is not available.
+
+  The talk channel is part of the RTSP stream, so it is protected by the stream's own login and nothing else: if you leave the RTSP user and password empty, anyone who can reach the camera can speak through its speaker.

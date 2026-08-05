@@ -32,8 +32,12 @@ src/ipc_cmd/ipc_cmd/ipc2file
 TODO.md
 CAMERA_FIRMWARE_DESIGN.md
 simulated_boot.log
+
+
+src/aoplay/aoplay/aoplay
+src/campipe/campipe/campipe
+src/campipe/campipe/vo-aacenc-*.tar.gz
+src/campipe/campipe/vo-aacenc-*/
 src/hisdk/
 src/hwsnap/hwsnap/hwsnap
 src/snapshot/snapshot/watermark
-src/campipe/campipe/campipe
-src/aoplay/aoplay/aoplay

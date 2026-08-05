@@ -1,10 +1,78 @@
 #!/bin/bash
 
+#
+#  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
+#  Copyright (c) 2026 Lino Barreca.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, version 3.
+#
+#  This program is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# campipe has exactly one external dependency: vo-aacenc, the VisualOn AAC-LC encoder
+# (the SoC has no AAC encoder in silicon and none in the SDK - see the Makefile for the
+# full story). It is fetched HERE rather than from the Makefile, which is where every
+# other tarball in this tree is fetched too (init.jq, init.busybox, init.wpa): the init
+# step owns "make sure the sources are present", the compile step owns "build them", and
+# a build that reaches for the network is a build that fails differently on every
+# machine. scripts/compile.sh runs init before compile on EVERY module build, targeted
+# ones included, so nothing is lost by moving it here.
+
+VERSION=0.1.3
+PACKAGE=vo-aacenc-${VERSION}
+ARCHIVE=${PACKAGE}.tar.gz
+URL=https://downloads.sourceforge.net/project/opencore-amr/vo-aacenc/${ARCHIVE}
+SHA256=e51a7477a359f18df7c4f82d195dab4e14e7414cbd48cf79cc195fc446850f36
+
+# Cross-toolchain, as in compile.campipe: scripts/compile.sh exports it too, but this
+# script has to work when run on its own.
+export PATH=${PATH}:/opt/arm-hisiv300-linux/bin
+CROSS=arm-hisiv300-linux-uclibcgnueabi
+
 SCRIPT_DIR=$(cd `dirname $0` && pwd)
 cd $SCRIPT_DIR
 
 rm -rf ./_install
 
-cd campipe
+cd campipe || exit 1
+
+# Built once and kept: `make clean` (here and in compile.campipe) only removes campipe's
+# own objects, so iterating on campipe.c does not pay minutes to re-configure and rebuild
+# the encoder every time. `make distclean` forces a full refetch.
+if [ ! -f ${PACKAGE}/.libs/libvo-aacenc.a ]; then
+    if [ ! -f ${ARCHIVE} ]; then
+        wget -O ${ARCHIVE} ${URL} || wget --no-check-certificate -O ${ARCHIVE} ${URL} || exit 1
+    fi
+
+    # Integrity comes from the pinned sha256 - which is what makes the
+    # --no-check-certificate fallback above safe, exactly as in init.jq.
+    echo "${SHA256}  ${ARCHIVE}" | sha256sum -c - || \
+        { echo "campipe: sha256 mismatch on ${ARCHIVE}"; exit 1; }
+
+    tar zxf ${ARCHIVE} || exit 1
+
+    # Static only - nothing else on the camera links it.
+    #
+    # NOT --enable-armv5e, despite this core being an ARM926EJ-S (armv5te). Its
+    # hand-written "ARMV5E" assembly violates the ARMv5 multiply operand restriction in
+    # several places - the assembler flags e.g. `smull r11, r7, r11, r11` ("rdhi, rdlo
+    # and rm must all be different") in band_nrg_v5.s and `mul r1, r1, r8` ("Rd and Rm
+    # should be different") in AutoCorrelation_v5.s. Those forms are architecturally
+    # UNPREDICTABLE before ARMv6, i.e. exactly on the CPU we ship to; the code presumably
+    # only ever ran on ARMv7 in Android, where the restriction was lifted. The plain C
+    # paths are still fixed-point, so we give up some speed and no correctness. Revisit
+    # only with a real A/B on hardware.
+    ( cd ${PACKAGE} && \
+        ./configure --host=${CROSS} --disable-shared --enable-static && \
+        make ) || exit 1
+fi
 
 make clean

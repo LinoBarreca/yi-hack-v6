@@ -5,6 +5,7 @@
 CONF_FILE="etc/system.conf"
 
 . /home/yi-hack/base/script/get_config.sh
+. /home/yi-hack/extra/script/url_helpers.sh   # urlencode (credentialed URLs)
 
 read YI_HACK_VER < /home/yi-hack/extra/../version
 read MODEL_SUFFIX < /home/app/.camver
@@ -21,7 +22,12 @@ init_config()
     if [[ x$USER != "x" ]] ; then
         USERNAME=$USER
         ONVIF_USERPWD="user=$USERNAME\npassword=$PASSWORD"
-        RTSP_USERPWD=$USERNAME:$PASSWORD@
+        # Percent-encode the credentials embedded in the ONVIF stream URL (a
+        # password with URL-reserved chars would otherwise corrupt it). Mirrors
+        # system.sh; ONVIF_USERPWD stays raw (separate user=/password= fields).
+        urlencode "$USERNAME" RTSP_USER_ENC
+        urlencode "$PASSWORD" RTSP_PWD_ENC
+        RTSP_USERPWD=$RTSP_USER_ENC:$RTSP_PWD_ENC@
     else
         PASSWORD=""
     fi
@@ -50,7 +56,15 @@ start_rtsp()
 {
 RRTSP_MODEL=$MODEL_SUFFIX
 RRTSP_RES=$STREAM
-RRTSP_AUDIO=$AUDIO
+# Stock-pipeline audio codec, normalised as in system.sh/wd_rtsp.sh: this path
+# serves the AAC h264grabber scrapes out of rmm, so aac is the only codec it can
+# produce (g711 comes from campipe, native mode only). AUDIO is an enum since the
+# codec became explicit - testing it for "yes" alone would leave the grabber
+# unstarted and the stream silent for the shipped "aac" default.
+case "$AUDIO" in
+    yes|aac|g711) RRTSP_AUDIO=aac ;;
+    *)            RRTSP_AUDIO=no ;;
+esac
 RRTSP_PORT=$RTSP_PORT
 RRTSP_USER=$USERNAME
 RRTSP_PWD=$PASSWORD
@@ -58,7 +72,7 @@ RRTSP_PWD=$PASSWORD
 
 # The below section to be also copied to system.sh
     rRTSPServer -r $RRTSP_RES -a $RRTSP_AUDIO -p $RRTSP_PORT -u $RRTSP_USER -w $RRTSP_PWD &
-    if [[ $AUDIO == "yes" ]]; then
+    if [[ $RRTSP_AUDIO == "aac" ]]; then
         h264grabber -r audio -m $MODEL_SUFFIX -f &
     fi
     if [[ $STREAM == "low" ]]; then

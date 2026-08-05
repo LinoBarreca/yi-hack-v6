@@ -45,3 +45,76 @@ diff -Naur onvif_simple_server.ori/wsd_simple_server.c onvif_simple_server/wsd_s
  
  #define RECV_BUFFER_LEN 4096
  
+diff -Naur onvif_simple_server.ori/media_service.c onvif_simple_server/media_service.c
+--- onvif_simple_server.ori/media_service.c
++++ onvif_simple_server/media_service.c
+@@ -26,6 +26,25 @@
+ 
+ extern service_context_t service_ctx;
+ 
++// Substitute the camera address into a stream/snapshot URL template from the
++// config. The template holds a single literal "%s" placeholder for the address.
++// It must NOT be used as a printf format string: the URL embeds the RTSP
++// user:password, which is user-controlled and may legitimately contain '%' (the
++// password is percent-encoded, or contains a literal '%'). Passing it to sprintf
++// makes those '%' sequences act as format directives - corrupting the URL (the
++// symptom: an ONVIF client receiving a mangled URI with the %s unsubstituted) and,
++// because it is a classic format-string bug, risking a crash on a hostile password.
++// Do a plain literal replace of the first "%s" instead.
++static void format_uri(char *dst, size_t dst_size, const char *tmpl, const char *address)
++{
++    const char *p = strstr(tmpl, "%s");
++    if (p == NULL) {
++        snprintf(dst, dst_size, "%s", tmpl);        // no placeholder: copy verbatim
++        return;
++    }
++    snprintf(dst, dst_size, "%.*s%s%s", (int)(p - tmpl), tmpl, address, p + 2);
++}
++
+ int media_get_service_capabilities()
+ {
+     long size = cat(NULL, "media_service_files/GetServiceCapabilities.xml", 0);
+@@ -495,9 +514,7 @@ int media_get_snapshot_uri()
+             return -2;
+         }
+ 
+-        if (sprintf(line, service_ctx.profiles[0].snapurl, address) < 0) {
+-            strcpy(line, service_ctx.profiles[0].snapurl);
+-        }
++        format_uri(line, sizeof(line), service_ctx.profiles[0].snapurl, address);
+         // Escape html chars
+         html_escape(line, MAX_LEN);
+ 
+@@ -518,9 +535,7 @@ int media_get_snapshot_uri()
+             return -2;
+         }
+ 
+-        if (sprintf(line, service_ctx.profiles[1].snapurl, address) < 0) {
+-            strcpy(line, service_ctx.profiles[1].snapurl);
+-        }
++        format_uri(line, sizeof(line), service_ctx.profiles[1].snapurl, address);
+         // Escape html chars
+         html_escape(line, MAX_LEN);
+ 
+@@ -563,9 +578,7 @@ int media_get_stream_uri()
+             return -2;
+         }
+ 
+-        if (sprintf(line, service_ctx.profiles[0].url, address) < 0) {
+-            strcpy(line, service_ctx.profiles[0].url);
+-        }
++        format_uri(line, sizeof(line), service_ctx.profiles[0].url, address);
+         // Escape html chars
+         html_escape(line, MAX_LEN);
+ 
+@@ -586,9 +599,7 @@ int media_get_stream_uri()
+             return -2;
+         }
+ 
+-        if (sprintf(line, service_ctx.profiles[1].url, address) < 0) {
+-            strcpy(line, service_ctx.profiles[1].url);
+-        }
++        format_uri(line, sizeof(line), service_ctx.profiles[1].url, address);
+         // Escape html chars
+         html_escape(line, MAX_LEN);
+ 

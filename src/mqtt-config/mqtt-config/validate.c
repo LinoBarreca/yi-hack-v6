@@ -1,6 +1,6 @@
 #include "validate.h"
 
-char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
+char *config_params[][PARAM_OPTIONS] = {
     /* system - generic settings (section = config/system.conf) */
     { "system", "DISABLE_CLOUD", "bool", "", "", "" , "", "", "" },
     { "system", "REC_WITHOUT_CLOUD", "bool", "", "", "" , "", "", "" },
@@ -11,6 +11,8 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
     /* recording - retention (section = config/recording.conf) */
     { "recording", "FREE_SPACE", "int", "0", "100", "" , "", "", "" },
     { "recording", "SEGMENT_TIME", "int", "1", "3600", "" , "", "", "" },
+    /* Which stream to record; high needs swap (see record.sh). */
+    { "recording", "STREAM", "enum", "high", "low", "" , "", "", "" },
 
     /* snapshot (section = config/services/snapshot.conf) */
     { "services/snapshot", "ENABLED", "bool", "", "", "" , "", "", "" },
@@ -26,8 +28,11 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
     /* rtsp - credentials shared with onvif (section = config/services/rtsp.conf) */
     { "services/rtsp", "ENABLED", "bool", "", "", "" , "", "", "" },
     { "services/rtsp", "STREAM", "enum", "high", "low", "both" , "", "", "" },
-    { "services/rtsp", "AUDIO", "enum", "no", "pcm", "alaw", "ulaw", "aac", "" },
-    { "services/rtsp", "AUDIO_NR_LEVEL", "int", "0", "30", "" , "", "", "" },
+    { "services/rtsp", "AUDIO", "enum", "no", "aac", "g711" , "", "", "" },
+    { "services/rtsp", "AUDIO_QUALITY", "enum", "low", "high", "" , "", "", "" },
+    /* Upper bound is the VQE ANR intensity range the hardware accepts ([0,25],
+     * hi_comm_aio.h AUDIO_ANR_CONFIG_S) - campipe clamps to the same. */
+    { "services/rtsp", "AUDIO_NR_LEVEL", "int", "0", "25", "" , "", "", "" },
     { "services/rtsp", "PORT", "int", "1", "65535", "" , "", "", "" },
     { "services/rtsp", "TIME_OSD", "bool", "", "", "" , "", "", "" },
     { "services/rtsp", "USER", "string", "", "", "" , "", "", "" },
@@ -94,6 +99,10 @@ char *config_params[PARAM_NUM][PARAM_OPTIONS] = {
     { "ptz", "REMOVE_PRESET", "int", "0", "7", "", "", "", "/home/yi-hack/script/ptz_presets.sh -a del_preset -n %s" },
 };
 
+/* Always in step with the table above - adding a row can no longer desynchronise
+ * a count that lives somewhere else. */
+const int config_params_num = (int)(sizeof(config_params) / sizeof(config_params[0]));
+
 int validate_param(char *file, char *key, char *value)
 {
     int i, j;
@@ -102,12 +111,15 @@ int validate_param(char *file, char *key, char *value)
     int errno;
     char *endptr;
 
-    for (i = 0; i < PARAM_NUM; i++) {
-        if (strcasecmp(key, config_params[i][1]) == 0) {
-            if (strcasecmp(file, config_params[i][0]) != 0) {
-                validate = 0;
-                break;
-            }
+    /* Look up on the (section, key) PAIR. The key alone does not identify a row:
+     * ENABLED, PORT, USER, PASSWORD and STREAM each appear in several sections.
+     * Matching on the key and then rejecting a section mismatch meant only the
+     * FIRST row carrying a given key was ever reachable - e.g. services/snapshot
+     * ENABLED shadowed services/rtsp ENABLED, and recording STREAM shadows
+     * services/rtsp STREAM - so those settings could not be changed over MQTT. */
+    for (i = 0; i < config_params_num; i++) {
+        if ((strcasecmp(key, config_params[i][1]) == 0) &&
+                (strcasecmp(file, config_params[i][0]) == 0)) {
             if (strcasecmp("bool", config_params[i][2]) == 0) {
                 if ((strcmp(value, "yes") == 0) || (strcmp(value, "no") == 0)) {
                     validate = 1;
@@ -192,11 +204,10 @@ int extract_param(char *param, char *file, char *key, int index)
     int i;
     int ret = -1;
 
-    for (i = 0; i < PARAM_NUM; i++) {
-        if (strcasecmp(key, config_params[i][1]) == 0) {
-            if (strcasecmp(file, config_params[i][0]) != 0) {
-                break;
-            }
+    /* (section, key) pair, for the same reason as validate_param above. */
+    for (i = 0; i < config_params_num; i++) {
+        if ((strcasecmp(key, config_params[i][1]) == 0) &&
+                (strcasecmp(file, config_params[i][0]) == 0)) {
             strcpy(param, config_params[i][index]);
             ret = 0;
             break;

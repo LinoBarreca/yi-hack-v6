@@ -14,8 +14,9 @@
  *
  * Stage A is video & lens distortion correction only
  * Stage B is IVE motion detection (MD) and audio out (AO) in PTT mode
- * Stage C is audio in (AI/AENC) and day/night actuation
- 
+ * Stage C is audio in (AI + AAC)
+ * Stage D day/night actuation, led on/off, and other board-specific GPIOs
+
  * Motion detection (IVE) lives here now (see md_thread): when CAMPIPE_MD=on a
  * hardware IVE motion detector runs on a dedicated downscaled VPSS channel and
  * signals start/stop by creating/removing the marker file /tmp/ipc/motion_alarm,
@@ -46,6 +47,8 @@
 #include "hi_ive.h"
 #include "ivs_md.h"
 #include "acodec.h"
+#include "voAAC.h"
+#include "cmnMemory.h"
 
 /* ---- pipeline geometry (matches the stock y20 layout) ------------------- */
 #define VPSS_GRP        0
@@ -74,6 +77,12 @@
 #define IPC_DIR       "/tmp/ipc"
 #define MOTION_MARKER IPC_DIR "/motion_alarm"
 
+/* Inbound control on the same marker-file bus: presence of this file means the
+ * microphone is muted (camera.MIC=no). `ipc_cmd -I` maintains it, so the web UI
+ * and the MQTT cmnd/ path both reach us with no changes of their own - in stock
+ * mode the same ipc_cmd invocation talks to rmm's message queue instead. */
+#define MIC_MUTE_MARKER IPC_DIR "/mic_off"
+
 /* Audio out (speaker): campipe plays PCM (8kHz/16-bit/mono, signed LE) written to
  * this FIFO through AO. The speaker-amp enable + DAC level are board-specific and
  * come from the per-model audio_hw.conf table via env (CAMPIPE_AMP_ON/_OFF /
@@ -83,6 +92,45 @@
 #define AO_CHN      0
 #define AO_PTNUM    320          /* samples per frame (40 ms @ 8 kHz) */
 #define FIFO_AUDIO  "/tmp/audio_out_fifo"
+#define BACKCHANNEL_RATE 8000    /* rRTSPServer decodes G.711 -> 8kHz PCM, always */
+
+/* Audio in (microphone): AI -> VQE -> AAC-LC -> ADTS frames on this FIFO, which is
+ * exactly what rRTSPServer's ADTSAudioFifoSource reads (same contract h264grabber
+ * honoured when it scraped rmm's AAC out of /tmp/view). Enabled by CAMPIPE_AUDIO.
+ *
+ * There is no AAC encoder in this SoC or its SDK - libmpi exports
+ * HI_MPI_AENC_VoiceInit (G711/G726/ADPCM/LPCM) and no AacInit, and mpp/lib ships no
+ * AAC library. Stock does exactly what we do here: link a software AAC-LC encoder
+ * into the pipeline process (rmm carries a HiSilicon FDK-AAC build). We use
+ * vo-aacenc, which is fixed-point (this core has no FPU) and emits ADTS directly.
+ *
+ * AI_PTNUM is the AI capture frame AND the VQE frame length; AAC-LC consumes 1024
+ * samples per frame, so the two do not divide evenly and ai_thread re-blocks
+ * capture frames into encoder frames. Going the other way (AI at 1024 to feed the
+ * encoder directly) would put the VQE frame length outside the 80..480 range the
+ * voice engine is tuned for, so re-blocking is the right side to absorb it. */
+#define AI_DEV      0
+#define AI_CHN      0
+#define AENC_CHN    0
+#define AI_PTNUM    320          /* AI + VQE frame: 40 ms @ 8 kHz, 20 ms @ 16 kHz */
+#define AAC_FRAME   1024         /* AAC-LC granule length, fixed by the format    */
+#define AAC_MAX_ADTS 1536        /* one mono ADTS frame is a few hundred bytes    */
+#define FIFO_AAC    "/tmp/aac_audio_fifo"
+#define FIFO_G711   "/tmp/g711_audio_fifo"
+
+/* Forward audio codec, from CAMPIPE_AUDIO. G.711 is the cheap alternative: the
+ * SDK encodes it natively (HI_MPI_AENC_VoiceInit registers it), so AENC can be
+ * bound straight to AI and we never touch a sample - versus AAC, where we own the
+ * encoder. It costs bandwidth (64 kbit/s constant) and is 8 kHz only, but it is
+ * essentially free in CPU and every RTSP client understands it without any
+ * out-of-band setup. */
+typedef enum { AUD_OFF = 0, AUD_AAC, AUD_G711 } aud_codec_t;
+
+/* The inner audio codec has ONE I2S clock for both ADC and DAC (CfgAcodec issues a
+ * single ACODEC_SET_I2S1_FS), so AI and AO necessarily run at the same rate. The
+ * mic side picks it (CAMPIPE_AUDIO_RATE, from config AUDIO_QUALITY); the speaker
+ * side adapts, because its input is always 8kHz G.711 - see ao_thread's resampler. */
+static AUDIO_SAMPLE_RATE_E g_audio_rate = AUDIO_SAMPLE_RATE_8000;
 
 /* The y20 sensor is a SOI JXF22 (1080p25, DVP 10-bit, i2c 0x80/8-bit regs) —
  * identified by letting stock rmm probe it (it dlopens libsns_f22.so). The SDK
@@ -667,6 +715,51 @@ static void apply_reg_list(const char *list)
     }
 }
 
+/* Mic mute, at the codec ADC - the exact mirror of the DAC mute below, and the
+ * same layer the speaker uses. Muting here (rather than dropping frames) keeps AI
+ * delivering frames and the AAC track flowing with silence in it: an RTSP audio
+ * track that simply stopped producing data would stall clients instead of going
+ * quiet. */
+static void acodec_mic_mute(int mute)
+{
+    unsigned int on = mute ? 1 : 0;
+    int fd = open("/dev/acodec", O_RDWR);
+    if (fd < 0) { SAMPLE_PRT("AI: open /dev/acodec failed\n"); return; }
+    ioctl(fd, ACODEC_SET_MICL_MUTE, &on);
+    ioctl(fd, ACODEC_SET_MICR_MUTE, &on);
+    close(fd);
+}
+
+/* Microphone input gain. The SDK's SAMPLE_INNER_CODEC_CfgAudio leaves this call
+ * disabled behind an `if (0)` whose comment reads "should be 1 when micin" - it
+ * configures the codec for a LINE input and says outright that the input volume
+ * must be set when the source is a mic, which on this board it is. Skipping it
+ * leaves the codec on its
+ * default gain, and acodec.h explains why that is ruinous: the input range is
+ * [-87,+86] but "the recommended volume range is [+10, +56]. Within this range the
+ * noises are lowest because ONLY THE ANALOG GAIN is adjusted" - outside it the part
+ * adds digital gain, which lifts the noise floor together with the signal.
+ * Measured on hardware with it unset: RMS -15.9dB against an RMS trough of -22dB,
+ * i.e. barely 6dB between speech and the noise floor - audibly "static with a faint
+ * voice under it". Clamped to the analog-only window for that reason. */
+static void acodec_mic_input(int gain)
+{
+    int fd = open("/dev/acodec", O_RDWR);
+    unsigned int mixer = ACODEC_MIXER_IN;
+
+    if (gain < 10) gain = 10;
+    if (gain > 56) gain = 56;
+    if (fd < 0) { SAMPLE_PRT("AI: open /dev/acodec failed\n"); return; }
+    /* Keep the SDK's single-ended input selection; only the gain was missing. */
+    if (ioctl(fd, ACODEC_SET_MIXER_MIC, &mixer) != 0)
+        SAMPLE_PRT("AI: ACODEC_SET_MIXER_MIC failed: %s\n", strerror(errno));
+    if (ioctl(fd, ACODEC_SET_INPUT_VOL, &gain) != 0)
+        SAMPLE_PRT("AI: ACODEC_SET_INPUT_VOL(%d) failed: %s\n", gain, strerror(errno));
+    else
+        SAMPLE_PRT("AI: mic input gain = %d (analog-only range)\n", gain);
+    close(fd);
+}
+
 /* CfgAcodec sets only the mic/input path; unmute the DAC output + set its volume
  * (acodec vol_ctrl is inverted: 0x00 loudest .. 0x7F mute). */
 static void acodec_dac_output(unsigned int dac_vol)
@@ -683,12 +776,20 @@ static void acodec_dac_output(unsigned int dac_vol)
     close(fd);
 }
 
-/* Bring up inner codec + AO + speaker amp, then play PCM (8kHz/16-bit/mono, signed
- * LE) received on FIFO_AUDIO until g_stop. The amp enable/disable + DAC level come
- * from the per-model table (env); this thread is only started when CAMPIPE_AMP_ON
- * is set. */
+/* Bring up AO + speaker amp, then play PCM (8kHz/16-bit/mono, signed LE) received
+ * on FIFO_AUDIO until g_stop. The amp enable/disable + DAC level come from the
+ * per-model table (env); this thread is only started when CAMPIPE_AMP_ON is set.
+ * The inner codec itself is configured once in main (shared with AI).
+ *
+ * The frames we play are always 8kHz - they come from rRTSPServer decoding the
+ * client's G.711 backchannel. When the mic side has pushed the codec to 16kHz we
+ * therefore run the AO channel's resampler (8kHz in -> device rate out) instead of
+ * playing them at double speed, and widen the device frame so one 40ms input frame
+ * still fits one device frame after upsampling. */
 static void *ao_thread(void *arg)
 {
+    const int rate_mult = (int)g_audio_rate / BACKCHANNEL_RATE;  /* 1 at 8k, 2 at 16k */
+    const HI_BOOL resample = (g_audio_rate != AUDIO_SAMPLE_RATE_8000) ? HI_TRUE : HI_FALSE;
     AIO_ATTR_S aio;
     AUDIO_FRAME_S frm;
     AUDIO_FADE_S fade;
@@ -702,25 +803,22 @@ static void *ao_thread(void *arg)
     int fifo_fd = -1;
     int amp = 0;                         /* current speaker-amp state */
     int idle_ticks = 0;
+    int fill = 0;                        /* bytes of the frame assembled so far */
     HI_S32 ret;
     (void)arg;
 
     memset(&aio, 0, sizeof(aio));
-    aio.enSamplerate   = AUDIO_SAMPLE_RATE_8000;
+    aio.enSamplerate   = g_audio_rate;
     aio.enBitwidth     = AUDIO_BIT_WIDTH_16;
     aio.enWorkmode     = AIO_MODE_I2S_MASTER;
     aio.enSoundmode    = AUDIO_SOUND_MODE_MONO;
     aio.u32FrmNum      = 30;
-    aio.u32PtNumPerFrm = AO_PTNUM;
+    aio.u32PtNumPerFrm = AO_PTNUM * rate_mult;
     aio.u32ChnCnt      = 1;
     aio.u32ClkSel      = 0;
 
-    if ((ret = SAMPLE_COMM_AUDIO_CfgAcodec(&aio)) != HI_SUCCESS) {
-        SAMPLE_PRT("AO: CfgAcodec failed %#x — audio out off\n", ret);
-        return NULL;
-    }
     if ((ret = SAMPLE_COMM_AUDIO_StartAo(AO_DEV, 1, &aio, AUDIO_SAMPLE_RATE_8000,
-                                         HI_FALSE, NULL, 0)) != HI_SUCCESS) {
+                                         resample, NULL, 0)) != HI_SUCCESS) {
         SAMPLE_PRT("AO: StartAo failed %#x — audio out off\n", ret);
         return NULL;
     }
@@ -742,7 +840,13 @@ static void *ao_thread(void *arg)
     frm.enSoundmode   = AUDIO_SOUND_MODE_MONO;
     frm.pVirAddr[0]   = vir;
     frm.u32PhyAddr[0] = phy;
-    frm.u32Len        = AO_PTNUM;
+    /* BYTES, not samples. The header only says "data lenth per channel in frame",
+     * but HI_MPI_AO_SendFrame in libmpi does `points = u32Len >> enBitwidth` and
+     * range-checks points against MAX_AO_POINT_NUM (4096) - so for 16-bit it
+     * divides by 2. Passing the sample count here made AO play the first half of
+     * every frame and silently drop the rest (160 of 320 samples), which still
+     * passes the range check and so produced no error anywhere. */
+    frm.u32Len        = bufbytes;
 
     unlink(FIFO_AUDIO);
     if (mkfifo(FIFO_AUDIO, 0666) < 0 && errno != EEXIST)
@@ -760,7 +864,8 @@ static void *ao_thread(void *arg)
         goto out_ao;
     }
 
-    SAMPLE_PRT("AO: speaker up (8kHz/16/mono, dac=0x%x); playing from %s\n",
+    SAMPLE_PRT("AO: speaker up (%dHz/16/mono%s, dac=0x%x); playing from %s\n",
+               (int)g_audio_rate, resample ? ", resampling 8kHz in" : "",
                dac_vol, FIFO_AUDIO);
 
     /* Play PCM frames as they arrive on the FIFO. poll (not a blocking read) keeps
@@ -781,20 +886,49 @@ static void *ao_thread(void *arg)
         ssize_t n;
         int got_data = 0;
 
+        /* Accumulate into a whole frame before sending, rather than padding a short
+         * read out with silence. A pipe read returns whatever happens to be there,
+         * and the real writer here is rRTSPServer, which decodes one 20ms G.711
+         * packet at a time: 320 bytes of PCM against this 640-byte frame. Padding
+         * that would have made HALF of every backchannel frame silence, and an
+         * odd-length read would shift every following 16-bit sample by one byte -
+         * which is heard as static, not as a dropout. (A fast writer like `cat`
+         * mostly returns full reads, which is why a 30s tone played clean and hid
+         * this.) */
         if (poll(&pfd, 1, 200) > 0 && (pfd.revents & POLLIN)) {
-            n = read(fifo_fd, vir, bufbytes);
+            n = read(fifo_fd, (char *)vir + fill, bufbytes - fill);
             if (n > 0) {
                 got_data = 1;
+                fill += (int)n;
                 if (!amp) { apply_reg_list(amp_on); amp = 1; }
-                if ((size_t)n < bufbytes)
-                    memset((char *)vir + n, 0, bufbytes - n);
-                HI_MPI_AO_SendFrame(AO_DEV, AO_CHN, &frm, 1000);
+                if (fill == (int)bufbytes) {
+                    HI_MPI_AO_SendFrame(AO_DEV, AO_CHN, &frm, 1000);
+                    fill = 0;
+                }
             }
         }
 
         if (got_data) {
             idle_ticks = 0;
         } else if (amp) {
+            /* Talker stopped mid-frame: flush what we have so the tail is not lost,
+             * but keep any odd trailing byte - it is the first half of a sample
+             * whose second half simply has not arrived yet, and dropping it would
+             * misalign everything that follows. */
+            if (fill >= 2) {
+                int keep = fill & 1;
+                /* Save the odd byte BEFORE padding: the memset below starts at
+                 * fill - keep, which is exactly where that byte sits, so reading
+                 * it back after the memset would only ever recover a zero. */
+                char tail = keep ? ((char *)vir)[fill - 1] : 0;
+                memset((char *)vir + (fill - keep), 0, bufbytes - (fill - keep));
+                HI_MPI_AO_SendFrame(AO_DEV, AO_CHN, &frm, 1000);
+                if (keep)
+                    ((char *)vir)[0] = tail;
+                fill = keep;
+                idle_ticks = 0;
+                continue;
+            }
             AO_CHN_STATE_S st;
             if (HI_MPI_AO_QueryChnStat(AO_DEV, AO_CHN, &st) == HI_SUCCESS &&
                 st.u32ChnBusyNum == 0) {
@@ -813,8 +947,418 @@ static void *ao_thread(void *arg)
     HI_MPI_SYS_MmzFree(phy, vir);
 out_ao:
     if (amp) apply_reg_list(amp_off);    /* disable speaker amp if still on */
-    SAMPLE_COMM_AUDIO_StopAo(AO_DEV, 1, HI_FALSE, HI_FALSE);
+    SAMPLE_COMM_AUDIO_StopAo(AO_DEV, 1, resample, HI_FALSE);
     HI_MPI_AO_Disable(AO_DEV);
+    return NULL;
+}
+
+/* ---- Audio in (microphone) ---------------------------------------------- */
+/* AAC-LC encoder handle. Thin wrapper over the vo-aacenc codec API so the encoder
+ * behind it is a contained swap (the same 3 entry points HiSilicon's own
+ * AENC_ENCODER_S vtable wants: open, encode a frame, close). */
+typedef struct {
+    VO_AUDIO_CODECAPI api;
+    VO_HANDLE handle;
+} aac_enc_t;
+
+/* The encoder keeps this pointer for the lifetime of the handle, so it must not
+ * live on a stack frame that goes away. */
+static VO_MEM_OPERATOR g_aac_mem;
+
+static int aac_open(aac_enc_t *e, int rate, int bitrate)
+{
+    VO_CODEC_INIT_USERDATA ud;
+    AACENC_PARAM p;
+
+    memset(e, 0, sizeof(*e));
+    if (voGetAACEncAPI(&e->api) != VO_ERR_NONE) {
+        SAMPLE_PRT("AI: voGetAACEncAPI failed\n");
+        return -1;
+    }
+    g_aac_mem.Alloc = cmnMemAlloc;
+    g_aac_mem.Copy  = cmnMemCopy;
+    g_aac_mem.Free  = cmnMemFree;
+    g_aac_mem.Set   = cmnMemSet;
+    g_aac_mem.Check = cmnMemCheck;
+    memset(&ud, 0, sizeof(ud));
+    ud.memflag = VO_IMF_USERMEMOPERATOR;
+    ud.memData = &g_aac_mem;
+    if (e->api.Init(&e->handle, VO_AUDIO_CodingAAC, &ud) != VO_ERR_NONE) {
+        SAMPLE_PRT("AI: AAC encoder init failed\n");
+        return -1;
+    }
+
+    memset(&p, 0, sizeof(p));
+    p.sampleRate = rate;
+    p.bitRate    = bitrate;
+    p.nChannels  = 1;
+    p.adtsUsed   = 1;            /* emit ADTS framing, which is what the FIFO carries */
+    if (e->api.SetParam(e->handle, VO_PID_AAC_ENCPARAM, &p) != VO_ERR_NONE) {
+        SAMPLE_PRT("AI: AAC SetParam(%dHz %dbps mono) failed\n", rate, bitrate);
+        e->api.Uninit(e->handle);
+        e->handle = 0;
+        return -1;
+    }
+    return 0;
+}
+
+/* Encode one 1024-sample mono frame; returns the ADTS frame length, or 0. */
+static int aac_encode(aac_enc_t *e, const HI_S16 *pcm, HI_U8 *out, int outsz)
+{
+    VO_CODECBUFFER in, ob;
+    VO_AUDIO_OUTPUTINFO info;
+
+    memset(&in, 0, sizeof(in));
+    memset(&ob, 0, sizeof(ob));
+    memset(&info, 0, sizeof(info));
+    in.Buffer = (VO_PBYTE)pcm;
+    in.Length = AAC_FRAME * 2;
+    if (e->api.SetInputData(e->handle, &in) != VO_ERR_NONE)
+        return 0;
+    ob.Buffer = out;
+    ob.Length = outsz;
+    if (e->api.GetOutputData(e->handle, &ob, &info) != VO_ERR_NONE)
+        return 0;
+    return (int)ob.Length;
+}
+
+static void aac_close(aac_enc_t *e)
+{
+    if (e->handle) {
+        e->api.Uninit(e->handle);
+        e->handle = 0;
+    }
+}
+
+/* Noise reduction: config AUDIO_NR_LEVEL (0 = off) maps straight onto the VQE
+ * ANR intensity, whose hardware range is [0,25] per hi_comm_aio.h. Level 0 skips
+ * VQE bring-up entirely rather than enabling it with everything switched off. */
+static void ai_vqe_config(AI_VQE_CONFIG_S *v, int rate, int nr_level)
+{
+    memset(v, 0, sizeof(*v));
+    v->s32WorkSampleRate = rate;
+    v->s32FrameSample    = AI_PTNUM;
+    v->enWorkstate       = VQE_WORKSTATE_COMMON;
+    v->bAnrOpen          = HI_TRUE;
+    v->stAnrCfg.bUsrMode       = HI_TRUE;
+    v->stAnrCfg.s16NrIntensity = (HI_S16)nr_level;
+    v->stAnrCfg.s16NoiseDbThr  = 45;      /* stock app/audio_config uses 45 */
+    v->stAnrCfg.s8SpProSwitch  = 0;
+    /* High-pass at 150Hz kills mains hum and wind rumble on these mics; stock
+     * enables the same filter at the same corner (audio_config stHpfCfg). */
+    v->bHpfOpen          = HI_TRUE;
+    v->stHpfCfg.bUsrMode = HI_TRUE;
+    v->stHpfCfg.enHpfFreq = AUDIO_HPF_FREQ_150;
+    /* AEC stays off: it needs the AO reference and only matters for full-duplex
+     * intercom, which is a separate piece of work. AGC off too - it pumps on a
+     * fixed-gain surveillance mic and stock drives it from its own tuning table. */
+    v->bAecOpen = HI_FALSE;
+    v->bAgcOpen = HI_FALSE;
+    v->bRnrOpen = HI_FALSE;
+    v->bEqOpen  = HI_FALSE;
+    v->bHdrOpen = HI_FALSE;
+}
+
+/* Mic mute follows the marker file, checked once every `period` captured frames.
+ * Polled rather than watched with inotify: one access() on tmpfs is far cheaper
+ * than another thread and an fd, and a mute has no latency requirement. */
+static void mic_mute_tick(int *muted, int *countdown, int period)
+{
+    int want;
+
+    if (--(*countdown) > 0)
+        return;
+    *countdown = period;
+    want = (access(MIC_MUTE_MARKER, F_OK) == 0);
+    if (want != *muted) {
+        acodec_mic_mute(want);
+        *muted = want;
+        SAMPLE_PRT("AI: microphone %s\n", want ? "MUTED" : "live");
+    }
+}
+
+/* Open (or reopen) the codec's FIFO for writing. ENXIO until rRTSPServer attaches
+ * as reader, which is normal and not worth logging. */
+static int audio_fifo_open(const char *path)
+{
+    int fd = open(path, O_WRONLY | O_NONBLOCK);
+    if (fd >= 0)
+        fcntl(fd, F_SETPIPE_SZ, 32 * 1024);
+    return fd;
+}
+
+/* One encoded audio frame -> FIFO, or dropped.
+ *
+ * Always one write per frame, never a partial one. Both an ADTS frame and a
+ * 40 ms G.711 frame are far below PIPE_BUF, so a non-blocking pipe write either
+ * takes the whole frame or takes nothing and returns EAGAIN - which is what makes
+ * "drop it" safe. Retrying a partial write instead would risk stalling the audio
+ * drain behind a slow reader, and giving up mid-frame would splice a truncated
+ * frame into the stream. */
+static void audio_fifo_write(int *fd, const void *buf, int len)
+{
+    ssize_t w;
+
+    if (len <= 0 || *fd < 0)
+        return;
+    w = write(*fd, buf, (size_t)len);
+    if (w < 0 && errno != EAGAIN) {
+        close(*fd);          /* reader gone: wait for a new one */
+        *fd = -1;
+    }
+}
+
+/* G.711 capture loop. Nothing here touches a sample: AENC is bound straight to AI
+ * and the SDK's own encoder (the one HI_MPI_AENC_VoiceInit registers) does the
+ * companding, so this is just a pump from the AENC channel to the FIFO. */
+static void ai_loop_g711(int mute_period)
+{
+    AUDIO_STREAM_S stream;
+    int fifo_fd = -1, aenc_fd;
+    int muted = -1, mute_countdown = 1;   /* -1: force the first state to apply */
+    int bound = 0;
+
+    /* A-law, and rRTSPServer must advertise PCMA to match - VERIFIED ON HARDWARE
+     * (y20, 2026-07-30) from the wire bytes themselves: their histogram is dominated
+     * by 0x55/0xD5/0x54/0xD4, and A-law XORs its codewords with 0x55 before
+     * transmission, so near-silence lands exactly there (u-law silence would sit
+     * near 0xFF/0x7F). Decoding the same bytes as A-law gives median |x| 72 and 25
+     * full-scale samples/sec; as u-law, 716 and 141/sec - i.e. garbage.
+     *
+     * Beware when testing this: a companding mismatch does NOT sound like silence
+     * or like a dropout, it sounds like a loud engine idling under the voice,
+     * because the wrong curve is still perfectly decodable audio. Judge it by the
+     * byte histogram or by median|x|, not by an acoustic tone measurement - a tone
+     * survives the wrong curve well enough to look like a "peak" either way, which
+     * is exactly how an earlier reading of this sent us the wrong direction. */
+    if (SAMPLE_COMM_AUDIO_StartAenc(1, AI_PTNUM, PT_G711A) != HI_SUCCESS) {
+        SAMPLE_PRT("AI: StartAenc(G711) failed — audio in off\n");
+        return;
+    }
+    if (SAMPLE_COMM_AUDIO_AencBindAi(AI_DEV, AI_CHN, AENC_CHN) != HI_SUCCESS) {
+        SAMPLE_PRT("AI: AencBindAi failed — audio in off\n");
+        goto out_aenc;
+    }
+    bound = 1;
+
+    aenc_fd = HI_MPI_AENC_GetFd(AENC_CHN);
+    if (aenc_fd < 0) {
+        SAMPLE_PRT("AI: AENC_GetFd failed %#x — audio in off\n", aenc_fd);
+        goto out_aenc;
+    }
+
+    unlink(FIFO_G711);
+    if (mkfifo(FIFO_G711, 0666) < 0 && errno != EEXIST)
+        SAMPLE_PRT("AI: mkfifo %s failed: %s\n", FIFO_G711, strerror(errno));
+
+    SAMPLE_PRT("AI: mic up (8000Hz/16/mono, G.711 A-law); writing %s\n", FIFO_G711);
+
+    while (!g_stop) {
+        fd_set fds;
+        struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
+
+        if (fifo_fd < 0)
+            fifo_fd = audio_fifo_open(FIFO_G711);
+
+        mic_mute_tick(&muted, &mute_countdown, mute_period);
+
+        FD_ZERO(&fds);
+        FD_SET(aenc_fd, &fds);
+        if (select(aenc_fd + 1, &fds, NULL, NULL, &tv) <= 0)
+            continue;
+
+        memset(&stream, 0, sizeof(stream));
+        if (HI_MPI_AENC_GetStream(AENC_CHN, &stream, HI_FALSE) != HI_SUCCESS)
+            continue;
+
+        /* AENC returns a 4-byte HEADER in front of the G.711 payload, and counts
+         * it in u32Len: for AI_PTNUM=320 samples the frame is 324 bytes, the first
+         * four being a constant 00 01 A0 00 (0xA0 = 160 = the payload length in
+         * 16-bit words). Writing the whole buffer put those 4 bytes into the audio
+         * as four garbage samples once per frame - 25 clicks per second at 8kHz,
+         * heard as a small engine idling under the voice. Diagnosed from the wire:
+         * impulse bursts spaced exactly 324 samples apart, all 500 frames carrying
+         * the same 4 bytes at the same phase.
+         *
+         * Derive the header size instead of hardcoding 4, so a different frame
+         * length cannot silently reintroduce the clicks. */
+        {
+            HI_U32 payload = (HI_U32)AI_PTNUM;      /* G.711: 1 byte per sample */
+            HI_U32 hdr = stream.u32Len > payload ? stream.u32Len - payload : 0;
+            static int logged;
+            if (!logged) {
+                logged = 1;
+                SAMPLE_PRT("AI: AENC frame u32Len=%u (payload %u, header %u): "
+                           "%02X %02X %02X %02X\n", stream.u32Len, payload, hdr,
+                           stream.pStream[0], stream.pStream[1],
+                           stream.pStream[2], stream.pStream[3]);
+            }
+            audio_fifo_write(&fifo_fd, stream.pStream + hdr,
+                             (int)(stream.u32Len - hdr));
+        }
+        HI_MPI_AENC_ReleaseStream(AENC_CHN, &stream);
+    }
+
+    if (fifo_fd >= 0)
+        close(fifo_fd);
+out_aenc:
+    if (bound)
+        SAMPLE_COMM_AUDIO_AencUnbindAi(AI_DEV, AI_CHN, AENC_CHN);
+    SAMPLE_COMM_AUDIO_StopAenc(1);
+}
+
+/* Capture the mic, encode AAC-LC, write ADTS frames to FIFO_AAC.
+ *
+ * Draining AI is unconditional: we keep calling GetFrame even with no FIFO reader
+ * attached (and just drop the encoded frame), because letting the AI ring buffer
+ * back up would stall the capture path rather than merely lose audio nobody wants. */
+static void ai_loop_aac(int mute_period)
+{
+    AUDIO_FRAME_S frame;
+    AEC_FRAME_S aec;
+    aac_enc_t enc;
+    HI_S16 pcm[AAC_FRAME];
+    HI_U8 adts[AAC_MAX_ADTS];
+    int fill = 0, fifo_fd = -1, ai_fd;
+    int muted = -1, mute_countdown = 1;   /* -1: force the first state to apply */
+    int rate = (int)g_audio_rate;
+    /* AAC-LC mono: 2-3 bits/sample, plenty for a camera mic and small on the wire.
+     * Both values sit inside vo-aacenc's accepted window (>= 4000 and
+     * <= sampleRate*6 for mono), so neither gets silently rewritten by SetParam. */
+    int bitrate = (rate >= 16000) ? 32000 : 24000;
+
+    /* AI only queues frames for a user-space reader when the channel has a NON-ZERO
+     * user frame depth. With the default 0, HI_MPI_AI_GetFrame never returns a frame
+     * and the channel fd never becomes readable, while the device happily keeps
+     * capturing - verified on hardware: /proc/umap/ai showed the device with
+     * IntCnt climbing but "AI CHN STATUS" Read/Write/UserGet/UserRls all 0 and
+     * UsrFrmDepth 0. (Same idea as HI_MPI_VPSS_SetDepth on the MD channel.)
+     *
+     * Only this path needs it: ai_loop_g711 binds AENC straight to AI, so its
+     * frames never travel through user space. */
+    {
+        AI_CHN_PARAM_S chnp;
+        if (HI_MPI_AI_GetChnParam(AI_DEV, AI_CHN, &chnp) != HI_SUCCESS) {
+            SAMPLE_PRT("AI: GetChnParam failed — audio in off\n");
+            return;
+        }
+        chnp.u32UsrFrmDepth = 30;
+        if (HI_MPI_AI_SetChnParam(AI_DEV, AI_CHN, &chnp) != HI_SUCCESS) {
+            SAMPLE_PRT("AI: SetChnParam(depth=30) failed — audio in off\n");
+            return;
+        }
+    }
+
+    if (aac_open(&enc, rate, bitrate) < 0)
+        return;
+
+    unlink(FIFO_AAC);
+    if (mkfifo(FIFO_AAC, 0666) < 0 && errno != EEXIST)
+        SAMPLE_PRT("AI: mkfifo %s failed: %s\n", FIFO_AAC, strerror(errno));
+
+    ai_fd = HI_MPI_AI_GetFd(AI_DEV, AI_CHN);
+    if (ai_fd < 0) {
+        SAMPLE_PRT("AI: GetFd failed %#x — audio in off\n", ai_fd);
+        goto out_enc;
+    }
+
+    SAMPLE_PRT("AI: mic up (%dHz/16/mono, AAC %dbps); writing %s\n",
+               rate, bitrate, FIFO_AAC);
+
+    while (!g_stop) {
+        fd_set fds;
+        struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
+        const HI_S16 *src;
+        int have;
+
+        if (fifo_fd < 0)
+            fifo_fd = audio_fifo_open(FIFO_AAC);
+
+        mic_mute_tick(&muted, &mute_countdown, mute_period);
+
+        FD_ZERO(&fds);
+        FD_SET(ai_fd, &fds);
+        if (select(ai_fd + 1, &fds, NULL, NULL, &tv) <= 0)
+            continue;
+
+        memset(&frame, 0, sizeof(frame));
+        memset(&aec, 0, sizeof(aec));
+        if (HI_MPI_AI_GetFrame(AI_DEV, AI_CHN, &frame, &aec, HI_FALSE) != HI_SUCCESS)
+            continue;
+
+        /* Re-block the capture frame into 1024-sample encoder frames. u32Len is a
+         * BYTE count (see the note on the AO frame above: libmpi's own
+         * `points = u32Len >> enBitwidth`), so halve it for 16-bit samples. */
+        src  = (const HI_S16 *)frame.pVirAddr[0];
+        have = (int)frame.u32Len / 2;
+        while (have > 0) {
+            int n = AAC_FRAME - fill;
+            if (n > have) n = have;
+            memcpy(pcm + fill, src, (size_t)n * 2);
+            fill += n;
+            src  += n;
+            have -= n;
+            if (fill < AAC_FRAME)
+                break;
+            fill = 0;
+            audio_fifo_write(&fifo_fd, adts,
+                             aac_encode(&enc, pcm, adts, sizeof(adts)));
+        }
+
+        HI_MPI_AI_ReleaseFrame(AI_DEV, AI_CHN, &frame, &aec);
+    }
+
+    if (fifo_fd >= 0)
+        close(fifo_fd);
+out_enc:
+    aac_close(&enc);
+}
+
+/* Bring up AI (shared by both codecs: same capture attrs, same VQE), then run the
+ * codec's own loop. The inner codec is already configured by main. */
+typedef struct { aud_codec_t codec; int nr_level; } ai_cfg_t;
+
+static void *ai_thread(void *arg)
+{
+    ai_cfg_t *cfg = arg;
+    int nr_level = cfg->nr_level;
+    AIO_ATTR_S aio;
+    AI_VQE_CONFIG_S vqe;
+    int rate = (int)g_audio_rate;
+    int mute_period;
+    HI_S32 ret;
+
+    memset(&aio, 0, sizeof(aio));
+    aio.enSamplerate   = g_audio_rate;
+    aio.enBitwidth     = AUDIO_BIT_WIDTH_16;
+    aio.enWorkmode     = AIO_MODE_I2S_MASTER;
+    aio.enSoundmode    = AUDIO_SOUND_MODE_MONO;
+    aio.u32FrmNum      = 30;
+    aio.u32PtNumPerFrm = AI_PTNUM;
+    aio.u32ChnCnt      = 1;
+    aio.u32ClkSel      = 0;
+
+    if (nr_level > 0) {
+        ai_vqe_config(&vqe, rate, nr_level);
+        ret = SAMPLE_COMM_AUDIO_StartAi(AI_DEV, 1, &aio, g_audio_rate, HI_FALSE, &vqe, 1);
+    } else {
+        ret = SAMPLE_COMM_AUDIO_StartAi(AI_DEV, 1, &aio, g_audio_rate, HI_FALSE, NULL, 0);
+    }
+    if (ret != HI_SUCCESS) {
+        SAMPLE_PRT("AI: StartAi failed %#x — audio in off\n", ret);
+        return NULL;
+    }
+
+    /* Check the mute marker about twice a second, expressed in captured frames so
+     * it stays ~500ms at either sample rate. */
+    mute_period = (500 / (AI_PTNUM * 1000 / rate)) + 1;
+
+    if (cfg->codec == AUD_G711)
+        ai_loop_g711(mute_period);
+    else
+        ai_loop_aac(mute_period);
+
+    SAMPLE_COMM_AUDIO_StopAi(AI_DEV, 1, HI_FALSE, nr_level > 0 ? HI_TRUE : HI_FALSE);
     return NULL;
 }
 
@@ -828,7 +1372,7 @@ int main(void)
     SIZE_S sensor_sz;
     PIC_SIZE_E sensor_pic;
     HI_S32 ret;
-    pthread_t th_high, th_low, th_md, th_ao;
+    pthread_t th_high, th_low, th_md, th_ao, th_ai;
     stream_ctx_t ctx_high = { CHN_HIGH, FIFO_HIGH, 512 * 1024 };
     stream_ctx_t ctx_low  = { CHN_LOW,  FIFO_LOW,  128 * 1024 };
     struct { VPSS_CHN chn; HI_U32 w, h; COMPRESS_MODE_E cmp; } vchn[] = {
@@ -852,18 +1396,59 @@ int main(void)
     const char *ao_env = getenv("CAMPIPE_AMP_ON");
     int ao_on = ao_env && *ao_env;
 
+    /* Audio in (mic -> encoded audio on a FIFO) is opt-in via CAMPIPE_AUDIO, which
+     * names the codec: "aac" (or the legacy "yes") or "g711". CAMPIPE_AUDIO_RATE
+     * comes from AUDIO_QUALITY (low=8000, high=16000) and CAMPIPE_AUDIO_NR from
+     * AUDIO_NR_LEVEL. */
+    const char *ai_env = getenv("CAMPIPE_AUDIO");
+    ai_cfg_t ai_cfg = { AUD_OFF, 0 };
+    int ai_on;
+
+    if (ai_env && (!strcmp(ai_env, "g711") || !strcmp(ai_env, "g711u")))
+        ai_cfg.codec = AUD_G711;
+    else if (ai_env && (!strcmp(ai_env, "aac") || !strcmp(ai_env, "yes") ||
+                        !strcmp(ai_env, "on") || !strcmp(ai_env, "1")))
+        ai_cfg.codec = AUD_AAC;
+    ai_on = (ai_cfg.codec != AUD_OFF);
+
+    /* SAMPLE_PRT writes to stdout, which the supervisor redirects to a log FILE -
+     * i.e. fully buffered, so diagnostics sat in a 4KB buffer and never reached the
+     * log of a process that (by design) never exits. Line-buffered instead: this is
+     * a low-rate status channel, and a log you cannot read while the thing runs is
+     * worth nothing. */
+    setvbuf(stdout, NULL, _IOLBF, 0);
+
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
-    SAMPLE_PRT("cfg: VBLK=%s H264HI_KB=%s H264LO_KB=%s JPEGHI_KB=%s JPEGLO_KB=%s LDC=%s MD=%s(%s)\n",
+    /* Mic sample rate + noise reduction. The rate is the whole inner codec's rate
+     * (single I2S clock, shared with AO), so it is decided here, once, before any
+     * audio thread starts. Only 8k and 16k are offered: they are the two rates the
+     * VQE voice engine is specified for AND valid AAC sampling frequencies. */
+    if (ai_on) {
+        const char *e = getenv("CAMPIPE_AUDIO_RATE");
+        /* G.711 is 8kHz by definition (RTP payload types 0/8 are bound to an
+         * 8000Hz clock by RFC 3551), so AUDIO_QUALITY simply does not apply to it
+         * and must not be allowed to drag the shared codec clock to 16kHz. */
+        if (ai_cfg.codec == AUD_AAC && e && atoi(e) >= 16000)
+            g_audio_rate = AUDIO_SAMPLE_RATE_16000;
+        e = getenv("CAMPIPE_AUDIO_NR");
+        if (e && *e) ai_cfg.nr_level = atoi(e);
+        if (ai_cfg.nr_level < 0)  ai_cfg.nr_level = 0;
+        if (ai_cfg.nr_level > 25) ai_cfg.nr_level = 25;  /* VQE ANR range per the SDK */
+    }
+
+    SAMPLE_PRT("cfg: VBLK=%s H264HI_KB=%s H264LO_KB=%s JPEGHI_KB=%s JPEGLO_KB=%s LDC=%s MD=%s(%s) AI=%s(%dHz nr=%d)\n",
                getenv("CAMPIPE_VBLK") ?: "def", getenv("CAMPIPE_H264HI_KB") ?: "def",
                getenv("CAMPIPE_H264LO_KB") ?: "def", getenv("CAMPIPE_JPEGHI_KB") ?: "def",
                getenv("CAMPIPE_JPEGLO_KB") ?: "def", getenv("CAMPIPE_LDC") ?: "0",
-               md_on ? "on" : "off", getenv("CAMPIPE_MD_SENS") ?: "low");
+               md_on ? "on" : "off", getenv("CAMPIPE_MD_SENS") ?: "low",
+               ai_cfg.codec == AUD_G711 ? "g711" : (ai_on ? "aac" : "off"),
+               (int)g_audio_rate, ai_cfg.nr_level);
 
-    if (md_on)
-        mkdir(IPC_DIR, 0755);      /* event-bus dir; onvif_notify_server needs it */
+    if (md_on || ai_on)
+        mkdir(IPC_DIR, 0755);      /* event-bus dir: motion out, mic-mute in */
 
     /* Sensor native size: F22 = 1080p, so VPSS chn0 is a passthrough. */
     sensor_pic = PIC_HD1080;
@@ -978,15 +1563,38 @@ int main(void)
     if (start_jpeg(VENC_JPEG_LOW, VPSS_CHN_SNAP, W_SNAP, H_SNAP) != HI_SUCCESS)
         goto err_vpss;
 
+    /* Inner audio codec: ONE configuration for both directions (it has a single
+     * I2S clock), so do it here rather than in whichever audio thread starts
+     * first. If it fails, both audio directions are off - AI/AO would only produce
+     * silence or garbage against an unconfigured codec. */
+    if (ai_on || ao_on) {
+        AIO_ATTR_S acfg;
+        memset(&acfg, 0, sizeof(acfg));
+        acfg.enSamplerate = g_audio_rate;
+        if ((ret = SAMPLE_COMM_AUDIO_CfgAcodec(&acfg)) != HI_SUCCESS) {
+            SAMPLE_PRT("CfgAcodec(%dHz) failed %#x — audio off\n", (int)g_audio_rate, ret);
+            ai_on = ao_on = 0;
+        } else if (ai_on) {
+            /* Must come AFTER CfgAcodec: that call soft-resets the codec, which
+             * would wipe the gain. Default 30 is the SDK's own suggested value for
+             * a mic input, in the middle of the analog-only window. */
+            const char *g = getenv("CAMPIPE_MIC_GAIN");
+            acodec_mic_input((g && *g) ? atoi(g) : 30);
+        }
+    }
+
     pthread_create(&th_high, NULL, stream_thread, &ctx_high);
     pthread_create(&th_low, NULL, stream_thread, &ctx_low);
     if (md_on)
         pthread_create(&th_md, NULL, md_thread, &md_sens);
     if (ao_on)
         pthread_create(&th_ao, NULL, ao_thread, NULL);
+    if (ai_on)
+        pthread_create(&th_ai, NULL, ai_thread, &ai_cfg);
 
-    SAMPLE_PRT("campipe: native pipeline running (high+low H.264, JPEG snap idle%s%s)\n",
-               md_on ? ", motion detection on" : "", ao_on ? ", audio out on" : "");
+    SAMPLE_PRT("campipe: native pipeline running (high+low H.264, JPEG snap idle%s%s%s)\n",
+               md_on ? ", motion detection on" : "", ao_on ? ", audio out on" : "",
+               ai_on ? ", audio in on" : "");
 
     while (!g_stop)
         pause();
@@ -997,6 +1605,8 @@ int main(void)
         pthread_join(th_md, NULL);
     if (ao_on)
         pthread_join(th_ao, NULL);
+    if (ai_on)
+        pthread_join(th_ai, NULL);
 
     /* Best-effort teardown; on a clean stop the startup script also re-inits. */
     HI_MPI_VENC_StopRecvPic(CHN_HIGH);

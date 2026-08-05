@@ -1,5 +1,15 @@
 ##### Change the following for your environment:
-COMPILE_OPTS =		$(INCLUDES) -I. -I./include -O1 -ffunction-sections -fdata-sections -DSOCKLEN_T=socklen_t -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64 -DNO_OPENSSL=1 -DRTP_PAYLOAD_MAX_SIZE=1352 -DNEWLOCALE_NOT_USED
+# -DPRES_TIME_CLOCK: stamp every frame with the system clock instead of a
+# free-running counter. Both FIFO sources (ADTSAudioFifoSource, ByteStreamFifoSource)
+# ship both paths; the default seeds the presentation time once and then just adds
+# the NOMINAL frame duration, so each source drifts from the wall clock at its own
+# rate - the encoder does not hit its nominal fps exactly, and any burst (e.g. a FIFO
+# backlog) is stamped at nominal spacing. The two tracks therefore drift APART, and
+# a client muxing video+audio discards the lagging one: measured on hardware as the
+# audio arriving 12.67s behind video, "227 packets read, 0 packets muxed", i.e.
+# silent recordings. Wall-clock stamping keeps the tracks aligned by construction
+# and is what a live source should do anyway.
+COMPILE_OPTS =		$(INCLUDES) -I. -I./include -O1 -ffunction-sections -fdata-sections -DSOCKLEN_T=socklen_t -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64 -DNO_OPENSSL=1 -DRTP_PAYLOAD_MAX_SIZE=1352 -DNEWLOCALE_NOT_USED -DPRES_TIME_CLOCK
 C =			c
 C_COMPILER =		$(CC)
 C_FLAGS =		$(COMPILE_OPTS) $(CPPFLAGS) $(CFLAGS)
@@ -73,7 +83,10 @@ livemedia:
 
 rRTSPServer_OBJS	= src/rRTSPServer.$(OBJ) \
 				src/ADTSAudioFifoServerMediaSubsession.$(OBJ) src/ADTSAudioFifoSource.$(OBJ) \
+				src/G711AudioFifoServerMediaSubsession.$(OBJ) \
 				src/ByteStreamFifoSource.$(OBJ) src/H264VideoFifoServerMediaSubsession.$(OBJ) \
+				src/BackchannelServerMediaSubsession.$(OBJ) src/AudioG711FifoSink.$(OBJ) \
+				src/DummySink.$(OBJ) \
 
 rRTSPServer$(EXE):	$(rRTSPServer_OBJS) $(LOCAL_LIBS)
 	$(LINK)$@ $(CONSOLE_LINK_OPTS) $(rRTSPServer_OBJS) $(LIBS) -lpthread

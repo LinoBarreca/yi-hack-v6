@@ -607,6 +607,26 @@ int main(int argc, char ** argv)
         exit(EXIT_SUCCESS);
     }
 
+    /* Mic mute is the one setting the NATIVE pipeline can honour too, so publish
+     * it on the local marker-file bus before touching the stock queue: campipe
+     * watches MIC_MUTE_MARKER and mutes the codec ADC. Done unconditionally and
+     * up front because it must also work when the queue below is absent - in
+     * native mode rmm never runs, so mq_open fails and this program used to exit
+     * before doing anything, which is why the MIC toggle was a no-op there. In
+     * stock mode the marker is simply unread and rmm still gets its message. */
+    if (mic != NONE) {
+        mkdir(MARKER_DIR, 0755);
+        if (mic == MIC_OFF) {
+            int fd = open(MIC_MUTE_MARKER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd >= 0)
+                close(fd);
+            else
+                fprintf(stderr, "Can't create %s: %s\n", MIC_MUTE_MARKER, strerror(errno));
+        } else if (unlink(MIC_MUTE_MARKER) != 0 && errno != ENOENT) {
+            fprintf(stderr, "Can't remove %s: %s\n", MIC_MUTE_MARKER, strerror(errno));
+        }
+    }
+
     ret=ipc_start();
     if(ret != 0) {
         exit(EXIT_FAILURE);

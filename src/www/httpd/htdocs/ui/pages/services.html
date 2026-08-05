@@ -58,18 +58,57 @@
                                 </div>
                             </div>
                             <div class="row2">
-                                <label for="sw-audio">Audio</label>
+                                <label for="in-audio">Microphone audio</label>
                                 <div>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="sw-audio"
-                                               :checked="rtsp.AUDIO === 'yes'" :disabled="dis('services.rtsp.AUDIO')"
-                                               @change="rtsp.AUDIO = $event.target.checked ? 'yes' : 'no'" />
-                                        <label class="form-check-label" for="sw-audio">Include the microphone audio (AAC)</label>
+                                    <select class="form-select" id="in-audio" x-model="rtsp.AUDIO"
+                                            :disabled="dis('services.rtsp.AUDIO')" style="max-width:230px">
+                                        <option value="no">Off</option>
+                                        <option value="aac">AAC</option>
+                                        <!-- A-law (PCMA): that is what the SoC's own encoder produces,
+                                             verified from the wire bytes. Not to be confused with the
+                                             two-way backchannel, which is µ-law. -->
+                                        <option value="g711">G.711 (A-law)</option>
+                                    </select>
+                                    <div class="help">
+                                        <strong>AAC</strong> is the one to pick if you want sound in recorded
+                                        clips — it is the only codec MP4 can hold.
+                                        <strong>G.711</strong> is encoded by the camera chip itself so it costs
+                                        almost no CPU, but it is a constant 64 kbit/s, 8 kHz only, and
+                                        <em>recordings become video-only</em>.
+                                        The microphone itself is muted/unmuted in Camera settings.
                                     </div>
-                                    <div class="help">Needed to have sound in recorded clips too. The
-                                        microphone itself is muted/unmuted in Camera settings.</div>
                                 </div>
                             </div>
+                            <template x-if="rtsp.AUDIO === 'aac' || rtsp.AUDIO === 'yes'">
+                                <div class="row2">
+                                    <label for="in-audioq">Microphone quality</label>
+                                    <div>
+                                        <div class="d-flex gap-2 align-items-center">
+                                            <select class="form-select" id="in-audioq" x-model="rtsp.AUDIO_QUALITY" style="max-width:190px">
+                                                <option value="high">High (16 kHz)</option>
+                                                <option value="low">Low (8 kHz)</option>
+                                            </select>
+                                            <label for="in-audionr" class="text-nowrap">Noise reduction</label>
+                                            <input type="number" min="0" max="25" class="form-control" id="in-audionr"
+                                                   x-model="rtsp.AUDIO_NR_LEVEL" style="max-width:90px" />
+                                        </div>
+                                        <div class="help">Noise reduction 0 turns it off, 25 is the strongest.
+                                            The quality setting is the audio chip's rate for both directions, so it
+                                            also applies to two-way audio.</div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="rtsp.AUDIO === 'g711'">
+                                <div class="row2">
+                                    <label for="in-audionr711">Noise reduction</label>
+                                    <div>
+                                        <input type="number" min="0" max="25" class="form-control" id="in-audionr711"
+                                               x-model="rtsp.AUDIO_NR_LEVEL" style="max-width:90px" />
+                                        <div class="help">0 turns it off, 25 is the strongest. G.711 is always
+                                            8 kHz, so there is no quality setting for it.</div>
+                                    </div>
+                                </div>
+                            </template>
                             <div class="row2">
                                 <label for="in-rtspport">Port / time overlay</label>
                                 <div class="d-flex gap-2 align-items-center">

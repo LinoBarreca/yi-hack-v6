@@ -24,7 +24,10 @@
 #include "DummySink.hh"
 #include "ADTSAudioFifoServerMediaSubsession.hh"
 #include "ADTSAudioFifoSource.hh"
+#include "G711AudioFifoServerMediaSubsession.hh"
+#include "ByteStreamFifoSource.hh"
 #include "H264VideoFifoServerMediaSubsession.hh"
+#include "BackchannelServerMediaSubsession.hh"
 
 #include <sys/stat.h>
 #include <getopt.h>
@@ -35,6 +38,18 @@
 #define RESOLUTION_LOW  360
 #define RESOLUTION_HIGH 1080
 #define RESOLUTION_BOTH 1440
+
+// Forward audio codec. The camera side (campipe) produces exactly one of these
+// and writes it to the matching FIFO; -a selects which track we advertise.
+#define AUDIO_NONE 0
+#define AUDIO_AAC  1
+#define AUDIO_G711 2
+
+// One 20 ms G.711 packet: 8000 samples/s * 0.02 s * 1 byte/sample. Feeding the
+// RTP sink in these units is what makes the packet cadence right; the payload has
+// no framing of its own to derive it from.
+#define G711_FRAME_BYTES  160
+#define G711_FRAME_USECS  20000
 
 int debug = 0;
 
@@ -54,20 +69,53 @@ StreamReplicator* startReplicatorStream(const char* inputAudioFileName) {
     // Create a single ADTSAudioFifo source that will be replicated for mutliple streams
     ADTSAudioFifoSource* adtsSource = ADTSAudioFifoSource::createNew(*env, inputAudioFileName);
     if (adtsSource == NULL) {
+        // Give up here: a replicator built on a NULL source crashes as soon as
+        // anything pulls from it, and the caller turns audio off on NULL.
         *env << "Failed to create Fifo Source \n";
+        return NULL;
     }
 
     // Create and start the replicator that will be given to each subsession
     StreamReplicator* replicator = StreamReplicator::createNew(*env, adtsSource);
 
-    // Begin by creating an input stream from our replicator:
+    // Keep the replicator DRAINED even with no client attached, by feeding one
+    // replica into a sink that throws the frames away.
+    //
+    // This is not optional. Without it the ADTS source only advances when some
+    // client pulls, so the FIFO backs up and its presentation times fall behind
+    // the wall clock, while the (separate) H.264 source stays current. A client
+    // that then asks for video+audio gets audio stamped seconds in the past and
+    // its muxer discards the lot: measured on hardware as "227 packets read,
+    // 0 packets muxed" with the timeline starting at -12.67s, i.e. silent
+    // recordings and a stalled recorder, even though the audio track itself was
+    // perfectly fine when pulled on its own.
     FramedSource* source = replicator->createStreamReplica();
+    MediaSink* sink = DummySink::createNew(*env, "dummy");
+    sink->startPlaying(*source, NULL, NULL);
 
-    // Then create a 'dummy sink' object to receive the replica stream:
-//    MediaSink* sink = DummySink::createNew(*env, "dummy");
+    return replicator;
+}
 
-    // Now, start playing, feeding the sink object from the source:
-//    sink->startPlaying(*source, NULL, NULL);
+// The G.711 payload is a bare byte stream - no sync word, no frame header - so
+// unlike the ADTS source there is nothing to parse and nothing to discover for
+// the SDP. We only have to hand it to the RTP sink in packet-sized bites.
+StreamReplicator* startG711ReplicatorStream(const char* inputAudioFileName) {
+    ByteStreamFifoSource* g711Source =
+        ByteStreamFifoSource::createNew(*env, inputAudioFileName,
+                                        G711_FRAME_BYTES, G711_FRAME_USECS);
+    if (g711Source == NULL) {
+        *env << "Failed to create G711 Fifo Source \n";
+        return NULL;
+    }
+
+    StreamReplicator* replicator = StreamReplicator::createNew(*env, g711Source);
+
+    // Same reason as the AAC replicator above: drain it continuously so the
+    // source's presentation times track the wall clock instead of drifting into
+    // the past whenever no client is attached.
+    FramedSource* source = replicator->createStreamReplica();
+    MediaSink* sink = DummySink::createNew(*env, "dummy");
+    sink->startPlaying(*source, NULL, NULL);
 
     return replicator;
 }
@@ -78,10 +126,28 @@ static void announceStream(RTSPServer* rtspServer, ServerMediaSession* sms,
     UsageEnvironment& env = rtspServer->envir();
     env << "\n\"" << streamName << "\" stream, from the file \""
         << inputFileName << "\"\n";
-    if (audio == 1)
+    if (audio == AUDIO_AAC)
         env << "AAC audio enabled\n";
+    else if (audio == AUDIO_G711)
+        env << "G.711 audio enabled\n";
     env << "Play this stream using the URL \"" << url << "\"\n";
     delete[] url;
+}
+
+// Attach whichever forward audio track is configured. The forward G.711 track is
+// PCMA, because the SoC's AENC produces A-law - verified from the wire bytes (see
+// the note in campipe's ai_loop_g711). That is a different companding from the
+// backchannel's PCMU, which is fine: they are independent tracks and each names
+// what it actually carries. Do not "align" them without re-checking the bytes.
+static void addAudioSubsession(ServerMediaSession* sms, int audio,
+                               StreamReplicator* replicator) {
+    if (audio == AUDIO_AAC) {
+        sms->addSubsession(ADTSAudioFifoServerMediaSubsession
+                               ::createNew(*env, replicator, reuseFirstSource));
+    } else if (audio == AUDIO_G711) {
+        sms->addSubsession(G711AudioFifoServerMediaSubsession
+                               ::createNew(*env, replicator, G711_ALAW, reuseFirstSource));
+    }
 }
 
 void print_usage(char *progname)
@@ -90,7 +156,9 @@ void print_usage(char *progname)
     fprintf(stderr, "\t-r RES,  --resolution RES\n");
     fprintf(stderr, "\t\tset resolution: low, high, both or none (default high)\n");
     fprintf(stderr, "\t-a AUDIO,  --audio AUDIO\n");
-    fprintf(stderr, "\t\tset audio: yes or no (default yes)\n");
+    fprintf(stderr, "\t\tset forward audio codec: no, aac or g711 (default aac)\n");
+    fprintf(stderr, "\t-b BACKCHANNEL,  --backchannel BACKCHANNEL\n");
+    fprintf(stderr, "\t\tset ONVIF two-way audio backchannel: yes or no (default no)\n");
     fprintf(stderr, "\t-p PORT, --port PORT\n");
     fprintf(stderr, "\t\tset TCP port (default 554)\n");
     fprintf(stderr, "\t-u USER, --user USER\n");
@@ -113,11 +181,14 @@ int main(int argc, char** argv)
     char *endptr;
 
     char const* inputAudioFileName = "/tmp/aac_audio_fifo";
+    char const* inputG711FileName = "/tmp/g711_audio_fifo";
+    char const* backchannelFifoName = "/tmp/audio_out_fifo";
     struct stat stat_buffer;
 
     // Setting default
     int resolution = RESOLUTION_HIGH;
-    int audio = 1;
+    int audio = AUDIO_AAC;
+    int backchannel = 0;   // ONVIF two-way audio (talk-back); opt-in
     int port = 554;
 
     memset(user, 0, sizeof(user));
@@ -128,6 +199,7 @@ int main(int argc, char** argv)
         {
             {"resolution",  required_argument, 0, 'r'},
             {"audio",  required_argument, 0, 'a'},
+            {"backchannel",  required_argument, 0, 'b'},
             {"port",  required_argument, 0, 'p'},
             {"user",  required_argument, 0, 'u'},
             {"password",  required_argument, 0, 'w'},
@@ -138,7 +210,7 @@ int main(int argc, char** argv)
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "r:a:p:u:w:d:h",
+        c = getopt_long (argc, argv, "r:a:b:p:u:w:d:h",
                          long_options, &option_index);
 
         /* Detect the end of the options. */
@@ -160,11 +232,23 @@ int main(int argc, char** argv)
 
         case 'a':
             if (strcasecmp("no", optarg) == 0) {
-                audio = 0;
-            } else if (strcasecmp("yes", optarg) == 0) {
-                audio = 1;
+                audio = AUDIO_NONE;
             } else if (strcasecmp("aac", optarg) == 0) {
-                audio = 1;
+                audio = AUDIO_AAC;
+            } else if (strcasecmp("g711", optarg) == 0) {
+                audio = AUDIO_G711;
+            } else if (strcasecmp("yes", optarg) == 0) {
+                // Legacy spelling of "aac" - config files written before the
+                // codec became explicit still say yes, so keep honouring it.
+                audio = AUDIO_AAC;
+            }
+            break;
+
+        case 'b':
+            if (strcasecmp("no", optarg) == 0) {
+                backchannel = 0;
+            } else if (strcasecmp("yes", optarg) == 0) {
+                backchannel = 1;
             }
             break;
 
@@ -243,14 +327,27 @@ int main(int argc, char** argv)
         }
     }
 
+    // Same codec vocabulary as -a, which this overrides: it must know every value
+    // the option knows, or an env-driven launch silently loses the g711 track.
     str = getenv("RRTSP_AUDIO");
     if (str != NULL) {
         if (strcasecmp("no", str) == 0) {
-            audio = 0;
-        } else if (strcasecmp("yes", str) == 0) {
-            audio = 1;
+            audio = AUDIO_NONE;
         } else if (strcasecmp("aac", str) == 0) {
-            audio = 1;
+            audio = AUDIO_AAC;
+        } else if (strcasecmp("g711", str) == 0) {
+            audio = AUDIO_G711;
+        } else if (strcasecmp("yes", str) == 0) {
+            audio = AUDIO_AAC;      // legacy spelling of "aac"
+        }
+    }
+
+    str = getenv("RRTSP_BACKCHANNEL");
+    if (str != NULL) {
+        if (strcasecmp("no", str) == 0) {
+            backchannel = 0;
+        } else if (strcasecmp("yes", str) == 0) {
+            backchannel = 1;
         }
     }
 
@@ -283,10 +380,14 @@ int main(int argc, char** argv)
     TaskScheduler* scheduler = BasicTaskScheduler::createNew();
     env = BasicUsageEnvironment::createNew(*scheduler);
 
+    // Each codec has its own FIFO, because campipe produces one or the other and
+    // the two payloads are not interchangeable on the wire.
+    if (audio == AUDIO_G711) inputAudioFileName = inputG711FileName;
+
     // If fifo doesn't exist, disable audio
-    if (stat (inputAudioFileName, &stat_buffer) != 0) {
+    if (audio != AUDIO_NONE && stat (inputAudioFileName, &stat_buffer) != 0) {
         *env << "Audio fifo does not exist, disabling audio.";
-        audio = 0;
+        audio = AUDIO_NONE;
     }
 
     UserAuthenticationDatabase* authDB = NULL;
@@ -307,10 +408,22 @@ int main(int argc, char** argv)
     }
 
     StreamReplicator* replicator = NULL;
-    if (audio == 1) {
+    if (audio == AUDIO_AAC) {
         if (debug & 1) fprintf(stderr, "Starting aac replicator\n");
         // Create and start the replicator that will be given to each subsession
         replicator = startReplicatorStream(inputAudioFileName);
+    } else if (audio == AUDIO_G711) {
+        if (debug & 1) fprintf(stderr, "Starting g711 replicator\n");
+        replicator = startG711ReplicatorStream(inputAudioFileName);
+    }
+    // A replicator that failed to build must turn the audio OFF, not be handed to
+    // a subsession: both subsessions dereference it unconditionally when a client
+    // SETUPs the track (fReplicator->createStreamReplica()), so advertising the
+    // track anyway would segfault the server on the first client instead of just
+    // serving video.
+    if (audio != AUDIO_NONE && replicator == NULL) {
+        *env << "Failed to start the audio replicator, disabling audio.\n";
+        audio = AUDIO_NONE;
     }
 
     char const* descriptionString = "Session streamed by \"rRTSPServer\"";
@@ -334,9 +447,10 @@ int main(int argc, char** argv)
                                     descriptionString);
         sms_high->addSubsession(H264VideoFifoServerMediaSubsession
                                 ::createNew(*env, inputFileName, reuseFirstSource));
-        if (audio == 1) {
-            sms_high->addSubsession(ADTSAudioFifoServerMediaSubsession
-                                       ::createNew(*env, replicator, reuseFirstSource));
+        addAudioSubsession(sms_high, audio, replicator);
+        if (backchannel == 1) {
+            sms_high->addSubsession(BackchannelServerMediaSubsession
+                                       ::createNew(*env, backchannelFifoName));
         }
         rtspServer->addServerMediaSession(sms_high);
 
@@ -354,9 +468,10 @@ int main(int argc, char** argv)
                                 descriptionString);
         sms_low->addSubsession(H264VideoFifoServerMediaSubsession
                                 ::createNew(*env, inputFileName, reuseFirstSource));
-        if (audio == 1) {
-            sms_low->addSubsession(ADTSAudioFifoServerMediaSubsession
-                                        ::createNew(*env, replicator, reuseFirstSource));
+        addAudioSubsession(sms_low, audio, replicator);
+        if (backchannel == 1) {
+            sms_low->addSubsession(BackchannelServerMediaSubsession
+                                       ::createNew(*env, backchannelFifoName));
         }
         rtspServer->addServerMediaSession(sms_low);
 
@@ -371,10 +486,7 @@ int main(int argc, char** argv)
         ServerMediaSession* sms_audio
             = ServerMediaSession::createNew(*env, streamName, streamName,
                                               descriptionString);
-        if (audio == 1) {
-            sms_audio->addSubsession(ADTSAudioFifoServerMediaSubsession
-                                       ::createNew(*env, replicator, reuseFirstSource));
-        }
+        addAudioSubsession(sms_audio, audio, replicator);
         rtspServer->addServerMediaSession(sms_audio);
 
         announceStream(rtspServer, sms_audio, streamName, inputAudioFileName, audio);

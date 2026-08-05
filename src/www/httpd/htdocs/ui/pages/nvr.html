@@ -105,6 +105,22 @@
                         </div>
                     </div>
                     <div class="row2">
+                        <label for="in-recstream">Recorded stream</label>
+                        <div>
+                            <select class="form-select" id="in-recstream" x-model="rec.STREAM" style="max-width:230px">
+                                <option value="low">Low resolution</option>
+                                <option value="high">High resolution</option>
+                            </select>
+                            <div class="help">
+                                Independent of what the RTSP stream publishes — you can watch in high
+                                resolution and still record the small stream.
+                                <strong x-show="rec.STREAM === 'high'">On low-memory models (y20),
+                                recording high resolution needs a swap file (System settings): without
+                                one the recorder falls back to the low stream.</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row2">
                         <label for="in-free">Keep free space</label>
                         <div>
                             <input type="text" class="form-control" id="in-free" x-model="rec.FREE_SPACE" style="max-width:110px" />
@@ -113,7 +129,11 @@
                     </div>
                     <div class="row2" x-show="rtsp.AUDIO !== 'yes' && rtsp.AUDIO !== 'aac'">
                         <label>Audio</label>
-                        <div class="help" style="margin-top:7px">The RTSP stream has audio off, so clips will be
+                        <div class="help" style="margin-top:7px" x-show="rtsp.AUDIO === 'g711'">
+                            The stream carries <b>G.711</b> audio, which MP4 cannot hold, so clips will be
+                            <b>video-only</b>. Switch the stream to AAC in Services → Streaming to record sound.</div>
+                        <div class="help" style="margin-top:7px" x-show="rtsp.AUDIO !== 'g711'">
+                            The RTSP stream has audio off, so clips will be
                             <b>video-only</b>. Enable audio in Services → Streaming to record sound.</div>
                     </div>
                 </div>
