@@ -1,0 +1,40 @@
+#!/bin/bash
+
+#
+#  This file is part of yi-hack-v6 (https://github.com/LinoBarreca/yi-hack-v6).
+#  Copyright (c) 2026 Lino Barreca.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, version 3.
+#
+#  This program is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+
+export PATH=${PATH}:/opt/arm-hisiv300-linux/bin
+export TARGET=arm-hisiv300-linux-uclibcgnueabi
+export CROSS=arm-hisiv300-linux-uclibcgnueabi
+export BUILD=x86_64-pc-linux-gnu
+export CROSSPREFIX=${CROSS}-
+export STRIP=${CROSSPREFIX}strip
+export CC=${CROSSPREFIX}gcc
+export LD=${CROSSPREFIX}ld
+export AS=${CROSSPREFIX}as
+export AR=${CROSSPREFIX}ar
+
+SCRIPT_DIR=$(cd `dirname $0` && pwd)
+cd $SCRIPT_DIR
+
+cd ledctl || exit 1
+make clean
+make || exit 1
+
+mkdir -p ../_install/bin || exit 1
+cp ./ledctl ../_install/bin || exit 1
+${STRIP} ../_install/bin/* || exit 1

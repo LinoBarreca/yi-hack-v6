@@ -100,7 +100,14 @@ diag "S20 entry (pre apply_config)"
 #   5. mount_cifs_rw - mounts the output (read-write) share on /tmp/cifs-rw if configured.
 #   6. build_view    - logical view: CIFS if mounted+compatible, else SD, else minimal.
 /home/yi-hack/base/script/apply_config.sh
-/home/yi-hack/base/script/wifi_up.sh
+# Status LED, phase 2: the network is up (wifi_up exits 0 only once the interface
+# has an address). If it timed out we deliberately leave phase 1 showing - on a
+# headless camera with no network, the LED is the ONLY thing left that can say
+# so, and "still in the pre-network phase" is exactly the right message.
+# Absolute path: S20's PATH does not include base/bin.
+if /home/yi-hack/base/script/wifi_up.sh; then
+    /home/yi-hack/base/bin/ledctl pattern boot-net
+fi
 diag "after wifi_up (WiFi associated? has IP?)"
 /home/yi-hack/base/script/mount_cifs.sh
 /home/yi-hack/base/script/apply_config.sh
@@ -119,6 +126,12 @@ if /home/yi-hack/base/script/build_view.sh; then
     /home/yi-hack/extra/script/system.sh
 else
     diag "build_view -> MINIMAL boot"
+    # Status LED: recovery. Both LEDs blinking slowly - the one state that is not
+    # a boot phase, so it reads as "stopped here" rather than "still working".
+    # This is the branch where the LED earns its keep: there may be no payload,
+    # no network and no web UI, and the blink is the only indication the user has
+    # that the camera came up at all and is waiting to be rescued.
+    /home/yi-hack/base/bin/ledctl pattern recovery
     # Minimal boot: no payload. Rescue web UI (www -> base/www-min), telnet and SSH are
     # always up - they are the ONLY recovery channels here, so they must not depend on
     # config. The stock Xiaomi cloud app runs so the camera is still usable via the Yi app,

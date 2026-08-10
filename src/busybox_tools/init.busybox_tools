@@ -18,7 +18,6 @@ cd "${BUILD_FOLDER}"
 # httpd patches for the full web UI (this is the busybox that serves it):
 #  - onvif.patch: treat the onvif/ URL prefix as a CGI dir (onvif_simple_server)
 #  - auth.patch : allow disabling auth on a path via an htpasswd entry of ":"
-# (gzip serving of the precompressed www is handled by CONFIG_FEATURE_HTTPD_GZIP.)
 patch -p1 < ../onvif.patch || exit 1
 patch -p1 < ../auth.patch || exit 1
 

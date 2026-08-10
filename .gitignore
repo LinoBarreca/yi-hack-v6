@@ -40,4 +40,5 @@ src/campipe/campipe/vo-aacenc-*.tar.gz
 src/campipe/campipe/vo-aacenc-*/
 src/hisdk/
 src/hwsnap/hwsnap/hwsnap
+src/ledctl/ledctl/ledctl
 src/snapshot/snapshot/watermark

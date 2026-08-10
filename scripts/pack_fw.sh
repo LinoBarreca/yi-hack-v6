@@ -336,7 +336,7 @@ pack_model() {
     log "$MODEL: stripping comments from scripts and .conf..."
     find "$IMG_DIR/home/yi-hack" "$IMG_DIR/rootfs/etc" \( -name '*.sh' -o -name '*.conf' \) | while read -r f; do
         [ -f "$f" ] || continue
-        sed -i '/^[[:space:]]*#[^!]/d; /^[[:space:]]*$/d' "$f"
+        sed -i '/^[[:space:]]*#!/!{/^[[:space:]]*#/d}; /^[[:space:]]*$/d' "$f"
     done
 
     # --- Step 8: restore the EXECUTE BIT on every deployed script. A rewrite (sed -i strip,

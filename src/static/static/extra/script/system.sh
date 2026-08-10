@@ -159,6 +159,11 @@ ENABLED=""; load_config services.ftp_upload ENABLED; FTP_UPLOAD_ENABLED=$ENABLED
 load_config system DISABLE_CLOUD REC_WITHOUT_CLOUD CRONTAB
 load_config output RECORD
 load_config recording FREE_SPACE
+# camera.LED decides the FINAL LED state at the end of this script. The boot
+# phases before it are shown regardless: they are diagnostics, not decoration,
+# and a camera that never lights up while it is starting cannot be told apart
+# from one that is not starting at all. LED=no means "dark once it is running".
+LED=""; load_config camera LED; CAMERA_LED=$LED
 
 # Native pipeline selector (pipeline.conf). Generic MODE/LDC renamed at once; the
 # native block further down consumes PIPELINE_MODE/PIPELINE_LDC (no get_config
@@ -273,6 +278,25 @@ if { [ "$PIPELINE_MODE" = "online" ] || [ "$PIPELINE_MODE" = "offline" ]; } \
     /home/yi-hack/extra/script/native_pipeline.sh "$PIPELINE_MODE" "$NATIVE_LDC" "$NATIVE_KO_DIR" "$NATIVE_BIN" &
 elif [ "$PIPELINE_MODE" != "stock" ] ; then
     echo "system.sh: pipeline.MODE=$PIPELINE_MODE requested but native assets/model missing - staying stock"
+fi
+
+# --- Status LED handoff (stock path only) -----------------------------------
+# On the stock path the LEDs are rmm's, not ours: we drove them through the boot
+# because rmm did not exist yet, and here - the last moment before any stock
+# binary starts - we give them back. Unloading rather than just leaving it alone
+# matters because the stock loader is lazy AND conditional: it insmods only when
+# /dev/cpld_periph is absent, so a module we loaded would be silently adopted,
+# and stock would never get to choose between cpld_periph.ko and the _v3 variant
+# (see system_init.sh for why that choice is not ours to make). rmm reloads it
+# within seconds of starting.
+#
+# Nothing has the device open at this point - ledctl closes its fd on exit and
+# no stock binary has started yet - so the unload should succeed; if it does not,
+# say so rather than leaving a silently adopted module behind.
+# The device node is the module's own (misc_register), so testing it with a
+# builtin says whether the module is loaded without forking lsmod+grep.
+if [ "$NATIVE_PIPELINE" = "no" ] && [ -c /dev/cpld_periph ] ; then
+    rmmod cpld_periph || echo "system.sh: rmmod cpld_periph failed - rmm will inherit the module we loaded"
 fi
 
 # Time sync. Run ntpd when the cloud is DISABLED (with the cloud on, the stock
@@ -666,3 +690,20 @@ fi
 /home/yi-hack/extra/script/check_update.sh
 
 crond -c /home/yi-hack/config/crontabs
+
+# --- Status LED, final state (native path only) -----------------------------
+# Boot is over: everything this script starts has been started. Steady blue is
+# the "nothing to report" state, and leaving a boot phase blinking forever would
+# be a lie about where the camera got to.
+# Only on the native path - on the stock path the LEDs went back to rmm above,
+# and the module is not even loaded here anymore.
+# ledctl resolves bare: env.sh puts base/bin on PATH in both of its branches.
+if [[ $NATIVE_PIPELINE == "yes" ]] ; then
+    if [ "$CAMERA_LED" = "no" ] ; then
+        # `off` is the driver's hold-off, not a plain "both off": it also blocks
+        # anything that would light them again later.
+        ledctl off
+    else
+        ledctl pattern ready
+    fi
+fi

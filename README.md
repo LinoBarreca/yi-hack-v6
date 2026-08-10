@@ -32,6 +32,7 @@ This firmware will add the following features:
   - [Native NVR](docs/native-nvr-recording.md) (just make sure your network is fast enough, if you have lots of cameras)
   - [Control the camera from Home Assistant / MQTT](docs/home-assistant-control.md) (LED, IR, microphone and more — no cloud)
   - [Completely redesigned web interface](docs/web-interface.md) (live view, diagnostics with one-click bug-report bundle, and a UI that knows which options work together — impossible combinations are simply not offered)
+  - [Status LEDs that tell you what the camera is doing](docs/status-leds.md) (lit from the first seconds of boot, with a different pattern for "no network yet", "still starting" and "recovery" — so a camera that won't come online is no longer just a dark box)
 
 - **v6 Improvements**
   - [Ultra-fast snapshots](docs/ultra-fast-snapshots.md) (hardware-captured JPEGs)
