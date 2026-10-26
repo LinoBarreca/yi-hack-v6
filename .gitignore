@@ -42,3 +42,4 @@ src/hisdk/
 src/hwsnap/hwsnap/hwsnap
 src/ledctl/ledctl/ledctl
 src/snapshot/snapshot/watermark
+src/campipe/campipe/lib_hiae_shim.a

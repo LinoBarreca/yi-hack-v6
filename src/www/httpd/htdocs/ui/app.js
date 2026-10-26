@@ -391,7 +391,8 @@ document.addEventListener('alpine:init', () => {
                     await api.setConf('recording', {
                         SEGMENT_TIME: this.rec.SEGMENT_TIME || '60',
                         FREE_SPACE: this.rec.FREE_SPACE || '10',
-                        STREAM: this.rec.STREAM === 'high' ? 'high' : 'low'
+                        STREAM: this.rec.STREAM === 'high' ? 'high' : 'low',
+                        MOTION_ONLY: this.rec.MOTION_ONLY === 'yes' ? 'yes' : 'no'
                     });
                     await api.setConf('system', { REC_WITHOUT_CLOUD: 'no' });
                 } else if (this.mode === 'stock') {

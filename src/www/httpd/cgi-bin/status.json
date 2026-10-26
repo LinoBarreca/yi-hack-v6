@@ -54,7 +54,7 @@ read HOME_VERSION < /home/app/.appver
 read MODEL_SUFFIX < /home/app/.camver
 load_hw_ids "$MODEL_SUFFIX"
 HARDWARE_ID="$HW_ID"
-if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
+if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] || [[ $MODEL_SUFFIX == "v201" ]] || [[ $MODEL_SUFFIX == "h20" ]] || [[ $MODEL_SUFFIX == "y19" ]] ; then
     PTZ="yes"
 else
     PTZ="no"

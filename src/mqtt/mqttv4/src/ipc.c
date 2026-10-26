@@ -32,6 +32,11 @@
  * events, and its absence in native mode is non-fatal (see ipc_init). */
 #define IPC_EVENT_DIR    "/tmp/ipc"
 #define IPC_MOTION_FILE  "motion_alarm"
+/* Native mode only: campipe's sound/cry detector raises these. In stock mode
+ * ipc2file writes the same names from the mqueue message we already handle,
+ * so they are ignored there to avoid double events. */
+#define IPC_SOUND_FILE   "sound_detection"
+#define IPC_CRY_FILE     "baby_crying"
 
 //-----------------------------------------------------------------------------
 // GENERAL STATIC VARS AND FUNCTIONS
@@ -336,6 +341,13 @@ static void *inotify_thread(void *args)
                     call_callback(IPC_MSG_MOTION_START);
                 else if(e->mask & IN_DELETE)
                     call_callback(IPC_MSG_MOTION_STOP);
+            }
+            else if(!ipc_mq_ok && e->len > 0 && (e->mask & IN_CREATE))
+            {
+                if(strcmp(e->name, IPC_SOUND_FILE) == 0)
+                    call_callback(IPC_MSG_SOUND_DETECTION);
+                else if(strcmp(e->name, IPC_CRY_FILE) == 0)
+                    call_callback(IPC_MSG_BABY_CRYING);
             }
             p += sizeof(struct inotify_event) + e->len;
         }

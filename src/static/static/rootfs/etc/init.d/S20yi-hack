@@ -158,7 +158,7 @@ else
             ./cloud &
             ./p2p_tnp &
             _cam=""; read _cam < /home/app/.camver
-            if [[ $_cam != "yi_dome" ]] ; then
+            if [[ $_cam != "yi_dome" ]] && [[ $_cam != "v201" ]] ; then
                 ./oss &
             fi
             ./watch_process &

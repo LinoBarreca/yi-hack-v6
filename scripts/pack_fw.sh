@@ -194,6 +194,16 @@ if [ \"\$(sed -n 's/^DEBUG_LOG=//p' /home/yi-hack/config/system.conf 2>/dev/null
 	exec >> /tmp/sd/yi-boot.log 2>&1
 	echo '===== [bootlog] DEBUG_LOG=early: live on SD /tmp/sd (-o sync) from base/init.sh ====='
 fi"
+
+    # Stock dispatch (h20) runs app/script/mount_sd.sh ('umount -l /tmp/sd; mount ...') after
+    # S20 has built the view. The lazy umount detaches the SD under the running system: the
+    # extra/www symlinks into /tmp/sd dangle and every LD_PRELOAD of ipc_multiplex.so fails.
+    # base/init.sh already owns the SD mount -> only mount it here if it is missing.
+    local msd="$1/app/script/mount_sd.sh"
+    if [ -f "$msd" ]; then
+        printf '%s\n' 'grep -q " /tmp/sd " /proc/mounts || mount /dev/mmcblk0p1 /tmp/sd' > "$msd"
+        chmod 0755 "$msd"
+    fi
 }
 
 # Bake the cloudAPI + udhcpc "first-boot file placement" into the home image at BUILD time.
@@ -257,10 +267,11 @@ make_partition_image() {
 # so each supported model needs its own line.
 # A model absent here builds with the size check skipped (a warning, not a wrong assertion).
 #   y20 (Yi 1080p Home, Hi3518Ev200, 16MB): mtd4 rootfs 0x140000, mtd5 home 0xcb0000
+#   h20 (Yi 1080p Dome, Hi3518Ev200, 16MB MX25L128): same table as y20
 partition_limit() {   # partition_limit <model> <rootfs|home> -> bytes (empty if unknown)
     case "$1:$2" in
-        y20:rootfs) echo $((0x140000)) ;;
-        y20:home)   echo $((0xcb0000)) ;;
+        y20:rootfs|h20:rootfs) echo $((0x140000)) ;;
+        y20:home|h20:home)     echo $((0xcb0000)) ;;
         *)          : ;;
     esac
 }
@@ -288,6 +299,13 @@ pack_model() {
 
     log "$MODEL: copying stock home..."
     cp -a "$MODEL_STOCK/home_extracted" "$IMG_DIR/home"
+
+    # A base taken from a yi-hack-v5 image (instead of a pristine Xiaomi one) still holds
+    # v5's per-file .7z (rmm.7z, oss.7z, p2p_tnp.7z, ...), which v5 unpacked at first boot.
+    # v6 does not, so the stock stack would boot without rmm and dispatch reboots the
+    # camera. Refuse such a base: unpack the archives in stock_firmware/ first.
+    local packed; packed=$(find "$IMG_DIR/rootfs" "$IMG_DIR/home" -name '*.7z' | sed "s|$IMG_DIR/||")
+    [ -z "$packed" ] || die "$MODEL: stock base still has v5 .7z archives (unpack them in stock_firmware/$MODEL): $(echo $packed)"
 
     # --- Step 2: fold in stock OTA update(s) so the base is current before our overlay ---
     log "$MODEL: applying stock firmware update(s)..."

@@ -18,6 +18,7 @@ clips are stored.
 - Works even **without an SD card** (record straight to a network share).
 - Light on the camera: video is saved as-is (no re-encoding), so it barely uses the
   processor.
+- Optionally keep **only the clips with motion** (native pipeline).
 - Automatic clean-up so the storage never fills up, plus a built-in page to browse
   and play your recordings.
 
@@ -38,7 +39,16 @@ Everything is in the web interface:
    In the **Events** page, set the retention (how much free space to keep). The
    oldest recordings are removed automatically when space runs low.
 
-3. **Watch your recordings.**
+3. **Optional: keep only the clips with motion.**
+   In the recording options, set **Keep** to **Only clips with motion**. The camera
+   still records everything, but deletes each finished clip that had no motion in
+   it or within 15 seconds either side, so every event keeps a little before and
+   after. This needs the native pipeline with motion detection on (the stock
+   pipeline has its own motion-only setting).
+   With Home Assistant discovery on, the same option is the **Record Only Motion**
+   switch.
+
+4. **Watch your recordings.**
    Also in the **Events** page: browse recordings by date and time, and press
    **Play** to watch them right in the browser (or download them).
 

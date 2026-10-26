@@ -118,6 +118,14 @@ mkdir -p "$(get_script_dir)/../build/extra"
 #              curl/libcurl consumer appears.
 SKIP_MODULES="uClibc++ libfuse curl"
 
+# The native-pipeline modules link the proprietary HiSilicon MPP SDK (gitignored under
+# src/hisdk). Without it, build everything else: the image then boots the stock media
+# stack (rmm), and system.sh stays stock because campipe is missing.
+if [ ! -d "$SRC_DIR/hisdk/mpp" ]; then
+    echo "src/hisdk/mpp not found - skipping SDK modules (aoplay campipe hwsnap)"
+    SKIP_MODULES="$SKIP_MODULES aoplay campipe hwsnap"
+fi
+
 for SUB_DIR in $SRC_DIR/* ; do
     if [ -d ${SUB_DIR} ]; then # Will not run if no directories are available
         case " $SKIP_MODULES " in

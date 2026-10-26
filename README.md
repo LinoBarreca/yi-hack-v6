@@ -32,6 +32,7 @@ This firmware will add the following features:
   - [Native NVR](docs/native-nvr-recording.md) (just make sure your network is fast enough, if you have lots of cameras)
   - [Control the camera from Home Assistant / MQTT](docs/home-assistant-control.md) (LED, IR, microphone and more — no cloud)
   - [Completely redesigned web interface](docs/web-interface.md) (live view, diagnostics with one-click bug-report bundle, and a UI that knows which options work together — impossible combinations are simply not offered)
+  - [Yi 1080p Dome on the native pipeline](docs/yi-1080p-dome.md) (pan/tilt, presets, cruise and motion tracking, automatic day/night, sound and baby-crying detection — all without the Xiaomi stack)
   - [Status LEDs that tell you what the camera is doing](docs/status-leds.md) (lit from the first seconds of boot, with a different pattern for "no network yet", "still starting" and "recovery" — so a camera that won't come online is no longer just a dark box)
 
 - **v6 Improvements**
@@ -71,7 +72,7 @@ Currently, this project supports the following cameras:
 | **Yi Home** | rootfs_y18 | home_y18 | 1.8.7.0F_201809191400 | Coming later (no hardware) |
 | **Yi 1080p Home** | rootfs_y20 | home_y20 | 2.1.0.0E_201809191630 | Already supported (no releases yet, I'm developing on it) |
 | **Yi Dome** | rootfs_v201 | home_v201 | 1.9.1.0J_201809191135 | Coming later (no hardware) |
-| **Yi 1080p Dome** | rootfs_h20 | home_h20 | 1.9.2.0I_201812141405 | Coming next |
+| **Yi 1080p Dome** | rootfs_h20 | home_h20 | 1.9.2.0I_201812141405 | Supported, incl. the native pipeline with pan/tilt, day/night and sound detection ([details](docs/yi-1080p-dome.md)) |
 | **Yi 1080p Cloud Dome** | rootfs_y19 | home_y19 | 1.9.3.0E_201812141519 | Coming next |
 | **Yi Outdoor** | rootfs_h30 | home_h30 | 3.0.0.0D_201809111054 | Coming later (no hardware) |
 

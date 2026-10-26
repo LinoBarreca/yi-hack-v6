@@ -99,7 +99,7 @@ stop_rtsp()
 
 start_onvif()
 {
-    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_home" ]] ; then
+    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_home" ]] || [[ $MODEL_SUFFIX == "v201" ]] || [[ $MODEL_SUFFIX == "y18" ]] ; then
         HIGHWIDTH="1280"
         HIGHHEIGHT="720"
     else
@@ -159,7 +159,7 @@ start_onvif()
         echo "" >> $ONVIF_SRVD_CONF
     fi
 
-    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
+    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] || [[ $MODEL_SUFFIX == "v201" ]] || [[ $MODEL_SUFFIX == "h20" ]] || [[ $MODEL_SUFFIX == "y19" ]] ; then
         echo "#PTZ" >> $ONVIF_SRVD_CONF
         echo "ptz=1" >> $ONVIF_SRVD_CONF
         echo "get_position=/home/yi-hack/extra/bin/ipc_cmd -g" >> $ONVIF_SRVD_CONF

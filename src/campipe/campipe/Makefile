@@ -52,7 +52,7 @@ COMM_OBJ = sample_comm_sys.o sample_comm_vi.o sample_comm_vpss.o \
 # three in a link group and let ld rescan them until resolved (order-independent).
 LDLIBS = -Wl,--start-group $(REL_LIB)/libmpi.a $(REL_LIB)/libive.a $(REL_LIB)/libmd.a -Wl,--end-group \
          $(REL_LIB)/libisp.a \
-         $(REL_LIB)/lib_hiae.a $(REL_LIB)/lib_hiawb.a $(REL_LIB)/lib_hiaf.a \
+         $(HIAE_LIB) $(REL_LIB)/lib_hiawb.a $(REL_LIB)/lib_hiaf.a \
          $(REL_LIB)/lib_hidefog.a $(REL_LIB)/lib_cmoscfg.a $(REL_LIB)/lib_iniparser.a \
          $(REL_LIB)/libVoiceEngine.a $(REL_LIB)/libupvqe.a $(REL_LIB)/libdnvqe.a \
          $(AACENC_LIB) \
@@ -67,7 +67,14 @@ LDFLAGS += -Wl,--gc-sections -rdynamic \
 
 all: campipe
 
-campipe: campipe.o $(COMM_OBJ) $(AACENC_LIB)
+# lib_hiae.a with HI_MPI_AE_SensorRegCallBack renamed to hiae_SensorRegCallBack,
+# so campipe.c can put its own in front of it for the sensor plugin (AE ABI shim).
+HIAE_LIB = lib_hiae_shim.a
+
+$(HIAE_LIB): $(REL_LIB)/lib_hiae.a
+	$(CROSSPREFIX)objcopy --redefine-sym HI_MPI_AE_SensorRegCallBack=hiae_SensorRegCallBack $< $@
+
+campipe: campipe.o $(COMM_OBJ) $(AACENC_LIB) $(HIAE_LIB)
 	$(CC) $(LDFLAGS) -o $@ campipe.o $(COMM_OBJ) $(LDLIBS)
 
 campipe.o: campipe.c $(AACENC_LIB)
@@ -89,7 +96,7 @@ $(AACENC_LIB):
 # `make clean && make` on every build, and re-configuring/rebuilding the encoder
 # each time would cost minutes for nothing. Use distclean to force a refetch.
 clean:
-	rm -f campipe *.o
+	rm -f campipe *.o $(HIAE_LIB)
 
 distclean: clean
 	rm -rf $(AACENC) $(AACENC).tar.gz

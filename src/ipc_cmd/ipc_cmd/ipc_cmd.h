@@ -164,6 +164,7 @@
  * here instead: presence of the file = microphone muted. campipe polls it. */
 #define MARKER_DIR      "/tmp/ipc"
 #define MIC_MUTE_MARKER MARKER_DIR "/mic_off"
+#define IR_OFF_MARKER   MARKER_DIR "/ir_off"
 
 #define IPC_SOUND_DETECTION_OFF "\x02\x00\x00\x00\x08\x00\x00\x00\x3a\x10\x01\x00\x04\x00\x00\x00\x01\x00\x00\x00"
 #define IPC_SOUND_DETECTION_ON  "\x02\x00\x00\x00\x08\x00\x00\x00\x3a\x10\x01\x00\x04\x00\x00\x00\x02\x00\x00\x00"

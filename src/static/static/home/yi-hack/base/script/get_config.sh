@@ -122,7 +122,7 @@ load_config() {
 # real diagnostic is emitted. Never suppress without that check.
 load_hw_ids() {
     case "$1" in
-        yi_dome_1080p|yi_cloud_dome_1080p) _hw_off=660; _sn_off=664 ;;
+        yi_dome_1080p|yi_cloud_dome_1080p|h20|y19) _hw_off=660; _sn_off=664 ;;
         *)                                 _hw_off=592; _sn_off=596 ;;
     esac
 

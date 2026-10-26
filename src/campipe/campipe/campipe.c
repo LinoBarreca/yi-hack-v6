@@ -42,6 +42,8 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <poll.h>
+#include <limits.h>
+#include <math.h>
 
 #include "sample_comm.h"
 #include "hi_ive.h"
@@ -82,6 +84,25 @@
  * and the MQTT cmnd/ path both reach us with no changes of their own - in stock
  * mode the same ipc_cmd invocation talks to rmm's message queue instead. */
 #define MIC_MUTE_MARKER IPC_DIR "/mic_off"
+
+/* Day/night (Stage D), same bus. ir_off (`ipc_cmd -i off`, camera.IR=no) keeps the
+ * IR illuminator dark at night; night is written by us while in night mode, so
+ * scripts can read the current state. */
+#define IR_OFF_MARKER   IPC_DIR "/ir_off"
+
+/* Motion tracking (PTZ), same bus. While motion is seen, the detector keeps
+ * MOTION_XY_FILE at "<seq> <x> <y>": the area-weighted centre of the moving
+ * regions in permille of the frame, seq bumping on every update. The tracker
+ * (`ipc_cmd -o on`) creates PTZ_MOVING_MARKER while the camera turns; the
+ * detector skips those frames and re-seeds its reference afterwards, or the
+ * turn itself would read as motion. */
+#define MOTION_XY_FILE    IPC_DIR "/motion_xy"
+/* Touched (at most once a second) on every tick that sees motion: its mtime is
+ * the last moment of motion, which wd_record.sh uses to keep only the recording
+ * segments around motion. */
+#define MOTION_SEEN_FILE  IPC_DIR "/motion_seen"
+#define PTZ_MOVING_MARKER IPC_DIR "/ptz_moving"
+#define NIGHT_MARKER    IPC_DIR "/night"
 
 /* Audio out (speaker): campipe plays PCM (8kHz/16-bit/mono, signed LE) written to
  * this FIFO through AO. The speaker-amp enable + DAC level are board-specific and
@@ -146,6 +167,12 @@ static AUDIO_SAMPLE_RATE_E g_audio_rate = AUDIO_SAMPLE_RATE_8000;
 static VIDEO_NORM_E g_norm = VIDEO_ENCODING_MODE_PAL;   /* SAMPLE default */
 static volatile int g_stop = 0;
 
+static int env_int(const char *name, int def)
+{
+    const char *e = getenv(name);
+    return (e && *e) ? atoi(e) : def;
+}
+
 static void *g_sns_handle;
 static int (*g_sns_unreg)(void);
 
@@ -177,6 +204,95 @@ int sensor_register_callback(void)
 int sensor_unregister_callback(void)
 {
     return g_sns_unreg ? g_sns_unreg() : HI_SUCCESS;
+}
+
+/* ---- sensor plugin AE ABI shim --------------------------------------------
+ *
+ * The stock plugin is built against MPP 1.0.4.0, whose AE_SENSOR_DEFAULT_S has
+ * one more u32 at offset 28 (before u32FullLinesStd) than the public 1.0.3.0
+ * headers we may be built with; every later field sits 4 bytes further on
+ * (checked against each store in the plugin's cmos_get_ae_default). Read
+ * through the 1.0.3 layout, the AE saw garbage limits - analog gain pinned at
+ * 1x, all the gain pushed into ISP digital gain - hence a dark, noisy picture
+ * and an ISO stuck at its maximum.
+ *
+ * The plugin hands its callbacks to HI_MPI_AE_SensorRegCallBack; the Makefile
+ * renames the SDK's copy to hiae_SensorRegCallBack so this one is what the
+ * plugin binds to. When the linked MPP is 1.0.3, the three callbacks that take
+ * the struct run on a 1.0.4-shaped copy and are converted both ways. */
+#define AE_DFT_GAP_OFF  28
+#define AE_DFT_GAP_LEN  4
+
+extern HI_S32 hiae_SensorRegCallBack(ISP_DEV IspDev, ALG_LIB_S *pstAeLib, SENSOR_ID SensorId,
+                                     AE_SENSOR_REGISTER_S *pstRegister);
+
+static HI_S32 (*g_ae_get_default)(AE_SENSOR_DEFAULT_S *);
+static HI_VOID (*g_ae_fps_set)(HI_FLOAT, AE_SENSOR_DEFAULT_S *);
+static HI_VOID (*g_ae_slow_fr_set)(HI_U32, AE_SENSOR_DEFAULT_S *);
+/* Persistent 1.0.4 copy: it keeps the extra field the plugin may rely on. */
+static HI_U8 g_ae_dft104[sizeof(AE_SENSOR_DEFAULT_S) + AE_DFT_GAP_LEN];
+
+static void ae_dft_to104(const AE_SENSOR_DEFAULT_S *src)
+{
+    memcpy(g_ae_dft104, src, AE_DFT_GAP_OFF);
+    memcpy(g_ae_dft104 + AE_DFT_GAP_OFF + AE_DFT_GAP_LEN, (const HI_U8 *) src + AE_DFT_GAP_OFF,
+           sizeof(AE_SENSOR_DEFAULT_S) - AE_DFT_GAP_OFF);
+}
+
+static void ae_dft_to103(AE_SENSOR_DEFAULT_S *dst)
+{
+    memcpy(dst, g_ae_dft104, AE_DFT_GAP_OFF);
+    memcpy((HI_U8 *) dst + AE_DFT_GAP_OFF, g_ae_dft104 + AE_DFT_GAP_OFF + AE_DFT_GAP_LEN,
+           sizeof(AE_SENSOR_DEFAULT_S) - AE_DFT_GAP_OFF);
+}
+
+static HI_S32 ae_get_default_shim(AE_SENSOR_DEFAULT_S *dft)
+{
+    HI_S32 ret;
+
+    memset(g_ae_dft104, 0, sizeof(g_ae_dft104));
+    ret = g_ae_get_default((AE_SENSOR_DEFAULT_S *) g_ae_dft104);
+    ae_dft_to103(dft);
+    SAMPLE_PRT("AE sensor defaults (1.0.4 -> 1.0.3): lines %u, inttime [%u, %u], again [%u, %u], "
+               "ispdgain [%u, %u] >> %u\n", dft->u32FullLinesStd, dft->u32MinIntTime, dft->u32MaxIntTime,
+               dft->u32MinAgain, dft->u32MaxAgain, dft->u32MinISPDgainTarget, dft->u32MaxISPDgainTarget,
+               dft->u32ISPDgainShift);
+    return ret;
+}
+
+static HI_VOID ae_fps_set_shim(HI_FLOAT fps, AE_SENSOR_DEFAULT_S *dft)
+{
+    ae_dft_to104(dft);
+    g_ae_fps_set(fps, (AE_SENSOR_DEFAULT_S *) g_ae_dft104);
+    ae_dft_to103(dft);
+}
+
+static HI_VOID ae_slow_fr_set_shim(HI_U32 full_lines, AE_SENSOR_DEFAULT_S *dft)
+{
+    ae_dft_to104(dft);
+    g_ae_slow_fr_set(full_lines, (AE_SENSOR_DEFAULT_S *) g_ae_dft104);
+    ae_dft_to103(dft);
+}
+
+HI_S32 HI_MPI_AE_SensorRegCallBack(ISP_DEV IspDev, ALG_LIB_S *pstAeLib, SENSOR_ID SensorId,
+                                   AE_SENSOR_REGISTER_S *pstRegister)
+{
+    MPP_VERSION_S ver;
+    AE_SENSOR_EXP_FUNC_S *f = &pstRegister->stSnsExp;
+
+    if (HI_MPI_SYS_GetVersion(&ver) == HI_SUCCESS && strstr(ver.aVersion, "V1.0.3.") != NULL) {
+        SAMPLE_PRT("MPP %s: adapting the sensor plugin's 1.0.4 AE defaults\n", ver.aVersion);
+        g_ae_get_default = f->pfn_cmos_get_ae_default;
+        g_ae_fps_set = f->pfn_cmos_fps_set;
+        g_ae_slow_fr_set = f->pfn_cmos_slow_framerate_set;
+        if (g_ae_get_default)
+            f->pfn_cmos_get_ae_default = ae_get_default_shim;
+        if (g_ae_fps_set)
+            f->pfn_cmos_fps_set = ae_fps_set_shim;
+        if (g_ae_slow_fr_set)
+            f->pfn_cmos_slow_framerate_set = ae_slow_fr_set_shim;
+    }
+    return hiae_SensorRegCallBack(IspDev, pstAeLib, SensorId, pstRegister);
 }
 
 /* ISP bring-up for the F22: same call sequence as SAMPLE_COMM_ISP_Init /
@@ -237,6 +353,47 @@ static HI_S32 f22_isp_init(void)
     return HI_SUCCESS;
 }
 
+/* AE limits. The F22 plugin is the stock one, built against the 1.0.4.0 SDK;
+ * logged here so the ranges the AE actually runs with are visible, with env
+ * overrides (CAMPIPE_AE_<FIELD>_MAX) for the ones the plugin gets wrong. */
+static int ae_range(const char *name, ISP_AE_RANGE_S *r)
+{
+    char env[48];
+    const char *e;
+
+    snprintf(env, sizeof(env), "CAMPIPE_AE_%s_MAX", name);
+    e = getenv(env);
+    SAMPLE_PRT("AE %s range [%u, %u]%s%s\n", name, r->u32Min, r->u32Max,
+               (e && *e) ? " -> max " : "", (e && *e) ? e : "");
+    if (!(e && *e))
+        return 0;
+    r->u32Max = strtoul(e, NULL, 0);
+    return 1;
+}
+
+static void ae_tune(void)
+{
+    ISP_EXPOSURE_ATTR_S ea;
+    HI_S32 ret;
+    int changed = 0;
+
+    if ((ret = HI_MPI_ISP_GetExposureAttr(0, &ea)) != HI_SUCCESS) {
+        SAMPLE_PRT("ISP_GetExposureAttr failed %#x\n", ret);
+        return;
+    }
+    changed |= ae_range("EXPTIME", &ea.stAuto.stExpTimeRange);
+    changed |= ae_range("AGAIN", &ea.stAuto.stAGainRange);
+    changed |= ae_range("DGAIN", &ea.stAuto.stDGainRange);
+    changed |= ae_range("ISPDGAIN", &ea.stAuto.stISPDGainRange);
+    changed |= ae_range("SYSGAIN", &ea.stAuto.stSysGainRange);
+    SAMPLE_PRT("AE gain threshold %u, mode %d, compensation %u, antiflicker %d\n",
+               ea.stAuto.u32GainThreshold, ea.stAuto.enAEMode, ea.stAuto.u8Compensation,
+               ea.stAuto.stAntiflicker.bEnable);
+    /* untouched unless overridden */
+    if (changed && (ret = HI_MPI_ISP_SetExposureAttr(0, &ea)) != HI_SUCCESS)
+        SAMPLE_PRT("ISP_SetExposureAttr failed %#x\n", ret);
+}
+
 /* VI+ISP start for the F22 (replaces SAMPLE_COMM_VI_StartVi, whose per-sensor
  * tables are all wrong-sized for it). Same step order as the sample:
  * MIPI/CMOS attr -> ISP init -> ISP run thread -> VI dev -> VI chn. The dev
@@ -261,6 +418,7 @@ static HI_S32 f22_start_vi_isp(SAMPLE_VI_CONFIG_S *vi)
         SAMPLE_PRT("ISP_Run failed %#x\n", ret);
         return ret;
     }
+    ae_tune();
 
     memcpy(&dev, &DEV_ATTR_OV9732_DC_720P_BASE, sizeof(dev));
     dev.stDevRect = cap;
@@ -564,6 +722,8 @@ static void *md_thread(void *arg)
     HI_VOID *sad_vir = NULL, *blob_vir = NULL;
     VIDEO_FRAME_INFO_S prev, cur;
     int have_prev = 0, motion = 0, on_ticks = 0;
+    unsigned int xy_seq = 0;
+    time_t seen_at = 0;
     time_t last_move = 0;
     HI_U32 sad_stride = (W_MD + 15) & ~15u;    /* IVE wants a 16-aligned stride */
     HI_S32 ret;
@@ -631,6 +791,15 @@ static void *md_thread(void *arg)
 
         if (HI_MPI_VPSS_GetChnFrame(VPSS_GRP, VPSS_CHN_MD, &cur, 200) != HI_SUCCESS)
             continue;
+        if (access(PTZ_MOVING_MARKER, F_OK) == 0) {
+            /* the camera is turning: drop the reference, keep the motion state */
+            HI_MPI_VPSS_ReleaseChnFrame(VPSS_GRP, VPSS_CHN_MD, &cur);
+            if (have_prev)
+                HI_MPI_VPSS_ReleaseChnFrame(VPSS_GRP, VPSS_CHN_MD, &prev);
+            have_prev = 0;
+            last_move = time(NULL);
+            continue;
+        }
         if (!have_prev) {          /* seed the reference on the first frame */
             prev = cur;
             have_prev = 1;
@@ -643,16 +812,40 @@ static void *md_thread(void *arg)
 
         moved = 0;
         if (ret == HI_SUCCESS) {
+            HI_U64 sx = 0, sy = 0;
+
             cc = (IVE_CCBLOB_S *)blob_vir;
-            for (i = 0; i < cc->u8RegionNum; i++)
-                area += cc->astRegion[i].u32Area;
-            if (cc->u8RegionNum > 0 && (int)area >= sens.min_area)
+            /* regions are stored non-contiguously: skip the empty slots */
+            for (i = 0; i < IVE_MAX_REGION_NUM; i++) {
+                IVE_REGION_S *r = &cc->astRegion[i];
+                if (r->u32Area == 0)
+                    continue;
+                area += r->u32Area;
+                sx += (HI_U64) r->u32Area * (r->u16Left + r->u16Right);
+                sy += (HI_U64) r->u32Area * (r->u16Top + r->u16Bottom);
+            }
+            if (cc->u8RegionNum > 0 && (int)area >= sens.min_area) {
+                /* region borders are in MD-frame pixels (W_MD x H_MD) */
+                FILE *fp = fopen(MOTION_XY_FILE ".tmp", "w");
                 moved = 1;
+                if (fp) {
+                    fprintf(fp, "%u %u %u\n", ++xy_seq,
+                            (unsigned) (sx * 1000 / (2 * area * W_MD)),
+                            (unsigned) (sy * 1000 / (2 * area * H_MD)));
+                    fclose(fp);
+                    rename(MOTION_XY_FILE ".tmp", MOTION_XY_FILE);
+                }
+            }
         }
 
         /* debounce -> edges */
         if (moved) {
             last_move = time(NULL);
+            if (last_move != seen_at) {
+                FILE *fp = fopen(MOTION_SEEN_FILE, "w");
+                if (fp) fclose(fp);
+                seen_at = last_move;
+            }
             if (!motion && ++on_ticks >= START_TICKS) {
                 FILE *fp = fopen(MOTION_MARKER, "w");
                 if (fp) fclose(fp);
@@ -1077,6 +1270,194 @@ static void mic_mute_tick(int *muted, int *countdown, int period)
     }
 }
 
+/* ---- sound and baby-cry detection ------------------------------------------
+ *
+ * In stock mode rmm ran these and dispatch's queue carried the events; here
+ * they run on the mic frames ai_loop_aac already has in hand (the G.711 path
+ * binds AENC straight to AI, so it has none). Events go out on the marker bus
+ * under the same names ipc2file uses in stock mode, which mqttv4 watches.
+ *
+ * Sound: per-frame level in dB re 1 LSB (0..90), against an adaptive noise
+ * floor (falls fast, rises ~1dB/s) so a fan or a fridge does not count. A sound
+ * is >= SOUND_SENSITIVITY dB, >= SD_OVER_FLOOR_DB above the floor, for
+ * SD_MIN_MS. SOUND_SENSITIVITY is therefore a threshold: 30 hears a whisper,
+ * 90 only a bang.
+ *
+ * Baby crying: the cry fundamental sits at 300-650 Hz, an adult voice at
+ * 85-255 Hz. A frame is cry-like when it is loud and its autocorrelation has a
+ * strong peak (voiced) at a 280-700 Hz period. A cry comes in sustained bursts
+ * between breaths, so it takes SD_CRY_BURSTS bursts of >= SD_CRY_BURST_MS within
+ * SD_CRY_WINDOW_S. A heuristic, not rmm's classifier - but talking does not
+ * trigger it, and a short squeal does not either.
+ *
+ * Settings follow camera.conf (SOUND_DETECTION, SOUND_SENSITIVITY,
+ * BABY_CRYING_DETECT), which `ipc_cmd -b/-n/-B` maintains, re-read every few
+ * seconds. CAMPIPE_SD_DEBUG=N logs the levels every N seconds. */
+#define SOUND_MARKER        IPC_DIR "/sound_detection"
+#define CRY_MARKER          IPC_DIR "/baby_crying"
+#define CAMERA_CONF         "/home/yi-hack/config/camera.conf"
+#define SD_CONF_PERIOD_S    5
+#define SD_OVER_FLOOR_DB    10.0f
+#define SD_MIN_MS           120
+#define SD_HOLD_S           30     /* one event per this long, extended by sound */
+#define SD_CRY_OVER_FLOOR_DB 12.0f
+#define SD_CRY_MIN_DB       45.0f
+#define SD_CRY_VOICED_PCT   55     /* normalised autocorrelation peak, percent */
+#define SD_CRY_BURST_MS     400
+#define SD_CRY_BURSTS       3
+#define SD_CRY_WINDOW_S     10
+#define SD_CRY_HOLD_S       60
+
+typedef struct {
+    int on, cry_on, sens;          /* from camera.conf */
+    time_t conf_at;
+    float floor;                   /* noise floor, dB; < 0 until the first frame */
+    int loud_ms, cry_ms, cry_gap, cry_counted;
+    time_t bursts[SD_CRY_BURSTS];  /* ring of the last burst times */
+    int burst_idx;
+    time_t sound_until, cry_until;
+    int debug;
+    time_t debug_at;
+    float peak_db;
+} sd_state_t;
+
+static void sd_read_conf(sd_state_t *sd)
+{
+    FILE *f = fopen(CAMERA_CONF, "r");
+    char line[128];
+
+    if (f == NULL)
+        return;
+    while (fgets(line, sizeof(line), f) != NULL) {
+        if (!strncmp(line, "SOUND_DETECTION=", 16))
+            sd->on = !strncmp(line + 16, "yes", 3);
+        else if (!strncmp(line, "SOUND_SENSITIVITY=", 18))
+            sd->sens = atoi(line + 18);
+        else if (!strncmp(line, "BABY_CRYING_DETECT=", 19))
+            sd->cry_on = !strncmp(line + 19, "yes", 3);
+    }
+    fclose(f);
+    if (sd->sens < 20 || sd->sens > 95)
+        sd->sens = 50;
+}
+
+static void sd_marker(const char *path, int on)
+{
+    if (on) {
+        FILE *fp = fopen(path, "w");
+        if (fp)
+            fclose(fp);
+    } else {
+        remove(path);
+    }
+}
+
+/* Voiced with a period in the cry band? Normalised autocorrelation peak. */
+static int sd_cry_pitch(const HI_S16 *x, int n, int rate)
+{
+    int lag, lo = rate / 700, hi = rate / 280, i;
+    long long r0 = 0, r, best = 0;
+
+    if (hi >= n / 2)
+        hi = n / 2 - 1;
+    for (i = 0; i < n; i++)
+        r0 += (int) x[i] * x[i];
+    if (r0 == 0)
+        return 0;
+    for (lag = lo; lag <= hi; lag++) {
+        r = 0;
+        for (i = 0; i + lag < n; i++)
+            r += (int) x[i] * x[i + lag];
+        /* compensate the shorter overlap */
+        r = r * n / (n - lag);
+        if (r > best)
+            best = r;
+    }
+    return best * 100 >= r0 * SD_CRY_VOICED_PCT;
+}
+
+static void sd_process(sd_state_t *sd, const HI_S16 *x, int n, int rate)
+{
+    long long sum = 0;
+    float db;
+    int i, frame_ms, loud;
+    time_t now = time(NULL);
+
+    if (now - sd->conf_at >= SD_CONF_PERIOD_S) {
+        sd->conf_at = now;
+        sd_read_conf(sd);
+    }
+    if (n <= 0)
+        return;
+    frame_ms = n * 1000 / rate;
+
+    for (i = 0; i < n; i++)
+        sum += (int) x[i] * x[i];
+    db = 10.0f * log10f((float) (sum / n) + 1.0f);
+
+    if (sd->floor < 0 || db < sd->floor)
+        sd->floor = (sd->floor < 0) ? db : sd->floor + (db - sd->floor) * 0.2f;
+    else
+        sd->floor += 1.0f * frame_ms / 1000;
+    if (db > sd->peak_db)
+        sd->peak_db = db;
+
+    if (sd->debug > 0 && now - sd->debug_at >= sd->debug) {
+        SAMPLE_PRT("SD: level %.1f dB, peak %.1f, floor %.1f (sound %s >= %d, cry %s)\n", db,
+                   sd->peak_db, sd->floor, sd->on ? "on" : "off", sd->sens, sd->cry_on ? "on" : "off");
+        sd->debug_at = now;
+        sd->peak_db = 0;
+    }
+
+    /* sound */
+    loud = sd->on && db >= sd->sens && db >= sd->floor + SD_OVER_FLOOR_DB;
+    sd->loud_ms = loud ? sd->loud_ms + frame_ms : 0;
+    if (sd->loud_ms >= SD_MIN_MS) {
+        if (sd->sound_until == 0) {
+            sd_marker(SOUND_MARKER, 1);
+            SAMPLE_PRT("SD: sound START (%.1f dB, floor %.1f)\n", db, sd->floor);
+        }
+        sd->sound_until = now + SD_HOLD_S;
+    }
+    if (sd->sound_until && now >= sd->sound_until) {
+        sd_marker(SOUND_MARKER, 0);
+        sd->sound_until = 0;
+        SAMPLE_PRT("SD: sound STOP\n");
+    }
+
+    /* baby crying */
+    if (sd->cry_on && db >= SD_CRY_MIN_DB && db >= sd->floor + SD_CRY_OVER_FLOOR_DB &&
+            sd_cry_pitch(x, n, rate)) {
+        sd->cry_ms += frame_ms;
+        sd->cry_gap = 0;
+    } else if (++sd->cry_gap > 1) {     /* tolerate a single odd frame */
+        sd->cry_ms = 0;
+        sd->cry_counted = 0;
+    }
+    if (sd->cry_ms >= SD_CRY_BURST_MS && !sd->cry_counted) {
+        int k, recent = 0;
+
+        sd->cry_counted = 1;
+        sd->bursts[sd->burst_idx] = now;
+        sd->burst_idx = (sd->burst_idx + 1) % SD_CRY_BURSTS;
+        for (k = 0; k < SD_CRY_BURSTS; k++)
+            if (sd->bursts[k] && now - sd->bursts[k] <= SD_CRY_WINDOW_S)
+                recent++;
+        if (recent >= SD_CRY_BURSTS) {
+            if (sd->cry_until == 0) {
+                sd_marker(CRY_MARKER, 1);
+                SAMPLE_PRT("SD: baby crying START\n");
+            }
+            sd->cry_until = now + SD_CRY_HOLD_S;
+        }
+    }
+    if (sd->cry_until && now >= sd->cry_until) {
+        sd_marker(CRY_MARKER, 0);
+        sd->cry_until = 0;
+        SAMPLE_PRT("SD: baby crying STOP\n");
+    }
+}
+
 /* Open (or reopen) the codec's FIFO for writing. ENXIO until rRTSPServer attaches
  * as reader, which is normal and not worth logging. */
 static int audio_fifo_open(const char *path)
@@ -1226,6 +1607,14 @@ static void ai_loop_aac(int mute_period)
      * Both values sit inside vo-aacenc's accepted window (>= 4000 and
      * <= sampleRate*6 for mono), so neither gets silently rewritten by SetParam. */
     int bitrate = (rate >= 16000) ? 32000 : 24000;
+    sd_state_t sd;
+
+    memset(&sd, 0, sizeof(sd));
+    sd.floor = -1.0f;
+    sd.debug = env_int("CAMPIPE_SD_DEBUG", 0);
+    mkdir(IPC_DIR, 0755);
+    remove(SOUND_MARKER);
+    remove(CRY_MARKER);
 
     /* AI only queues frames for a user-space reader when the channel has a NON-ZERO
      * user frame depth. With the default 0, HI_MPI_AI_GetFrame never returns a frame
@@ -1291,6 +1680,7 @@ static void ai_loop_aac(int mute_period)
          * `points = u32Len >> enBitwidth`), so halve it for 16-bit samples. */
         src  = (const HI_S16 *)frame.pVirAddr[0];
         have = (int)frame.u32Len / 2;
+        sd_process(&sd, src, have, rate);
         while (have > 0) {
             int n = AAC_FRAME - fill;
             if (n > have) n = have;
@@ -1362,6 +1752,189 @@ static void *ai_thread(void *arg)
     return NULL;
 }
 
+/* ---- day/night (Stage D) -------------------------------------------------
+ *
+ * In stock mode rmm switches day/night; with rmm gone nobody did, so the image
+ * stayed in day mode all night. Enabled by CAMPIPE_DAYNIGHT (auto | day | night).
+ *
+ * Actuation is what rmm does on the h20 (from its disassembly), all through the
+ * stock cpld_periph driver: the IR LEDs are PWM channel 0, ramped 10 -> 50 -> 100
+ * on the way up, and the latching IR-cut is pulsed by the driver itself. The
+ * picture goes greyscale at night via VENC Color2Grey, as in rmm.
+ *
+ * The decision uses the AE's ISO (total gain): night when the sensor is near the
+ * top of its gain for a while. Leaving night is harder, because our own IR lights
+ * the scene: on the h20 a dark room under IR reads ISO 100, the same as daylight.
+ * So while the IR is on, every DN_PROBE_S we switch it off for a few seconds and
+ * read ISO without it; day only when the room is bright on its own. With the IR
+ * off (ir_off) ISO is the ambient light anyway and a plain threshold is enough.
+ * A day that does not last (the probe misread) doubles the probe interval, up to
+ * an hour; a day that holds resets it. */
+#define CPLD_DEV            "/dev/cpld_periph"
+#define CPLD_PWM0_SET       _IO('p', 19)   /* arg: int* 0..100 - IR illuminator */
+#define CPLD_IRCUT_NIGHT    _IO('p', 21)
+#define CPLD_IRCUT_DAY      _IO('p', 22)
+
+#define DN_TO_NIGHT_S       5      /* ISO above the night threshold this long   */
+#define DN_TO_DAY_S         10     /* ISO below the day threshold this long     */
+#define DN_PROBE_S          300    /* IR-off probe interval at night            */
+#define DN_PROBE_MAX_S      3600
+#define DN_PROBE_MIN_MS     2000   /* AE settle window after the IR goes dark   */
+#define DN_PROBE_MAX_MS     8000
+#define DN_SHORT_DAY_S      120    /* a day shorter than this was a false exit  */
+#define DN_START_GRACE_S    20     /* the AE reads its ceiling while it converges */
+
+/* IR LEDs on (ramped, as rmm does) or off. */
+static void dn_leds(int fd, int on)
+{
+    static const int ramp[] = { 10, 50, 100 };
+    int i, pwm;
+
+    if (!on) {
+        pwm = 0;
+        ioctl(fd, CPLD_PWM0_SET, &pwm);
+        return;
+    }
+    for (i = 0; i < 3; i++) {
+        pwm = ramp[i] * env_int("CAMPIPE_IR_PWM", 100) / 100;
+        ioctl(fd, CPLD_PWM0_SET, &pwm);
+        usleep(200 * 1000);
+    }
+}
+
+static void dn_apply(int night, int ir_on)
+{
+    VENC_COLOR2GREY_S grey;
+    int fd, chn;
+
+    fd = open(CPLD_DEV, O_RDWR);
+    if (fd < 0) {
+        SAMPLE_PRT("daynight: open %s failed: %s\n", CPLD_DEV, strerror(errno));
+    } else {
+        dn_leds(fd, night && ir_on);
+        ioctl(fd, night ? CPLD_IRCUT_NIGHT : CPLD_IRCUT_DAY);
+        close(fd);
+    }
+
+    grey.bColor2Grey = night ? HI_TRUE : HI_FALSE;
+    for (chn = 0; chn <= VENC_JPEG_LOW; chn++)
+        HI_MPI_VENC_SetColor2Grey(chn, &grey);
+
+    if (night) {
+        FILE *fp = fopen(NIGHT_MARKER, "w");
+        if (fp)
+            fclose(fp);
+    } else {
+        remove(NIGHT_MARKER);
+    }
+}
+
+/* Ambient-only ISO at night: IR LEDs off until the AE settles (ISO steady
+ * within 5% over half a second, or at its ceiling), then IR back on. A probe read
+ * before the AE caught up would come out low and look like daylight. */
+static unsigned int dn_probe(void)
+{
+    ISP_EXP_INFO_S ei;
+    unsigned int iso = 0, prev = 0;
+    int fd, ms;
+
+    fd = open(CPLD_DEV, O_RDWR);
+    if (fd < 0)
+        return UINT_MAX;
+    dn_leds(fd, 0);
+    for (ms = 0; ms < DN_PROBE_MAX_MS; ms += 500) {
+        usleep(500 * 1000);
+        if (HI_MPI_ISP_QueryExposureInfo(0, &ei) != HI_SUCCESS)
+            continue;
+        prev = iso;
+        iso = ei.u32ISO;
+        if (ei.bExposureIsMAX)
+            break;
+        if (ms + 500 >= DN_PROBE_MIN_MS && prev > 0 &&
+            iso * 20 <= prev * 21 && prev * 20 <= iso * 21)
+            break;
+    }
+    dn_leds(fd, 1);
+    close(fd);
+    return iso ? iso : UINT_MAX;
+}
+
+static void *daynight_thread(void *arg)
+{
+    const char *mode = (const char *) arg;
+    int iso_night = env_int("CAMPIPE_ISO_NIGHT", 6000);
+    int iso_day   = env_int("CAMPIPE_ISO_DAY", 1200);
+    int debug     = env_int("CAMPIPE_DN_DEBUG", 0);   /* log AE every N seconds */
+    unsigned int tick = 0, iso = 0;
+    int night = -1, ir_on = -1, want, want_ir;
+    int probe_base = env_int("CAMPIPE_DN_PROBE_S", DN_PROBE_S);
+    int above = 0, below = 0, probe_every = probe_base;
+    time_t day_since = 0, last_probe = 0, now, started = time(NULL);
+    ISP_EXP_INFO_S ei;
+
+    memset(&ei, 0, sizeof(ei));
+    SAMPLE_PRT("daynight: mode %s, ISO night >= %d, day <= %d\n", mode, iso_night, iso_day);
+    mkdir(IPC_DIR, 0755);
+
+    while (!g_stop) {
+        want_ir = (access(IR_OFF_MARKER, F_OK) != 0);
+        want = night;
+        now = time(NULL);
+
+        if (strcmp(mode, "night") == 0) {
+            want = 1;
+        } else if (strcmp(mode, "day") == 0) {
+            want = 0;
+        } else if (night == 1 && ir_on == 1) {
+            /* our IR masks the ambient light: only a probe can tell */
+            if (now - last_probe >= probe_every) {
+                iso = dn_probe();
+                last_probe = time(NULL);
+                SAMPLE_PRT("daynight: probe without IR: ISO %u (day <= %d)\n", iso, iso_day);
+                if ((int) iso <= iso_day)
+                    want = 0;
+            }
+        } else if (HI_MPI_ISP_QueryExposureInfo(0, &ei) == HI_SUCCESS) {
+            iso = ei.u32ISO;
+            if (debug > 0 && ++tick % debug == 0)
+                SAMPLE_PRT("daynight: iso %u exp %u (t %u ag %u dg %u ispdg %u) max %d lum %u fps %u\n",
+                           ei.u32ISO, ei.u32Exposure, ei.u32ExpTime, ei.u32AGain, ei.u32DGain,
+                           ei.u32ISPDGain, ei.bExposureIsMAX, ei.u8AveLum, ei.u32Fps);
+            above = ((int) iso >= iso_night) ? above + 1 : 0;
+            below = ((int) iso <= iso_day) ? below + 1 : 0;
+            if (night < 0)
+                want = 0;   /* start in day: the AE reads its ceiling until it converges */
+            else if (night == 0 && above >= DN_TO_NIGHT_S && now - started >= DN_START_GRACE_S)
+                want = 1;
+            else if (night == 1 && below >= DN_TO_DAY_S)
+                want = 0;
+        }
+
+        if (want != night || (want == 1 && want_ir != ir_on)) {
+            if (night == 0 && want == 1 && day_since > started) {
+                /* a day that did not last: the probe misread the light */
+                if (now - day_since < DN_SHORT_DAY_S)
+                    probe_every = (probe_every * 2 > DN_PROBE_MAX_S) ? DN_PROBE_MAX_S : probe_every * 2;
+                else
+                    probe_every = probe_base;
+            }
+            if (want == 0)
+                day_since = now;
+            if (want == 1 && night != 1)
+                last_probe = now;           /* first probe one interval after dusk */
+            if (want != night)
+                SAMPLE_PRT("daynight: -> %s (ISO %u, probe every %ds)\n",
+                           want ? "NIGHT" : "DAY", iso, probe_every);
+            dn_apply(want, want_ir);
+            night = want;
+            ir_on = want_ir;
+            above = below = 0;
+        }
+        sleep(1);
+    }
+    return NULL;
+}
+
 int main(void)
 {
     VB_CONF_S vb;
@@ -1372,7 +1945,14 @@ int main(void)
     SIZE_S sensor_sz;
     PIC_SIZE_E sensor_pic;
     HI_S32 ret;
-    pthread_t th_high, th_low, th_md, th_ao, th_ai;
+    pthread_t th_high, th_low, th_md, th_ao, th_ai, th_dn;
+    const char *dn_mode = getenv("CAMPIPE_DAYNIGHT");
+    int dn_on = dn_mode && (!strcmp(dn_mode, "auto") || !strcmp(dn_mode, "day") || !strcmp(dn_mode, "night"));
+    /* The 640x360 stream is opt-out via CAMPIPE_LOW=off (rtsp STREAM=high): its
+     * VB pool and encoder buffers are ~2.7MB of MMZ, which the boot script can
+     * then spend on a 4th 1080p block instead. */
+    const char *low_env = getenv("CAMPIPE_LOW");
+    int low_on = !(low_env && (!strcmp(low_env, "off") || !strcmp(low_env, "no")));
     stream_ctx_t ctx_high = { CHN_HIGH, FIFO_HIGH, 512 * 1024 };
     stream_ctx_t ctx_low  = { CHN_LOW,  FIFO_LOW,  128 * 1024 };
     struct { VPSS_CHN chn; HI_U32 w, h; COMPRESS_MODE_E cmp; } vchn[] = {
@@ -1476,6 +2056,11 @@ int main(void)
      * from this pool. MD holds two frames at once (cur+ref) plus user-get depth,
      * so give it extra blocks when enabled. */
     vb.astCommPool[2].u32BlkCnt = md_on ? 8 : 4;
+    if (!low_on) {
+        /* no 640x360 pool: close the gap rather than leave an empty one */
+        vb.astCommPool[1] = vb.astCommPool[2];
+        memset(&vb.astCommPool[2], 0, sizeof(vb.astCommPool[2]));
+    }
 
     if ((ret = SAMPLE_COMM_SYS_Init(&vb)) != HI_SUCCESS) {
         SAMPLE_PRT("SYS_Init failed %#x\n", ret);
@@ -1510,6 +2095,8 @@ int main(void)
         goto err_vpss;
     }
     for (i = 0; i < 3; i++) {
+        if (vchn[i].chn == CHN_LOW && !low_on)
+            continue;
         memset(&chn_mode, 0, sizeof(chn_mode));
         chn_mode.enChnMode      = VPSS_CHN_MODE_USER;
         chn_mode.bDouble        = HI_FALSE;
@@ -1556,7 +2143,7 @@ int main(void)
     /* --- VENC: two H.264 streams + two idle JPEG snap channels --- */
     if (start_h264(CHN_HIGH, CHN_HIGH, W_HIGH, H_HIGH, 2048, SNS_FPS) != HI_SUCCESS)
         goto err_vpss;
-    if (start_h264(CHN_LOW, CHN_LOW, W_LOW, H_LOW, 512, SNS_FPS) != HI_SUCCESS)
+    if (low_on && start_h264(CHN_LOW, CHN_LOW, W_LOW, H_LOW, 512, SNS_FPS) != HI_SUCCESS)
         goto err_vpss;
     if (start_jpeg(VENC_JPEG_HIGH, CHN_HIGH, W_HIGH, H_HIGH) != HI_SUCCESS)
         goto err_vpss;
@@ -1584,15 +2171,19 @@ int main(void)
     }
 
     pthread_create(&th_high, NULL, stream_thread, &ctx_high);
-    pthread_create(&th_low, NULL, stream_thread, &ctx_low);
+    if (low_on)
+        pthread_create(&th_low, NULL, stream_thread, &ctx_low);
     if (md_on)
         pthread_create(&th_md, NULL, md_thread, &md_sens);
     if (ao_on)
         pthread_create(&th_ao, NULL, ao_thread, NULL);
     if (ai_on)
         pthread_create(&th_ai, NULL, ai_thread, &ai_cfg);
+    if (dn_on)
+        pthread_create(&th_dn, NULL, daynight_thread, (void *) dn_mode);
 
-    SAMPLE_PRT("campipe: native pipeline running (high+low H.264, JPEG snap idle%s%s%s)\n",
+    SAMPLE_PRT("campipe: native pipeline running (%s H.264, JPEG snap idle%s%s%s)\n",
+               low_on ? "high+low" : "high only",
                md_on ? ", motion detection on" : "", ao_on ? ", audio out on" : "",
                ai_on ? ", audio in on" : "");
 
@@ -1600,17 +2191,21 @@ int main(void)
         pause();
 
     pthread_join(th_high, NULL);
-    pthread_join(th_low, NULL);
+    if (low_on)
+        pthread_join(th_low, NULL);
     if (md_on)
         pthread_join(th_md, NULL);
     if (ao_on)
         pthread_join(th_ao, NULL);
     if (ai_on)
         pthread_join(th_ai, NULL);
+    if (dn_on)
+        pthread_join(th_dn, NULL);
 
     /* Best-effort teardown; on a clean stop the startup script also re-inits. */
     HI_MPI_VENC_StopRecvPic(CHN_HIGH);
-    HI_MPI_VENC_StopRecvPic(CHN_LOW);
+    if (low_on)
+        HI_MPI_VENC_StopRecvPic(CHN_LOW);
 err_vpss:
     SAMPLE_COMM_VPSS_Stop(1, md_on ? 4 : 3);
 err_vi:

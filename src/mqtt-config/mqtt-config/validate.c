@@ -13,6 +13,8 @@ char *config_params[][PARAM_OPTIONS] = {
     { "recording", "SEGMENT_TIME", "int", "1", "3600", "" , "", "", "" },
     /* Which stream to record; high needs swap (see record.sh). */
     { "recording", "STREAM", "enum", "high", "low", "" , "", "", "" },
+    /* Keep only segments around motion (native pipeline, see wd_record.sh). */
+    { "recording", "MOTION_ONLY", "bool", "", "", "" , "", "", "" },
 
     /* snapshot (section = config/services/snapshot.conf) */
     { "services/snapshot", "ENABLED", "bool", "", "", "" , "", "", "" },

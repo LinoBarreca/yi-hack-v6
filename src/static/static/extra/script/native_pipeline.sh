@@ -77,6 +77,21 @@ log "reloading SDK modules ($MODE) from $KO_RUN ..."
 himm 0x2003002c 0x1c4001 >/dev/null 2>&1
 log "modules reloaded (hi3518e count = $(lsmod | grep -c hi3518e))"
 
+# h20 (Yi Dome) PTZ: the stock dispatch that owns the motors does not run here, so
+# load its motor driver ourselves; ipc_cmd drives /dev/ssp directly when the
+# dispatch queue is missing. Calibration finds the end stops and centres (~10s).
+if [ "$MODEL_SUFFIX" = "h20" ] && [ -f /home/app/localko/ssp_ms41909.ko ] ; then
+    [ -e /dev/ssp ] || insmod /home/app/localko/ssp_ms41909.ko >> "$LOG_FILE" 2>&1
+    # camera.conf IR/CRUISE were dispatch's to restore at boot; restore them here.
+    CAM_IR=$(sed -n 's/^IR=//p' /home/yi-hack/config/camera.conf)
+    CAM_CRUISE=$(sed -n 's/^CRUISE=//p' /home/yi-hack/config/camera.conf)
+    CAM_TRACK=$(sed -n 's/^MOTION_TRACKING=//p' /home/yi-hack/config/camera.conf)
+    [ "$CAM_IR" = "no" ] && ipc_cmd -i off >/dev/null 2>&1
+    ( { ipc_cmd -K; [ -n "$CAM_CRUISE" ] && ipc_cmd -C "$CAM_CRUISE"
+        [ "$CAM_TRACK" = "yes" ] && ipc_cmd -o on; } >/dev/null 2>&1 & )
+    log "ptz: motor driver loaded, calibrating (cruise=${CAM_CRUISE:-no} tracking=${CAM_TRACK:-no})"
+fi
+
 # --- 2. campipe env per mode ------------------------------------------------
 # VB pool depth: offline needs 5 (VI->DDR->VPSS round-trip + LDC), online 3.
 # LDC only meaningful offline; validated ranges baked into campipe defaults.
@@ -88,6 +103,16 @@ if [ "$MODE" = "offline" ] ; then
 else
     C_VBLK=3
     C_LDC=0
+fi
+
+# h20 builds may use the public SDK 1.0.3.0, whose VENC rejects campipe's 1.0.4.0-
+# validated stream buffers (CreateChn 0xa0088003): it wants at least w*h for H.264
+# and w*align16(h) for JPEG (1920x1088 = 2040KB). Size them up via campipe's env
+# overrides; the low JPEG default (w*h*2) is already large enough.
+if [ "$MODEL_SUFFIX" = "h20" ] ; then
+    export CAMPIPE_H264HI_KB=2025 CAMPIPE_H264LO_KB=225 CAMPIPE_JPEGHI_KB=2048
+    # Day/night: rmm drove the IR-cut and the IR LEDs here; campipe does now.
+    export CAMPIPE_DAYNIGHT=auto
 fi
 
 # --- 3. rRTSPServer params ---------------------------------------------------
@@ -106,6 +131,15 @@ RRTSP_USER=""; RRTSP_PWD=""
 [ -n "$USER" ] && RRTSP_USER="-u $USER"
 [ -n "$PASSWORD" ] && RRTSP_PWD="-w $PASSWORD"
 RTSP_ENABLED=$ENABLED
+
+# STREAM=high: nobody reads the 640x360 stream, so campipe does not encode it,
+# and its MMZ (~2.7MB) buys a 4th 1080p VB block - with only 3 the 1080p
+# channel drops to ~17fps of the sensor's 25. Offline mode keeps its own depth.
+C_LOW=on
+if [ "$STREAM" = "high" ] ; then
+    C_LOW=off
+    [ "$MODE" = "offline" ] || C_VBLK=4
+fi
 
 # Forward audio (mic -> AAC): campipe captures AI, encodes AAC-LC and writes ADTS
 # frames to /tmp/aac_audio_fifo, which is the FIFO rRTSPServer's audio track reads.
@@ -235,7 +269,7 @@ while : ; do
         CAMPIPE_VBLK=$C_VBLK CAMPIPE_LDC=$C_LDC CAMPIPE_MD=$C_MD CAMPIPE_MD_SENS=$C_MD_SENS \
             CAMPIPE_AMP_ON="$AMP_ON" CAMPIPE_AMP_OFF="$AMP_OFF" CAMPIPE_DAC_VOL="$DAC_VOL" \
             CAMPIPE_AUDIO="$C_AUDIO" CAMPIPE_AUDIO_RATE="$C_AUDIO_RATE" \
-            CAMPIPE_AUDIO_NR="$C_AUDIO_NR" \
+            CAMPIPE_AUDIO_NR="$C_AUDIO_NR" CAMPIPE_LOW="$C_LOW" \
             "$CAMPIPE" >> "$LOG_FILE" 2>&1 &
         sleep 3
     fi

@@ -194,6 +194,18 @@ void message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_
                 sprintf(conf_file, "%s/%s.conf", CONF_FILE_PATH, file);
                 if (debug) fprintf(stderr, "Updating file \"%s\", parameter \"%s\" with value \"%s\"\n", file, param, (char *) message->payload);
                 config_replace(conf_file, param, message->payload);
+                /* Echo the new value on <prefix>/stat/<file>/<param> (the
+                 * conf2mqtt layout), so a Home Assistant entity bound to a
+                 * plain config key sees the change. ipc_cmd-backed keys are
+                 * echoed by mqttv4 instead. */
+                if (len > 4 && strcmp(&topic_prefix[len - 5], "/cmnd") == 0 &&
+                        len - 4 + 5 + strlen(file) + 1 + strlen(param) < sizeof(topic)) {
+                    sprintf(topic, "%.*sstat/%s/", len - 4, topic_prefix, file);
+                    for (s = param; *s; s++)
+                        *s = tolower((unsigned char) *s);
+                    strcat(topic, param);
+                    mosquitto_publish(mosq, NULL, topic, message->payloadlen, message->payload, 0, false);
+                }
             }
         }
     } else {

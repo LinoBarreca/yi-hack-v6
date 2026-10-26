@@ -159,9 +159,18 @@ mkdir -p "$REC_DIR/$(date +%YY%mM%dD%HH)"
 # globbing off first: the '?' in "0:a:0?" is a wildcard to the shell, and a stray
 # file matching it in the cwd would silently rewrite the argument. Nothing below
 # needs pathname expansion, and it costs no fork.
+#
+# -rtsp_transport udp, -skip_frame nokey: measured on the h20 recording 1080p.
+# Probing decodes video in software, and on this ARM926 1080p decodes far slower
+# than real time, so ffmpeg spent the whole probe window falling behind. Over TCP
+# that was fatal: once ffmpeg stopped draining the socket, live555 stopped
+# sending to it for good, and the recorder sat on a 48-byte file forever. Over
+# loopback UDP nothing is lost and a late reader cannot wedge the server, and
+# decoding only keyframes keeps the probe short. Neither touches the recorded
+# stream (stream copy, no decoding after the probe).
 set -f
-exec ffmpeg -nostdin -loglevel error -probesize 500k \
-    -rtsp_transport tcp -i "$URL" \
+exec ffmpeg -nostdin -loglevel error -skip_frame nokey -probesize 500k \
+    -rtsp_transport udp -i "$URL" \
     $MAP -c copy -map_metadata -1 -f segment -segment_time "$SEG" -segment_atclocktime 1 \
     -reset_timestamps 1 -strftime 1 \
     "$REC_DIR/%YY%mM%dD%HH/%MM%SS.mp4"

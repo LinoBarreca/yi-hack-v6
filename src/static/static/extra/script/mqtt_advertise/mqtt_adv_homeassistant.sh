@@ -287,6 +287,10 @@ AI_ANIMAL_DETECTION|AI Animal Detection|mdi:paw
 FACE_DETECTION|Face Detection|mdi:face-recognition
 MOTION_TRACKING|Motion Tracking|mdi:radar
 BABY_CRYING_DETECT|Baby Crying Detect|mdi:baby-face-outline"
+# Plain recording.conf keys (applied by wd_record.sh, no ipc_cmd); mqtt-config
+# echoes their state on stat/recording/<key>.
+RECORDING_SWITCHES="
+MOTION_ONLY|Record Only Motion|mdi:record-rec"
 CAMERA_SELECTS="
 SENSITIVITY|Sensitivity|mdi:tune|\"low\",\"medium\",\"high\"
 SOUND_SENSITIVITY|Sound Sensitivity|mdi:tune|\"30\",\"35\",\"40\",\"45\",\"50\",\"60\",\"70\",\"80\",\"90\"
@@ -301,6 +305,14 @@ if [ "$CAMERA_SETTING_ENABLE" == "yes" ]; then
         CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS',"icon":"'$ICON'","state_topic":"'$MQTT_PREFIX'/stat/camera/'$LKEY'","command_topic":"'$MQTT_PREFIX'/cmnd/camera/'$KEY'","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
         $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
     done
+    echo "$RECORDING_SWITCHES" | while IFS='|' read -r KEY UNIQUE_NAME ICON; do
+        [ -z "$KEY" ] && continue
+        LKEY=$(echo "$KEY" | tr 'A-Z' 'a-z')
+        UNIQUE_ID=$IDENTIFIERS"-RECORDING-"$KEY
+        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/RECORDING_$KEY/config
+        CONTENT='{"availability_topic":"'$MQTT_PREFIX'/'$TOPIC_BIRTH_WILL'","payload_available":"'$BIRTH_MSG'","payload_not_available":"'$WILL_MSG'","device":'$DEVICE_DETAILS',"icon":"'$ICON'","state_topic":"'$MQTT_PREFIX'/stat/recording/'$LKEY'","command_topic":"'$MQTT_PREFIX'/cmnd/recording/'$KEY'","name":"'$UNIQUE_NAME'","unique_id":"'$UNIQUE_ID'","payload_on":"yes","payload_off":"no", "platform": "mqtt"}'
+        $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -m "$CONTENT"
+    done
     echo "$CAMERA_SELECTS" | while IFS='|' read -r KEY UNIQUE_NAME ICON OPTIONS; do
         [ -z "$KEY" ] && continue
         LKEY=$(echo "$KEY" | tr 'A-Z' 'a-z')
@@ -313,6 +325,11 @@ else
     echo "$CAMERA_SWITCHES" | while IFS='|' read -r KEY UNIQUE_NAME ICON; do
         [ -z "$KEY" ] && continue
         TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/$KEY/config
+        $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -n
+    done
+    echo "$RECORDING_SWITCHES" | while IFS='|' read -r KEY UNIQUE_NAME ICON; do
+        [ -z "$KEY" ] && continue
+        TOPIC=$HOMEASSISTANT_MQTT_PREFIX/switch/$IDENTIFIERS/RECORDING_$KEY/config
         $MOSQUITTO_PUB -i $HOSTNAME $HA_QOS $HA_RETAIN -h $HOST -t $TOPIC -n
     done
     echo "$CAMERA_SELECTS" | while IFS='|' read -r KEY UNIQUE_NAME ICON OPTIONS; do

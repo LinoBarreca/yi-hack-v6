@@ -245,7 +245,7 @@ mkdir -p /tmp/ipc
 # watchdog; since we skip it, we feed /dev/watchdog ourselves (NOW, before the
 # ~10s module reload).
 #
-# Safety: native activates only if MODEL=y20 AND the SDK modules + campipe are
+# Safety: native activates only if MODEL=y20/h20 AND the SDK modules + campipe are
 # present - otherwise it silently stays stock (so a native config on a build
 # without the assets never breaks boot). Physical escape hatch that survives a
 # bad flash config: `touch /tmp/sd/NO_NATIVE` forces stock regardless of the
@@ -262,7 +262,7 @@ NATIVE_BIN=/home/yi-hack/extra/bin/campipe
 
 NATIVE_PIPELINE=no
 if { [ "$PIPELINE_MODE" = "online" ] || [ "$PIPELINE_MODE" = "offline" ]; } \
-   && [ "$MODEL_SUFFIX" = "y20" ] \
+   && { [ "$MODEL_SUFFIX" = "y20" ] || [ "$MODEL_SUFFIX" = "h20" ]; } \
    && [ -f "$NATIVE_KO_DIR/load3518e" ] && [ -x "$NATIVE_BIN" ] ; then
     NATIVE_PIPELINE=yes
     NATIVE_LDC=0
@@ -295,7 +295,18 @@ fi
 # say so rather than leaving a silently adopted module behind.
 # The device node is the module's own (misc_register), so testing it with a
 # builtin says whether the module is loaded without forking lsmod+grep.
-if [ "$NATIVE_PIPELINE" = "no" ] && [ -c /dev/cpld_periph ] ; then
+#
+# NOT on the PTZ domes: their cpld_periph also runs the pan/tilt motor timer and does
+# not free IRQ 31 on exit. After rmmod + stock re-insmod, dmesg shows
+# "request_irq 31 failed!" and the next timer tick lands in the unloaded module:
+# the h20 hard-resets ~21 s into every boot. The domes run the non-v3 module (the one
+# system_init.sh loads, confirmed by lsmod on a stock-booted h20), so leaving it for
+# stock to adopt is safe.
+case "$MODEL_SUFFIX" in
+    h20|y19|v201|yi_dome|yi_dome_1080p|yi_cloud_dome_1080p) CPLD_HANDOFF=no ;;
+    *) CPLD_HANDOFF=yes ;;
+esac
+if [ "$NATIVE_PIPELINE" = "no" ] && [ "$CPLD_HANDOFF" = "yes" ] && [ -c /dev/cpld_periph ] ; then
     rmmod cpld_periph || echo "system.sh: rmmod cpld_periph failed - rmm will inherit the module we loaded"
 fi
 
@@ -334,7 +345,7 @@ if [[ $NATIVE_PIPELINE == "no" ]] && [[ $DISABLE_CLOUD == "no" ]] ; then
         fi
         ./cloud &
         ./p2p_tnp &
-        if [[ $MODEL_SUFFIX != "yi_dome" ]] ; then
+        if [[ $MODEL_SUFFIX != "yi_dome" ]] && [[ $MODEL_SUFFIX != "v201" ]] ; then
             # oss hardware-encrypts uploaded media via /dev/cipher and is the only
             # runtime user of hi_cipher.ko (cloudAPI uses software CyaSSL). Load the
             # module here: it was removed from the stock app/init.sh unconditional
@@ -495,7 +506,7 @@ RRTSP_PWD=$RTSP_PASSWORD
 
 if [[ $RTSP_ENABLED == "yes" ]] ; then
 
-    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_home" ]] ; then
+    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_home" ]] || [[ $MODEL_SUFFIX == "v201" ]] || [[ $MODEL_SUFFIX == "y18" ]] ; then
         HIGHWIDTH="1280"
         HIGHHEIGHT="720"
     else
@@ -589,7 +600,7 @@ if [[ $ONVIF_ENABLED == "yes" ]] ; then
         echo "" >> $ONVIF_SRVD_CONF
     fi
 
-    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] ; then
+    if [[ $MODEL_SUFFIX == "yi_dome" ]] || [[ $MODEL_SUFFIX == "yi_dome_1080p" ]] || [[ $MODEL_SUFFIX == "yi_cloud_dome_1080p" ]] || [[ $MODEL_SUFFIX == "v201" ]] || [[ $MODEL_SUFFIX == "h20" ]] || [[ $MODEL_SUFFIX == "y19" ]] ; then
         echo "#PTZ" >> $ONVIF_SRVD_CONF
         echo "ptz=1" >> $ONVIF_SRVD_CONF
         echo "get_position=/home/yi-hack/extra/bin/ipc_cmd -g" >> $ONVIF_SRVD_CONF

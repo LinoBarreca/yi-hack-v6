@@ -56,6 +56,370 @@ void ipc_stop()
     }
 }
 
+/* PTZ without dispatch (native pipeline). Degrees use the same scale as -g.
+ *
+ * Presets live only in ptz_presets.conf ("N=name,x,y" in degrees), which
+ * ptz_presets.sh already maintains from -g in both modes; dispatch's own copy is
+ * what we lack here, so -P/-R/-H have nothing left to do and -p reads the file.
+ *
+ * Cruise is a small daemon (pid in CRUISE_PID_FILE). Manual moves touch
+ * PTZ_MANUAL_FILE and the daemon pauses until they have been quiet for
+ * CRUISE_RESUME_S, so it does not fight whoever is steering. */
+#define PTZ_PRESETS_FILE "/home/yi-hack/config/ptz_presets.conf"
+#define CRUISE_PID_FILE  "/tmp/ptz_cruise.pid"
+#define PTZ_MANUAL_FILE  "/tmp/ptz_manual"
+#define CRUISE_STAY_S    10
+#define CRUISE_RESUME_S  60
+
+/* campipe's motion detector ignores frames while this exists, so a turn of
+ * ours (cruise, tracking) does not read as motion. */
+#define PTZ_MOVING_MARKER MARKER_DIR "/ptz_moving"
+
+static int marked_jump(int x, int y)
+{
+    int fd = open(PTZ_MOVING_MARKER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int ret;
+
+    if (fd >= 0)
+        close(fd);
+    ret = native_ptz_jump(x, y);
+    usleep(800 * 1000);         /* let the picture settle */
+    unlink(PTZ_MOVING_MARKER);
+    return ret;
+}
+
+static int native_jump_deg(double x, double y)
+{
+    return native_ptz_jump((int) round(x * MAX_PTZ_X / 360.0), (int) round(y * MAX_PTZ_Y / 180.0));
+}
+
+static int read_preset(int num, double *x, double *y)
+{
+    FILE *f = fopen(PTZ_PRESETS_FILE, "r");
+    char line[128], *p;
+    int n, ret = -1;
+
+    if (f == NULL)
+        return -1;
+    while (fgets(line, sizeof(line), f) != NULL) {
+        if (sscanf(line, "%d=", &n) != 1 || n != num)
+            continue;
+        p = strchr(line, ',');
+        if (p != NULL && sscanf(p + 1, "%lf,%lf", x, y) == 2)
+            ret = 0;
+        break;
+    }
+    fclose(f);
+    return ret;
+}
+
+static void touch_manual()
+{
+    int fd = open(PTZ_MANUAL_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd >= 0)
+        close(fd);
+}
+
+static void cruise_pause(int secs)
+{
+    struct stat st;
+
+    for (; secs > 0; secs--)
+        sleep(1);
+    while (stat(PTZ_MANUAL_FILE, &st) == 0 && time(NULL) - st.st_mtime < CRUISE_RESUME_S)
+        sleep(1);
+}
+
+/* Stop the daemon whose pid is in pid_file; returns 1 if there was one. */
+static int daemon_stop(const char *pid_file)
+{
+    FILE *f = fopen(pid_file, "r");
+    int pid;
+
+    if (f == NULL)
+        return 0;
+    if (fscanf(f, "%d", &pid) == 1 && pid > 1)
+        kill(pid, SIGTERM);
+    fclose(f);
+    unlink(pid_file);
+    return 1;
+}
+
+/* Returns in the parent (0) and in the detached child (1), which owns pid_file. */
+static int daemon_start(const char *pid_file)
+{
+    FILE *f;
+
+    if (fork() != 0)
+        return 0;
+    setsid();
+    if (fork() != 0)
+        exit(EXIT_SUCCESS);
+    signal(SIGHUP, SIG_IGN);
+    chdir("/");
+    /* callers (mqtt-config, CGI) may wait for EOF on our stdout */
+    freopen("/dev/null", "r", stdin);
+    freopen("/dev/null", "w", stdout);
+    freopen("/dev/null", "w", stderr);
+
+    f = fopen(pid_file, "w");
+    if (f != NULL) {
+        fprintf(f, "%d\n", getpid());
+        fclose(f);
+    }
+    return 1;
+}
+
+static void cruise_stop()
+{
+    if (daemon_stop(CRUISE_PID_FILE))
+        native_ptz_stop();
+}
+
+static int cruise_start(int mode)
+{
+    double x, y;
+    int i, found, cur_x, cur_y;
+
+    cruise_stop();
+    if (!daemon_start(CRUISE_PID_FILE))
+        return 0;
+
+    while (1) {
+        if (mode == CRUISE_PRESETS) {
+            found = 0;
+            for (i = 0; i < 8; i++) {
+                if (read_preset(i, &x, &y) != 0)
+                    continue;
+                found = 1;
+                cruise_pause(0);
+                marked_jump((int) round(x * MAX_PTZ_X / 360.0), (int) round(y * MAX_PTZ_Y / 180.0));
+                cruise_pause(CRUISE_STAY_S);
+            }
+            if (!found)
+                sleep(CRUISE_STAY_S);
+        } else {
+            /* 360: sweep end to end at the current tilt */
+            for (i = 0; i < 2; i++) {
+                cruise_pause(0);
+                if (read_ptz(&cur_x, &cur_y) == 0)
+                    marked_jump(i == 0 ? INT_MAX : 0, cur_y);
+                cruise_pause(CRUISE_STAY_S / 2);
+            }
+        }
+    }
+    return 0;
+}
+
+/* Native settings persistence. In stock mode mqttv4 sees each command on
+ * dispatch's queue, records it in camera.conf and publishes the new state; with
+ * no queue that never happens, so the HA switches snapped back and boot could not
+ * restore the setting. Do both here for the settings handled natively. */
+#define CAMERA_CONF_FILE "/home/yi-hack/config/camera.conf"
+#define CONF2MQTT_SCRIPT "/home/yi-hack/extra/script/conf2mqtt.sh"
+
+static int camera_conf_set(const char *key, const char *value)
+{
+    char line[256], tmp[] = CAMERA_CONF_FILE ".tmp";
+    FILE *in, *out;
+    size_t klen = strlen(key);
+    int changed = 0;
+
+    in = fopen(CAMERA_CONF_FILE, "r");
+    if (in == NULL)
+        return 0;
+    out = fopen(tmp, "w");
+    if (out == NULL) {
+        fclose(in);
+        return 0;
+    }
+    while (fgets(line, sizeof(line), in) != NULL) {
+        if (strncmp(line, key, klen) == 0 && line[klen] == '=') {
+            line[strcspn(line, "\r\n")] = '\0';
+            if (strcmp(line + klen + 1, value) != 0)
+                changed = 1;
+            fprintf(out, "%s=%s\n", key, value);
+        } else {
+            fputs(line, out);
+        }
+    }
+    fclose(in);
+    fclose(out);
+    /* rewrite the flash only on a real change */
+    if (changed)
+        rename(tmp, CAMERA_CONF_FILE);
+    else
+        unlink(tmp);
+    return changed;
+}
+
+static void native_persist(int ir, int mic, int cruise, int tracking,
+                           int sound, int sound_sens, int babycrying)
+{
+    int changed = 0;
+    char val[8];
+
+    if (ir != NONE)
+        changed |= camera_conf_set("IR", ir == IR_ON ? "yes" : "no");
+    if (mic != NONE)
+        changed |= camera_conf_set("MIC", mic == MIC_ON ? "yes" : "no");
+    if (cruise != NONE)
+        changed |= camera_conf_set("CRUISE", cruise == CRUISE_PRESETS ? "presets" :
+                                   (cruise == CRUISE_OFF ? "no" : "360"));
+    if (tracking != NONE)
+        changed |= camera_conf_set("MOTION_TRACKING", tracking == MOTION_TRACKING_ON ? "yes" : "no");
+    /* campipe's sound detector re-reads these from camera.conf */
+    if (sound != NONE)
+        changed |= camera_conf_set("SOUND_DETECTION", sound == SOUND_DETECTION_ON ? "yes" : "no");
+    if (sound_sens != NONE) {
+        snprintf(val, sizeof(val), "%d", sound_sens);
+        changed |= camera_conf_set("SOUND_SENSITIVITY", val);
+    }
+    if (babycrying != NONE)
+        changed |= camera_conf_set("BABY_CRYING_DETECT", babycrying == BABYCRYING_ON ? "yes" : "no");
+    /* always republish: HA shows the requested state until it hears back */
+    if (ir != NONE || mic != NONE || cruise != NONE || tracking != NONE ||
+            sound != NONE || sound_sens != NONE || babycrying != NONE)
+        system(CONF2MQTT_SCRIPT " camera >/dev/null 2>&1 &");
+    (void) changed;
+}
+
+/* Motion tracking. campipe's detector keeps MOTION_XY_FILE at "<seq> <x> <y>"
+ * (centre of the motion, permille of the frame); when it is off-centre we turn
+ * towards it (marked_jump, so the detector ignores our own turn).
+ * After TRACK_HOME_S without motion we go back to preset 0 (Home), if set.
+ *
+ * TRACK_FOV_X/Y: the frame width/height in driver units (27 steps each),
+ * measured on the h20 (centre of the wide-angle lens; the edges are compressed). */
+#define TRACK_PID_FILE    "/tmp/ptz_track.pid"
+#define MOTION_XY_FILE    MARKER_DIR "/motion_xy"
+#define TRACK_FOV_X       1000
+#define TRACK_FOV_Y       300
+#define TRACK_DEAD_ZONE   150     /* permille off-centre we tolerate */
+#define TRACK_GAIN        80      /* percent of the offset to correct per step */
+#define TRACK_HOME_S      30
+
+static int read_motion_xy(unsigned int *seq, int *x, int *y)
+{
+    FILE *f = fopen(MOTION_XY_FILE, "r");
+    int n;
+
+    if (f == NULL)
+        return -1;
+    n = fscanf(f, "%u %d %d", seq, x, y);
+    fclose(f);
+    return n == 3 ? 0 : -1;
+}
+
+static void track_jump(int x, int y)
+{
+    touch_manual();             /* pause the cruise, if any */
+    marked_jump(x, y);
+}
+
+static int track_start()
+{
+    unsigned int seq, last_seq = 0;
+    int mx, my, cur_x, cur_y, dx, dy, away = 0;
+    time_t last_motion = 0;
+    double hx, hy;
+
+    daemon_stop(TRACK_PID_FILE);
+    if (!daemon_start(TRACK_PID_FILE))
+        return 0;
+    if (read_motion_xy(&seq, &mx, &my) == 0)
+        last_seq = seq;         /* only react to motion from now on */
+
+    while (1) {
+        usleep(200 * 1000);
+        if (read_motion_xy(&seq, &mx, &my) == 0 && seq != last_seq) {
+            last_seq = seq;
+            last_motion = time(NULL);
+            dx = mx - 500;
+            dy = my - 500;
+            if (abs(dx) < TRACK_DEAD_ZONE && abs(dy) < TRACK_DEAD_ZONE)
+                continue;
+            if (read_ptz(&cur_x, &cur_y) != 0)
+                continue;
+            /* motion right of centre -> pan right, which lowers x; below -> raise y */
+            if (abs(dx) < TRACK_DEAD_ZONE)
+                dx = 0;
+            if (abs(dy) < TRACK_DEAD_ZONE)
+                dy = 0;
+            track_jump(cur_x - dx * TRACK_FOV_X / 1000 * TRACK_GAIN / 100,
+                       cur_y + dy * TRACK_FOV_Y / 1000 * TRACK_GAIN / 100);
+            away = 1;
+            /* updates written before the turn describe the old view */
+            if (read_motion_xy(&seq, &mx, &my) == 0)
+                last_seq = seq;
+        } else if (away && time(NULL) - last_motion >= TRACK_HOME_S) {
+            away = 0;
+            if (read_preset(0, &hx, &hy) == 0)
+                track_jump((int) round(hx * MAX_PTZ_X / 360.0), (int) round(hy * MAX_PTZ_Y / 180.0));
+        }
+    }
+    return 0;
+}
+
+int native_ptz(int move, int jump_abs, int jump_rel, double x, double y, int get_pos, int calibrate,
+               int preset, int cruise, int tracking)
+{
+    int cur_x, cur_y;
+
+    if (calibrate)
+        return native_ptz_calibrate();
+
+    if (cruise == CRUISE_OFF)
+        cruise_stop();
+    else if (cruise == CRUISE_PRESETS || cruise == CRUISE_360 || cruise == CRUISE_ON)
+        return cruise_start(cruise == CRUISE_PRESETS ? CRUISE_PRESETS : CRUISE_360);
+
+    if (tracking == MOTION_TRACKING_OFF) {
+        daemon_stop(TRACK_PID_FILE);
+        unlink(PTZ_MOVING_MARKER);
+    } else if (tracking == MOTION_TRACKING_ON) {
+        return track_start();
+    }
+
+    if (move != NONE || jump_abs || jump_rel || preset != NONE)
+        touch_manual();
+
+    if (move == MOVE_STOP)
+        return native_ptz_stop();
+    if (move == MOVE_UP)
+        return native_ptz_move(NATIVE_UP);
+    if (move == MOVE_DOWN)
+        return native_ptz_move(NATIVE_DOWN);
+    if (move == MOVE_LEFT)
+        return native_ptz_move(NATIVE_LEFT);
+    if (move == MOVE_RIGHT)
+        return native_ptz_move(NATIVE_RIGHT);
+
+    if (preset != NONE) {
+        if (read_preset(preset, &x, &y) != 0) {
+            fprintf(stderr, "Preset %d not set\n", preset);
+            return -1;
+        }
+        return native_jump_deg(x, y);
+    }
+
+    if (jump_abs || jump_rel || get_pos) {
+        if (read_ptz(&cur_x, &cur_y) != 0) {
+            fprintf(stderr, "Error reading current ptz position\n");
+            return -1;
+        }
+    }
+    if (jump_abs)
+        return native_jump_deg(x, y);
+    if (jump_rel)
+        return native_ptz_jump(cur_x + (int) round(x * MAX_PTZ_X / 360.0), cur_y + (int) round(y * MAX_PTZ_Y / 180.0));
+    if (get_pos) {
+        fprintf(stderr, "Current x  = %d, y  = %d\n", cur_x, cur_y);
+        fprintf(stdout, "%.1f,%.1f\n", ((double) cur_x) / MAX_PTZ_X * 360.0, ((double) cur_y) / MAX_PTZ_Y * 180.0);
+    }
+    return 0;
+}
+
 void print_usage(char *progname)
 {
     fprintf(stderr, "\nUsage: %s [t ON/OFF] [-s SENS] [-l LED] [-v WHEN] [-i IR] [-r ROTATE] [-1] [-a AIHUMANDETECTION] [-E AIVEHICLEDETECTION] [-N AIANIMALDETECTION] [-O AIMOTIONDETECTION] [-c FACEDETECTION] [-o MOTIONTRACKING] [-I MIC] [-b SOUNDDETECTION] [-B BABYCRYING] [-n SOUNDSENSITIVITY] [-m MOVE] [-g] [-j ABS_POSITION] [-J REL_POSITION] [-p NUM] [-P NAME] [-R NUM] [-C MODE] [-f FILE] [-S TIME] [-T] [-d]\n\n", progname);
@@ -101,6 +465,8 @@ void print_usage(char *progname)
     fprintf(stderr, "\t\tmove PTZ to ABS_POSITION (x,y) in degrees (example -j 500,500)\n");
     fprintf(stderr, "\t-J REL_POSITION, --jump-rel REL_POSITION\n");
     fprintf(stderr, "\t\tmove PTZ to REL_POSITION (x,y) in degrees (example -J 500,500)\n");
+    fprintf(stderr, "\t-K, --calibrate\n");
+    fprintf(stderr, "\t\tfind the PTZ end stops and centre (native pipeline only)\n");
     fprintf(stderr, "\t-p NUM, --preset NUM\n");
     fprintf(stderr, "\t\tsend PTZ go to preset command: TOKEN = [0..7]\n");
     fprintf(stderr, "\t-P NAME, --add_preset NAME\n");
@@ -148,6 +514,7 @@ int main(int argc, char ** argv)
     int soundsensitivity = NONE;
     int move = NONE;
     int get_pos = NONE;
+    int calibrate = NONE;
     int jump_abs = NONE;
     int jump_rel = NONE;
     char jump_msg[24];
@@ -195,6 +562,7 @@ int main(int argc, char ** argv)
             {"get-pos", no_argument, 0, 'g'},
             {"jump-abs", required_argument, 0, 'j'},
             {"jump-rel", required_argument, 0, 'J'},
+            {"calibrate", no_argument, 0, 'K'},
             {"preset",  required_argument, 0, 'p'},
             {"add_preset",  required_argument, 0, 'P'},
             {"set_home_position",  no_argument, 0, 'H'},
@@ -211,7 +579,7 @@ int main(int argc, char ** argv)
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "t:s:l:v:i:r:a:E:N:O:c:o:I:b:B:n:m:M:gj:J:p:P:HR:C:f:S:Txdh",
+        c = getopt_long (argc, argv, "t:s:l:v:i:r:a:E:N:O:c:o:I:b:B:n:m:M:gj:J:Kp:P:HR:C:f:S:Txdh",
                          long_options, &option_index);
 
         /* Detect the end of the options. */
@@ -450,6 +818,10 @@ int main(int argc, char ** argv)
             get_pos = 1;
             break;
 
+        case 'K':
+            calibrate = 1;
+            break;
+
         case 'j':
             jump_abs = 1;
             if (sscanf(optarg, "%lf,%lf", &x, &y) != 2) {
@@ -627,9 +999,36 @@ int main(int argc, char ** argv)
         }
     }
 
+    /* Same for the IR illuminator: campipe's day/night keeps it dark at night
+     * while IR_OFF_MARKER exists. */
+    if (ir != NONE) {
+        mkdir(MARKER_DIR, 0755);
+        if (ir == IR_OFF) {
+            int fd = open(IR_OFF_MARKER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd >= 0)
+                close(fd);
+            else
+                fprintf(stderr, "Can't create %s: %s\n", IR_OFF_MARKER, strerror(errno));
+        } else if (unlink(IR_OFF_MARKER) != 0 && errno != ENOENT) {
+            fprintf(stderr, "Can't remove %s: %s\n", IR_OFF_MARKER, strerror(errno));
+        }
+    }
+
     ret=ipc_start();
     if(ret != 0) {
-        exit(EXIT_FAILURE);
+        /* No dispatch queue: the native pipeline. PTZ still works by driving the
+         * motor driver directly; everything else needs the stock stack. */
+        native_persist(ir, mic, cruise, motiontracking, sounddetection, soundsensitivity, babycrying);
+        if (native_ptz_available() &&
+                (move != NONE || jump_abs != NONE || jump_rel != NONE || get_pos != NONE || calibrate != NONE ||
+                 preset != NONE || add_preset != NONE || remove_preset != NONE || set_home_position != NONE ||
+                 cruise != NONE || motiontracking != NONE)) {
+            exit(native_ptz(move, jump_abs != NONE, jump_rel != NONE, x, y, get_pos != NONE, calibrate != NONE,
+                            preset, cruise, motiontracking) == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
+        }
+        /* -i/-I were handled above through the marker files, -b/-n/-B by persisting */
+        exit((ir != NONE || mic != NONE || sounddetection != NONE || soundsensitivity != NONE ||
+              babycrying != NONE) ? EXIT_SUCCESS : EXIT_FAILURE);
     }
 
     if (switch_on == SWITCH_ON) {

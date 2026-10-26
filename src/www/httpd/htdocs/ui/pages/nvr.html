@@ -121,6 +121,18 @@
                         </div>
                     </div>
                     <div class="row2">
+                        <label for="in-motiononly">Keep</label>
+                        <div>
+                            <select class="form-select" id="in-motiononly" x-model="rec.MOTION_ONLY" style="max-width:230px">
+                                <option value="no">Everything (continuous)</option>
+                                <option value="yes">Only clips with motion</option>
+                            </select>
+                            <div class="help" x-show="rec.MOTION_ONLY === 'yes'">
+                                Segments without motion (±15 s) are deleted as they finish. Needs the
+                                native pipeline with motion detection on; ignored in stock mode.</div>
+                        </div>
+                    </div>
+                    <div class="row2">
                         <label for="in-free">Keep free space</label>
                         <div>
                             <input type="text" class="form-control" id="in-free" x-model="rec.FREE_SPACE" style="max-width:110px" />

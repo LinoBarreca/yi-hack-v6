@@ -66,6 +66,16 @@ add_del_preset() {
     fi
 }
 
+get_pos() {
+    POS=$(ipc_cmd -g)
+    POSX=${POS%%,*}
+    POSY=${POS#*,}; POSY=${POSY%%,*}
+    if [ -z "$POS" ] || [ -z "$POSX" ] || [ -z "$POSY" ]; then
+        echo "Error getting PTZ position"
+        return 1
+    fi
+}
+
 ACTION="none"
 NUM=-1
 NAME=""
@@ -107,17 +117,7 @@ elif [ $ACTION == "go_preset" ] ; then
     ipc_cmd -p $NUM
 elif [ $ACTION == "add_preset" ]; then
     # add preset
-    POS=$(ipc_cmd -g)
-    if [ -z $POS ]; then
-        echo "Error getting PTZ position"
-        exit
-    fi
-    POSX=${POS%%,*}
-    POSY=${POS#*,}; POSY=${POSY%%,*}
-    if [ -z $POSX ] || [ -z $POSY ]; then
-        echo "Error getting PTZ position"
-        exit
-    fi
+    get_pos || exit
 
     add_del_preset add $NAME $POSX $POSY
     RES=$?
@@ -136,8 +136,11 @@ elif [ $ACTION == "del_preset" ]; then
     ipc_cmd -R $NUM
 elif [ $ACTION == "set_home_position" ]; then
     # set home position
+    # Store the position too: the native pipeline has no dispatch to remember it,
+    # so -p 0 jumps to what this file says.
+    get_pos || exit
     add_del_preset del 0
-    add_del_preset add "Home"
+    add_del_preset add "Home" $POSX $POSY
     ipc_cmd -H
 else
     echo "Invalid action received"
